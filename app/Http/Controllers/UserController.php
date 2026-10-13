@@ -1,0 +1,311 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Requests\StoreUserRequest;
+use App\Http\Requests\UpdateUserRequest;
+use App\Models\Project;
+use App\Models\Role;
+use App\Models\User;
+use App\Models\UserPermissionOverride;
+use App\Services\Access;
+use App\Services\ActivityLogger;
+use App\Support\Permissions;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class UserController extends Controller
+{
+    public function __construct(private Access $access, private ActivityLogger $activity) {}
+
+    public function index(Request $request): Response
+    {
+        $users = User::query()
+            ->with(['role', 'projects'])
+            ->orderBy('name')
+            ->get()
+            ->map(fn (User $user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'designation' => $user->designation,
+                'role' => $user->role?->name ?: ($user->is_admin ? 'Super Admin' : 'User'),
+                'projects' => $user->project_access === 'selected'
+                    ? $user->projects->pluck('project_name')->join(', ')
+                    : 'All projects',
+                'status' => $user->status,
+                'last_login_at' => $user->last_login_at?->toDateTimeString(),
+                'created_at' => $user->created_at?->toDateString(),
+                'is_self' => $user->is($request->user()),
+            ]);
+
+        return Inertia::render('Users/Index', [
+            'users' => $users,
+        ]);
+    }
+
+    public function create(): Response
+    {
+        return Inertia::render('Users/Form', [
+            'user' => null,
+            'roles' => $this->roleOptions(),
+            'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_name']),
+        ]);
+    }
+
+    public function store(StoreUserRequest $request): RedirectResponse
+    {
+        $this->guardPrivilege($request, null);
+        $user = User::query()->create($request->safe()->except(['password_confirmation', 'project_ids']));
+        $this->syncProjects($request, $user);
+        $this->activity->log($request->user()->id, 'user.created', $user, ['email' => $user->email, 'role_id' => $user->role_id]);
+
+        return redirect()
+            ->route('users.index')
+            ->with('success', 'User created.');
+    }
+
+    public function edit(User $user): Response
+    {
+        $user->load('projects');
+
+        return Inertia::render('Users/Form', [
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'designation' => $user->designation,
+                'status' => $user->status,
+                'is_admin' => $user->is_admin,
+                'role_id' => $user->role_id,
+                'project_access' => $user->project_access ?: 'all',
+                'project_ids' => $user->projects->pluck('id'),
+                'is_self' => $user->is(auth()->user()),
+            ],
+            'roles' => $this->roleOptions(),
+            'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_name']),
+        ]);
+    }
+
+    public function update(UpdateUserRequest $request, User $user): RedirectResponse
+    {
+        if ($user->is($request->user()) && ! $request->boolean('is_admin')) {
+            return back()->withErrors([
+                'is_admin' => 'You cannot remove your own admin access.',
+            ]);
+        }
+
+        if ($user->is($request->user()) && $request->validated('status') === User::STATUS_INACTIVE) {
+            return back()->withErrors([
+                'status' => 'You cannot deactivate your own account.',
+            ]);
+        }
+
+        $this->guardPrivilege($request, $user);
+        $before = $user->only(['role_id', 'is_admin', 'status', 'project_access']);
+        $data = collect($request->validated())->except(['password', 'password_confirmation', 'project_ids'])->all();
+
+        if ($request->filled('password')) {
+            $data['password'] = $request->validated('password');
+        }
+
+        $user->update($data);
+        $this->syncProjects($request, $user);
+        $this->activity->log($request->user()->id, 'user.updated', $user, [
+            'before' => $before,
+            'after' => $user->only(['role_id', 'is_admin', 'status', 'project_access']),
+            'password_reset' => $request->filled('password'),
+        ]);
+
+        return redirect()
+            ->route('users.index')
+            ->with('success', 'User updated.');
+    }
+
+    public function updateStatus(Request $request, User $user): RedirectResponse
+    {
+        $status = $request->validate([
+            'status' => ['required', Rule::in([User::STATUS_ACTIVE, User::STATUS_INACTIVE])],
+        ])['status'];
+
+        if ($user->is($request->user()) && $status === User::STATUS_INACTIVE) {
+            return back()->with('error', 'You cannot deactivate your own account.');
+        }
+
+        if ($status === User::STATUS_INACTIVE && $this->isLastSuperAdmin($user)) {
+            return back()->with('error', 'The last active Super Admin cannot be deactivated.');
+        }
+
+        $user->update(['status' => $status]);
+        $this->activity->log($request->user()->id, 'user.status', $user, ['status' => $status]);
+
+        return back()->with('success', $status === User::STATUS_ACTIVE ? 'User activated.' : 'User deactivated.');
+    }
+
+    public function destroy(Request $request, User $user): RedirectResponse
+    {
+        if ($user->is($request->user())) {
+            return back()->with('error', 'You cannot delete your own account.');
+        }
+
+        if ($user->requestedPurchaseRequests()->exists() || $user->createdPurchaseOrders()->exists()) {
+            return back()->with('error', 'This user cannot be deleted because procurement records exist.');
+        }
+
+        $user->delete();
+
+        return redirect()
+            ->route('users.index')
+            ->with('success', 'User deleted.');
+    }
+
+    public function permissions(Request $request, User $user): Response
+    {
+        abort_unless($this->access->allows($request->user(), 'users.edit'), 403);
+        $user->load('role.permissions', 'permissionOverrides');
+        $rows = [];
+
+        foreach (Permissions::modules() as $module => $actions) {
+            $items = [];
+
+            foreach ($actions as $action => $permission) {
+                $explained = $this->access->explain($user, $permission);
+                $items[] = [
+                    'action' => $action,
+                    'permission' => $permission,
+                    'mode' => $user->permissionOverrides->firstWhere('permission', $permission)?->effect ?: 'inherit',
+                    'effective' => $explained['effective'],
+                    'source' => $explained['source'],
+                ];
+            }
+
+            $rows[] = ['module' => $module, 'actions' => $items];
+        }
+
+        return Inertia::render('Users/Permissions', [
+            'member' => ['id' => $user->id, 'name' => $user->name, 'role' => $user->role?->name],
+            'modules' => $rows,
+        ]);
+    }
+
+    public function updatePermissions(Request $request, User $user): RedirectResponse
+    {
+        abort_unless($this->access->allows($request->user(), 'users.edit'), 403);
+
+        if ($user->is($request->user())) {
+            return back()->with('error', 'You cannot change your own permissions.');
+        }
+
+        $data = $request->validate([
+            'overrides' => ['required', 'array'],
+            'overrides.*.permission' => ['required', 'string'],
+            'overrides.*.mode' => ['required', Rule::in(['inherit', 'allow', 'deny'])],
+        ]);
+
+        $actor = $request->user();
+
+        foreach ($data['overrides'] as $override) {
+            if (! Permissions::exists($override['permission'])) {
+                return back()->with('error', 'Unknown permission.');
+            }
+
+            if ($override['mode'] === 'allow' && ! $this->access->isSuperAdmin($actor) && ! $this->access->allows($actor, $override['permission'])) {
+                return back()->with('error', 'You cannot grant a permission you do not have.');
+            }
+        }
+
+        $user->permissionOverrides()->delete();
+
+        foreach ($data['overrides'] as $override) {
+            if ($override['mode'] === 'inherit') {
+                continue;
+            }
+
+            UserPermissionOverride::query()->create([
+                'user_id' => $user->id,
+                'permission' => $override['permission'],
+                'effect' => $override['mode'],
+            ]);
+        }
+
+        $user->unsetRelation('permissionOverrides');
+        $this->activity->log($actor->id, 'user.permissions', $user, ['overrides' => $data['overrides']]);
+
+        return back()->with('success', 'Individual permissions saved.');
+    }
+
+    private function guardPrivilege(Request $request, ?User $user): void
+    {
+        $actor = $request->user();
+
+        if ($request->boolean('is_admin') && ! $actor->isSuperAdmin()) {
+            abort(403);
+        }
+
+        if ($user && $user->is($actor)) {
+            if ($request->boolean('is_admin') !== (bool) $user->is_admin || (int) $request->input('role_id') !== (int) $user->role_id) {
+                abort(403, 'You cannot change your own access.');
+            }
+        }
+
+        if ($request->filled('role_id')) {
+            $role = Role::query()->with('permissions')->findOrFail($request->integer('role_id'));
+
+            if (($role->slug === 'super_admin' || $role->is_system && $role->slug === 'super_admin') && ! $actor->isSuperAdmin()) {
+                abort(403);
+            }
+
+            if (! $actor->isSuperAdmin()) {
+                foreach ($role->permissions as $permission) {
+                    abort_unless($this->access->allows($actor, $permission->permission), 403);
+                }
+            }
+        }
+
+        if ($user && $user->is_admin && ! $request->boolean('is_admin') && $this->isLastSuperAdmin($user)) {
+            abort(403, 'The last active Super Admin cannot be removed.');
+        }
+    }
+
+    private function syncProjects(Request $request, User $user): void
+    {
+        if (! $request->exists('project_access') && ! $request->exists('project_ids')) {
+            return;
+        }
+
+        if ($request->input('project_access') === 'selected') {
+            $user->projects()->sync($request->input('project_ids', []));
+
+            return;
+        }
+
+        $user->projects()->detach();
+    }
+
+    private function isLastSuperAdmin(User $user): bool
+    {
+        if (! $user->isSuperAdmin() || ! $user->isActive()) {
+            return false;
+        }
+
+        return User::query()
+            ->where('status', User::STATUS_ACTIVE)
+            ->where(function ($query): void {
+                $query->where('is_admin', true)->orWhereHas('role', fn ($role) => $role->where('slug', 'super_admin'));
+            })
+            ->count() <= 1;
+    }
+
+    /**
+     * @return list<array{id: int, name: string}>
+     */
+    private function roleOptions(): array
+    {
+        return Role::query()->where('is_active', true)->orderBy('name')->get(['id', 'name'])->all();
+    }
+}

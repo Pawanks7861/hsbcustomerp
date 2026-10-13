@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+    .ui-card {
+        @apply rounded-2xl border border-slate-200/80 bg-white;
+    }
+
+    .ui-label {
+        @apply mb-1.5 block text-sm font-medium text-slate-700;
+    }
+
+    .ui-input {
+        @apply h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-none outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-200;
+    }
+
+    .ui-textarea {
+        @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 shadow-none outline-none transition placeholder:text-slate-400 focus:border-slate-400 focus:ring-2 focus:ring-slate-200;
+    }
+
+    .ui-btn {
+        @apply inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3.5 text-sm font-medium transition disabled:opacity-60;
+    }
+
+    .ui-btn-primary {
+        @apply ui-btn bg-slate-800 text-white hover:bg-slate-700;
+    }
+
+    .ui-btn-secondary {
+        @apply ui-btn border border-slate-200 bg-white text-slate-700 hover:bg-slate-50;
+    }
+
+    .ui-btn-danger {
+        @apply ui-btn text-red-600 hover:bg-red-50;
+    }
+
+    .ui-table-wrap {
+        @apply ui-card overflow-x-auto;
+    }
+
+    .ui-table {
+        @apply min-w-full text-left text-sm text-slate-700;
+    }
+
+    .ui-table thead {
+        @apply bg-slate-50 text-xs font-medium uppercase tracking-wide text-slate-500;
+    }
+
+    .ui-table th {
+        @apply whitespace-nowrap px-4 py-3 font-medium;
+    }
+
+    .ui-table td {
+        @apply border-t border-slate-100 px-4 py-3.5 align-middle;
+    }
+
+    .ui-table tbody tr {
+        @apply transition hover:bg-slate-50/80;
+    }
+
+    .cell-input {
+        @apply w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100;
+    }
+
+    .menu-item {
+        @apply flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50;
+    }
+
+    .menu-item-danger {
+        @apply menu-item text-red-600 hover:bg-red-50;
+    }
+}
+
+.ui-table-wrap thead,
+.ui-card thead {
+    background: #f8fafc;
+}
+
+.ui-table-wrap th,
+.ui-card th {
+    border-color: transparent;
+    color: #64748b;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}

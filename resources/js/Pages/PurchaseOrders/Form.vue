@@ -1,0 +1,227 @@
+<script setup>
+import { computed } from 'vue';
+import { Head, Link, useForm } from '@inertiajs/vue3';
+import AdminLayout from '../../Layouts/AdminLayout.vue';
+import { formatInr } from '../../lib/money';
+
+const props = defineProps({
+    project: { type: Object, required: true },
+    purchaseRequest: { type: Object, required: true },
+    boq: { type: Object, required: true },
+    item: { type: Object, required: true },
+    purchaseOrder: { type: Object, required: true },
+    vendors: { type: Array, default: () => [] },
+});
+
+const lines = computed(() => props.purchaseOrder.items ?? []);
+
+const form = useForm({
+    po_date: props.purchaseOrder.po_date || new Date().toISOString().slice(0, 10),
+    vendor_id: props.purchaseOrder.vendor_id || '',
+    delivery_date: props.purchaseOrder.delivery_date ?? '',
+    delivery_address: props.purchaseOrder.delivery_address ?? '',
+    place_of_supply: props.purchaseOrder.place_of_supply ?? '',
+    cgst_percentage: props.purchaseOrder.cgst_percentage ?? '0',
+    sgst_percentage: props.purchaseOrder.sgst_percentage ?? '0',
+    freight: props.purchaseOrder.freight ?? '0',
+    round_off: props.purchaseOrder.round_off ?? '0',
+    subject: props.purchaseOrder.subject ?? '',
+    terms_conditions: props.purchaseOrder.terms_conditions ?? '',
+    remarks: props.purchaseOrder.remarks ?? '',
+    items: (props.purchaseOrder.items ?? []).map((line) => ({
+        hsn_sac: line.hsn_sac ?? '',
+        discount_percentage: line.discount_percentage ?? '0',
+    })),
+});
+
+function roundMoney(value) {
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) {
+        return 0;
+    }
+
+    const negative = number < 0;
+    const rounded = Math.round((Math.abs(number) + Number.EPSILON) * 100) / 100;
+
+    return negative ? -rounded : rounded;
+}
+
+function percentOf(base, rate) {
+    return roundMoney(base * (Number(rate) || 0) / 100);
+}
+
+const preview = computed(() => {
+    const cgstRate = Number(form.cgst_percentage) || 0;
+    const sgstRate = Number(form.sgst_percentage) || 0;
+    let subtotal = 0;
+    let discount = 0;
+    let taxable = 0;
+    let cgst = 0;
+    let sgst = 0;
+
+    lines.value.forEach((line, index) => {
+        const gross = Number(line.amount) || 0;
+        const discountAmount = percentOf(gross, form.items[index]?.discount_percentage);
+        const taxableAmount = roundMoney(gross - discountAmount);
+        subtotal = roundMoney(subtotal + gross);
+        discount = roundMoney(discount + discountAmount);
+        taxable = roundMoney(taxable + taxableAmount);
+        cgst = roundMoney(cgst + percentOf(taxableAmount, cgstRate));
+        sgst = roundMoney(sgst + percentOf(taxableAmount, sgstRate));
+    });
+
+    const freight = roundMoney(form.freight);
+    const roundOff = roundMoney(form.round_off);
+    const grand = roundMoney(taxable + cgst + sgst + freight + roundOff);
+
+    return { subtotal, discount, taxable, cgst, sgst, freight, roundOff, grand };
+});
+
+const selectedVendor = computed(() => props.vendors.find((vendor) => String(vendor.id) === String(form.vendor_id)) ?? null);
+
+function submit() {
+    if (props.purchaseOrder.id) {
+        form.put(`/projects/${props.project.id}/purchase-orders/${props.purchaseOrder.id}`);
+        return;
+    }
+
+    form.post(`/projects/${props.project.id}/purchase-requests/${props.purchaseRequest.id}/purchase-orders`);
+}
+</script>
+
+<template>
+    <Head :title="purchaseOrder.id ? 'Edit Purchase Order' : 'Create Purchase Order'" />
+    <AdminLayout :project="project">
+        <template #header>
+            <div>
+                <h1 class="text-xl font-semibold">{{ purchaseOrder.id ? 'Edit purchase order' : 'Create purchase order' }}</h1>
+                <p class="text-sm text-slate-500">From {{ purchaseRequest.pr_number }} · {{ item.item_number }} {{ item.description }}</p>
+            </div>
+        </template>
+
+        <form class="space-y-5" @submit.prevent="submit">
+            <div class="ui-card grid gap-5 p-6 sm:grid-cols-2">
+                <label class="block text-sm">
+                    <span class="font-medium">PO date</span>
+                    <input v-model="form.po_date" type="date" required class="ui-input">
+                    <span v-if="form.errors.po_date" class="mt-1 block text-red-700">{{ form.errors.po_date }}</span>
+                </label>
+                <label class="block text-sm">
+                    <span class="font-medium">Place of supply</span>
+                    <input v-model="form.place_of_supply" type="text" maxlength="255" class="ui-input">
+                    <span v-if="form.errors.place_of_supply" class="mt-1 block text-red-700">{{ form.errors.place_of_supply }}</span>
+                </label>
+                <label class="block text-sm">
+                    <span class="font-medium">CGST %</span>
+                    <input v-model="form.cgst_percentage" type="number" min="0" max="100" step="0.01" class="ui-input">
+                    <span v-if="form.errors.cgst_percentage" class="mt-1 block text-red-700">{{ form.errors.cgst_percentage }}</span>
+                </label>
+                <label class="block text-sm">
+                    <span class="font-medium">SGST %</span>
+                    <input v-model="form.sgst_percentage" type="number" min="0" max="100" step="0.01" class="ui-input">
+                    <span v-if="form.errors.sgst_percentage" class="mt-1 block text-red-700">{{ form.errors.sgst_percentage }}</span>
+                </label>
+                <label class="block text-sm">
+                    <span class="font-medium">Freight</span>
+                    <input v-model="form.freight" type="number" min="0" step="0.01" class="ui-input">
+                    <span v-if="form.errors.freight" class="mt-1 block text-red-700">{{ form.errors.freight }}</span>
+                </label>
+                <label class="block text-sm">
+                    <span class="font-medium">Round off</span>
+                    <input v-model="form.round_off" type="number" step="0.01" class="ui-input">
+                    <span class="mt-1 block text-xs text-slate-500">Added to the grand total. Use a negative amount to reduce it.</span>
+                    <span v-if="form.errors.round_off" class="mt-1 block text-red-700">{{ form.errors.round_off }}</span>
+                </label>
+                <label class="block text-sm sm:col-span-2">
+                    <span class="font-medium">Vendor</span>
+                    <select v-model="form.vendor_id" required class="ui-input">
+                        <option value="">Select a vendor</option>
+                        <option v-for="vendor in vendors" :key="vendor.id" :value="vendor.id">{{ vendor.vendor_code }} — {{ vendor.name }}</option>
+                    </select>
+                    <span v-if="form.errors.vendor_id" class="mt-1 block text-red-700">{{ form.errors.vendor_id }}</span>
+                </label>
+                <div v-if="selectedVendor" class="rounded-xl bg-slate-50 p-4 text-sm text-slate-600 sm:col-span-2">
+                    <p class="font-medium text-slate-900">{{ selectedVendor.name }}</p>
+                    <p v-if="selectedVendor.address" class="whitespace-pre-line">{{ selectedVendor.address }}</p>
+                    <p v-if="selectedVendor.phone">{{ selectedVendor.phone }}</p>
+                    <p v-if="selectedVendor.email">{{ selectedVendor.email }}</p>
+                    <p v-if="selectedVendor.gst_number">GST {{ selectedVendor.gst_number }}</p>
+                    <p class="mt-2 text-xs text-slate-500">These details are saved on the purchase order and stay unchanged if the vendor master is edited later.</p>
+                </div>
+                <label class="block text-sm sm:col-span-2">
+                    <span class="font-medium">Subject</span>
+                    <input v-model="form.subject" type="text" class="ui-input" maxlength="255">
+                    <span v-if="form.errors.subject" class="mt-1 block text-red-700">{{ form.errors.subject }}</span>
+                </label>
+                <label class="block text-sm">
+                    <span class="font-medium">Delivery date</span>
+                    <input v-model="form.delivery_date" type="date" class="ui-input">
+                </label>
+                <label class="block text-sm sm:col-span-2">
+                    <span class="font-medium">Delivery address</span>
+                    <textarea v-model="form.delivery_address" rows="2" class="ui-textarea"></textarea>
+                </label>
+                <label class="block text-sm sm:col-span-2">
+                    <span class="font-medium">Terms &amp; Conditions</span>
+                    <textarea v-model="form.terms_conditions" rows="5" class="ui-textarea"></textarea>
+                    <span class="mt-1 block text-xs text-slate-500">Enter one condition per line if preferred.</span>
+                </label>
+                <label class="block text-sm sm:col-span-2">
+                    <span class="font-medium">Remarks</span>
+                    <textarea v-model="form.remarks" rows="2" class="ui-textarea"></textarea>
+                </label>
+            </div>
+
+            <div class="ui-table-wrap">
+                <table class="min-w-full border-collapse text-sm">
+                    <thead>
+                        <tr>
+                            <th class="px-3 py-2 font-medium text-slate-500">Sr. No.</th>
+                            <th class="px-3 py-2 font-medium text-slate-500">Service Code</th>
+                            <th class="px-3 py-2 font-medium text-slate-500">Item Description</th>
+                            <th class="px-3 py-2 font-medium text-slate-500">HSN/SAC</th>
+                            <th class="px-3 py-2 font-medium text-slate-500">Unit</th>
+                            <th class="px-3 py-2 font-medium text-slate-500 text-right">Qty</th>
+                            <th class="px-3 py-2 font-medium text-slate-500 text-right">Rate</th>
+                            <th class="px-3 py-2 font-medium text-slate-500 text-right">Disc %</th>
+                            <th class="px-3 py-2 font-medium text-slate-500 text-right">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(line, index) in lines" :key="index">
+                            <td class="border border-slate-200 px-3 py-2">{{ index + 1 }}</td>
+                            <td class="border border-slate-200 px-3 py-2">{{ line.service_code || '—' }}</td>
+                            <td class="border border-slate-200 px-3 py-2 whitespace-pre-line">{{ line.description }}</td>
+                            <td class="border border-slate-200 px-3 py-2">
+                                <input v-if="form.items[index]" v-model="form.items[index].hsn_sac" type="text" maxlength="20" class="ui-input w-24">
+                            </td>
+                            <td class="border border-slate-200 px-3 py-2">{{ line.unit || '—' }}</td>
+                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ line.quantity }}</td>
+                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ formatInr(line.rate) }}</td>
+                            <td class="border border-slate-200 px-3 py-2 text-right">
+                                <input v-if="form.items[index]" v-model="form.items[index].discount_percentage" type="number" min="0" max="100" step="0.01" class="ui-input w-20 text-right">
+                            </td>
+                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ formatInr(line.amount) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-sm text-slate-500">Quantity, rate, and description stay copied from the purchase request. HSN and discount can be edited while this order is a draft. CGST and SGST apply to the taxable value after discount.</p>
+            <dl class="grid gap-2 text-sm sm:ml-auto sm:w-80">
+                <div class="flex justify-between"><dt>Subtotal</dt><dd class="tabular-nums">{{ formatInr(preview.subtotal) }}</dd></div>
+                <div class="flex justify-between"><dt>Discount</dt><dd class="tabular-nums">{{ formatInr(preview.discount ? -preview.discount : 0) }}</dd></div>
+                <div class="flex justify-between"><dt>Taxable value</dt><dd class="tabular-nums">{{ formatInr(preview.taxable) }}</dd></div>
+                <div class="flex justify-between"><dt>CGST</dt><dd class="tabular-nums">{{ formatInr(preview.cgst) }}</dd></div>
+                <div class="flex justify-between"><dt>SGST</dt><dd class="tabular-nums">{{ formatInr(preview.sgst) }}</dd></div>
+                <div class="flex justify-between"><dt>Freight</dt><dd class="tabular-nums">{{ formatInr(preview.freight) }}</dd></div>
+                <div class="flex justify-between"><dt>Round off</dt><dd class="tabular-nums">{{ formatInr(preview.roundOff) }}</dd></div>
+                <div class="flex justify-between font-semibold"><dt>Grand total</dt><dd class="tabular-nums">{{ formatInr(preview.grand) }}</dd></div>
+            </dl>
+            <div class="flex flex-wrap items-center gap-4">
+                <button type="submit" class="ui-btn-primary" :disabled="form.processing">Save draft</button>
+                <Link :href="purchaseOrder.id ? `/projects/${project.id}/purchase-orders/${purchaseOrder.id}` : `/projects/${project.id}/purchase-requests/${purchaseRequest.id}`" class="text-sm text-slate-600 hover:underline">Cancel</Link>
+            </div>
+        </form>
+    </AdminLayout>
+</template>
