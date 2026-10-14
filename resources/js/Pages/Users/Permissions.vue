@@ -55,7 +55,8 @@ function save() {
                             <tr v-for="action in module.actions" :key="action.permission">
                                 <td class="py-2">{{ action.action }}</td>
                                 <td>
-                                    <select v-if="mode(action.permission)" v-model="mode(action.permission).mode" class="ui-input">
+                                    <a v-if="action.approval" href="/approvals/settings" class="text-xs text-slate-500 hover:underline">Set in Approval Settings</a>
+                                    <select v-else-if="mode(action.permission)" v-model="mode(action.permission).mode" class="ui-input">
                                         <option value="inherit">Inherit from role</option>
                                         <option value="allow">Allow</option>
                                         <option value="deny">Deny</option>

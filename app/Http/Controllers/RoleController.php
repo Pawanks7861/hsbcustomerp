@@ -119,7 +119,7 @@ class RoleController extends Controller
         $role->permissions()->delete();
 
         foreach ($request->input('permissions', []) as $permission) {
-            if (! Permissions::exists($permission)) {
+            if (! Permissions::exists($permission) || Permissions::isApproval($permission)) {
                 continue;
             }
 
@@ -150,6 +150,7 @@ class RoleController extends Controller
                     'action' => $action,
                     'permission' => $permission,
                     'granted' => in_array($permission, $granted, true),
+                    'approval' => Permissions::isApproval($permission),
                 ];
             }
 

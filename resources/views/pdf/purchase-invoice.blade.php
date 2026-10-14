@@ -49,7 +49,7 @@
                 <td class="num">{{ \App\Support\PdfFormat::money($invoice['invoice_amount']) }}</td>
             </tr>
             <tr>
-                <td>Tax Amount</td>
+                <td>Tax Amount{{ $invoice['tax_percentage'] !== null ? ' (GST '.rtrim(rtrim($invoice['tax_percentage'], '0'), '.').'%)' : '' }}</td>
                 <td class="num">{{ \App\Support\PdfFormat::money($invoice['tax_amount']) }}</td>
             </tr>
             <tr>

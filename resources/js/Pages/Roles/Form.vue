@@ -14,7 +14,7 @@ const form = useForm({
     name: props.role?.name || '',
     description: props.role?.description || '',
     is_active: props.role?.is_active ?? true,
-    permissions: props.modules.flatMap((module) => module.actions.filter((action) => action.granted).map((action) => action.permission)),
+    permissions: props.modules.flatMap((module) => module.actions.filter((action) => action.granted && !action.approval).map((action) => action.permission)),
 });
 
 function toggle(permission, checked) {
@@ -24,7 +24,7 @@ function toggle(permission, checked) {
 }
 
 function setModule(module, checked) {
-    const names = module.actions.map((action) => action.permission);
+    const names = module.actions.filter((action) => !action.approval).map((action) => action.permission);
     form.permissions = checked
         ? [...new Set([...form.permissions, ...names])]
         : form.permissions.filter((item) => !names.includes(item));
@@ -60,10 +60,16 @@ function save() {
                     </span>
                 </div>
                 <div v-if="open === module.module" class="flex flex-wrap gap-3 border-t px-4 py-3">
-                    <label v-for="action in module.actions" :key="action.permission" class="flex items-center gap-2 text-sm">
-                        <input type="checkbox" :checked="form.permissions.includes(action.permission)" @change="toggle(action.permission, $event.target.checked)">
-                        {{ action.action }}
-                    </label>
+                    <template v-for="action in module.actions" :key="action.permission">
+                        <a v-if="action.approval" href="/approvals/settings" class="flex items-center gap-2 text-sm text-slate-400 hover:underline" title="Approvers are chosen per staff member in Approval Settings">
+                            <input type="checkbox" disabled>
+                            {{ action.action }} (Approval Settings)
+                        </a>
+                        <label v-else class="flex items-center gap-2 text-sm">
+                            <input type="checkbox" :checked="form.permissions.includes(action.permission)" @change="toggle(action.permission, $event.target.checked)">
+                            {{ action.action }}
+                        </label>
+                    </template>
                 </div>
             </section>
             <div v-if="role?.users?.length" class="text-sm text-slate-600">

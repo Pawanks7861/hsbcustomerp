@@ -4,7 +4,7 @@ import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
-import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { Head, useForm, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 defineProps({
@@ -140,7 +140,6 @@ const submit = () => {
             <div class="form-panel">
                 <div class="login-card">
                     <h1>Welcome Back</h1>
-                    <p class="login-lead">Sign in to your account</p>
 
                     <div v-if="status" class="mb-4 text-sm font-medium text-green-600">
                         {{ status }}
@@ -184,14 +183,6 @@ const submit = () => {
                         <PrimaryButton class="sign-in" :disabled="form.processing">
                             {{ form.processing ? 'Signing in…' : 'Sign in' }}
                         </PrimaryButton>
-
-                        <Link
-                            v-if="canResetPassword"
-                            :href="route('password.request')"
-                            class="forgot-link"
-                        >
-                            Forgot Password?
-                        </Link>
                     </form>
                 </div>
             </div>
@@ -287,16 +278,10 @@ const submit = () => {
 }
 
 .login-card h1 {
+    margin-bottom: 1.5rem;
     font-size: 1.5rem;
     font-weight: 600;
     color: #0f172a;
-}
-
-.login-lead {
-    margin-top: 0.35rem;
-    margin-bottom: 1.5rem;
-    font-size: 0.925rem;
-    color: #64748b;
 }
 
 .sign-in {
@@ -304,20 +289,6 @@ const submit = () => {
     height: 2.75rem;
     margin-top: 1.25rem;
     justify-content: center;
-}
-
-.forgot-link {
-    display: block;
-    margin-top: 1rem;
-    text-align: center;
-    font-size: 0.875rem;
-    color: #475569;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-}
-
-.forgot-link:hover {
-    color: #0f172a;
 }
 
 .login-screen[data-phase="intro"] .lockup,

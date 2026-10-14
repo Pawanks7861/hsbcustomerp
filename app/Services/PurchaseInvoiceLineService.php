@@ -52,7 +52,7 @@ class PurchaseInvoiceLineService
      * @param  array<int, array<string, mixed>>  $rows
      * @return array{invoice_amount: string, tax_amount: string, total_amount: string}
      */
-    public function sync(PurchaseInvoice $invoice, PurchaseOrder $order, array $rows): array
+    public function sync(PurchaseInvoice $invoice, PurchaseOrder $order, array $rows, ?string $taxPercentage = null): array
     {
         if ($order->status !== DocumentStatus::APPROVED) {
             throw ValidationException::withMessages([
@@ -60,7 +60,7 @@ class PurchaseInvoiceLineService
             ]);
         }
 
-        return DB::transaction(function () use ($invoice, $order, $rows): array {
+        return DB::transaction(function () use ($invoice, $order, $rows, $taxPercentage): array {
             $requested = $this->requestedQuantities($rows);
             $ids = array_keys($requested);
             sort($ids);
@@ -128,9 +128,10 @@ class PurchaseInvoiceLineService
                 ]);
             }
 
-            $commercial = $this->commercial($order);
-            $priced = PurchaseLines::price($pricedRows, $order->gst_percentage, $commercial);
-            $totals = PurchaseLines::summarize($priced, $order->gst_percentage, $commercial);
+            $commercial = $taxPercentage === null ? $this->commercial($order) : [];
+            $rate = $taxPercentage ?? $order->gst_percentage;
+            $priced = PurchaseLines::price($pricedRows, $rate, $commercial);
+            $totals = PurchaseLines::summarize($priced, $rate, $commercial);
 
             $invoice->items()->delete();
 
@@ -159,6 +160,7 @@ class PurchaseInvoiceLineService
 
             return [
                 'invoice_amount' => $totals['taxable_value'],
+                'tax_percentage' => $totals['gst_percentage'],
                 'tax_amount' => $totals['gst_amount'],
                 'total_amount' => $totals['grand_total'],
             ];

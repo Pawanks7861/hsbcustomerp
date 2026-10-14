@@ -42,6 +42,11 @@ class HandleInertiaRequests extends Middleware
                     'permissions' => app(\App\Services\Access::class)->grantedNames($user),
                 ] : null,
             ],
+            'approvals' => fn () => $user ? [
+                'can_approve' => app(\App\Services\ApprovalInbox::class)->typesFor($user) !== [],
+                'pending' => app(\App\Services\ApprovalInbox::class)->count($user),
+                'can_configure' => app(\App\Services\Access::class)->canConfigureApprovals($user),
+            ] : null,
             'company' => fn () => \App\Models\CompanySetting::shared(),
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),

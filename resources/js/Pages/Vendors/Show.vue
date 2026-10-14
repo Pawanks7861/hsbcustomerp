@@ -26,6 +26,10 @@ function openTab(name) {
     router.get(`/vendors/${props.vendor.id}`, { tab: name }, { preserveState: true, preserveScroll: true });
 }
 
+function confirmDelete() {
+    return confirm(`Delete vendor ${props.vendor.name}? This cannot be undone.`);
+}
+
 function markRefund() {
     refund.post(`/vendors/${props.vendor.id}/recoveries`, { preserveScroll: true });
 }
@@ -50,9 +54,10 @@ function recordRefund() {
         </template>
 
         <p class="mb-4 text-sm capitalize text-slate-500">Status: {{ vendor.status }}</p>
-        <div class="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div class="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard label="Total PO" :value="formatInr(summary.total_po_value)" tone="blue" />
             <StatCard label="Total Invoice" :value="formatInr(summary.total_invoice_value)" tone="beige" />
+            <StatCard label="Total Paid" :value="formatInr(summary.total_paid)" tone="mint" />
             <StatCard label="Advance Paid" :value="formatInr(summary.advance_paid)" tone="mint" />
             <StatCard label="Available Advance" :value="formatInr(summary.available_advance)" tone="mint" />
             <StatCard label="Outstanding Payable" :value="formatInr(summary.outstanding_payable)" tone="pink" />
@@ -73,7 +78,7 @@ function recordRefund() {
             <p>Marked for refund {{ formatInr(summary.marked_for_refund) }} · Refund received {{ formatInr(summary.refund_received) }}</p>
             <div class="flex gap-3 pt-3">
                 <button type="button" class="ui-btn-secondary" @click="router.patch(`/vendors/${vendor.id}/status`)">{{ vendor.status === 'active' ? 'Deactivate' : 'Activate' }}</button>
-                <button type="button" class="text-sm text-red-700" @click="router.delete(`/vendors/${vendor.id}`)">Delete</button>
+                <button type="button" class="text-sm text-red-700" @click="confirmDelete() && router.delete(`/vendors/${vendor.id}`)">Delete</button>
             </div>
         </section>
 

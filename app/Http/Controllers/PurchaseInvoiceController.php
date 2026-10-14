@@ -19,6 +19,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -172,6 +173,7 @@ class PurchaseInvoiceController extends Controller
             'invoice_date' => ['required', 'date'],
             'invoice_amount' => [$lineMode ? 'nullable' : 'required', 'numeric', 'gte:0'],
             'tax_amount' => ['nullable', 'numeric', 'gte:0'],
+            'tax_percentage' => ['nullable', 'numeric', Rule::in(PurchaseInvoice::TAX_RATES)],
             'due_date' => ['nullable', 'date'],
             'remarks' => ['nullable', 'string', 'max:2000'],
             'invoice_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
@@ -193,7 +195,10 @@ class PurchaseInvoiceController extends Controller
         }
 
         $amount = Money::scale($validated['invoice_amount'] ?? 0, 2) ?? '0.00';
-        $tax = Money::scale($validated['tax_amount'] ?? 0, 2) ?? '0.00';
+        $taxPercentage = isset($validated['tax_percentage']) ? Money::scale($validated['tax_percentage'], 2) : null;
+        $tax = $taxPercentage !== null && ! $lineMode
+            ? Money::percentage($amount, $taxPercentage)
+            : (Money::scale($validated['tax_amount'] ?? 0, 2) ?? '0.00');
 
         $attributes = [
             'project_id' => $project->id,
@@ -202,6 +207,7 @@ class PurchaseInvoiceController extends Controller
             'invoice_number' => trim($validated['invoice_number']),
             'invoice_date' => $validated['invoice_date'],
             'invoice_amount' => $amount,
+            'tax_percentage' => $taxPercentage,
             'tax_amount' => $tax,
             'total_amount' => Money::add($amount, $tax),
             'due_date' => $validated['due_date'] ?? null,
@@ -218,7 +224,7 @@ class PurchaseInvoiceController extends Controller
             }
         }
 
-        $saved = DB::transaction(function () use ($invoice, $attributes, $request, $lineMode, $lines, $order): PurchaseInvoice {
+        $saved = DB::transaction(function () use ($invoice, $attributes, $request, $lineMode, $lines, $order, $taxPercentage): PurchaseInvoice {
             if ($invoice) {
                 $invoice->update($attributes);
                 $saved = $invoice;
@@ -231,7 +237,7 @@ class PurchaseInvoiceController extends Controller
             }
 
             if ($lineMode) {
-                $saved->update($lines->sync($saved, $order, $request->input('items', [])));
+                $saved->update($lines->sync($saved, $order, $request->input('items', []), $taxPercentage));
             }
 
             return $saved;
@@ -347,6 +353,7 @@ class PurchaseInvoiceController extends Controller
             'purchase_order_id' => $invoice->purchase_order_id,
             'po_grand_total' => (string) $invoice->purchaseOrder?->grand_total,
             'invoice_amount' => (string) $invoice->invoice_amount,
+            'tax_percentage' => $invoice->tax_percentage === null ? null : (string) $invoice->tax_percentage,
             'tax_amount' => (string) $invoice->tax_amount,
             'total_amount' => (string) $invoice->total_amount,
             'paid' => $balances->directInvoicePayments($invoice),

@@ -17,6 +17,13 @@ class Access
         return $user->is_admin || $user->role?->slug === 'super_admin';
     }
 
+    public function canConfigureApprovals(User $user): bool
+    {
+        $user->loadMissing('role');
+
+        return $this->isSuperAdmin($user) || $user->role?->slug === 'administrator';
+    }
+
     public function allows(User $user, string $permission): bool
     {
         return $this->explain($user, $permission)['effective'];
@@ -34,6 +41,16 @@ class Access
         }
 
         $override = $user->permissionOverrides->firstWhere('permission', $permission);
+
+        if (Permissions::isApproval($permission)) {
+            $approver = $override?->effect === UserPermissionOverride::ALLOW;
+
+            return [
+                'effective' => $approver,
+                'source' => $approver ? 'Approval Settings' : 'Not an approver',
+                'mode' => $approver ? 'allow' : 'inherit',
+            ];
+        }
 
         if ($override?->effect === UserPermissionOverride::DENY) {
             return ['effective' => false, 'source' => 'Individually Denied', 'mode' => 'deny'];

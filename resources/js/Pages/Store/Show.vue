@@ -11,6 +11,12 @@ const props = defineProps({
 });
 
 const preview = ref(null);
+
+function destroy() {
+    if (confirm(`Delete ${props.receipt.receipt_number}? This cannot be undone.`)) {
+        router.delete(`/projects/${props.project.id}/store/${props.receipt.id}`);
+    }
+}
 </script>
 
 <template>
@@ -22,8 +28,9 @@ const preview = ref(null);
                     :view-url="`/projects/${project.id}/store/${receipt.id}/pdf`"
                     :download-url="`/projects/${project.id}/store/${receipt.id}/pdf/download`"
                 />
-                <Link :href="`/projects/${project.id}/store/${receipt.id}/edit`" class="ui-btn-secondary">Edit</Link>
-                <button type="button" class="text-sm text-red-700" @click="router.delete(`/projects/${project.id}/store/${receipt.id}`)">Delete</button>
+                <Link v-if="receipt.is_grn" :href="`/projects/${project.id}/grns/${receipt.id}`" class="ui-btn-secondary">Open GRN</Link>
+                <Link v-if="receipt.can_edit" :href="`/projects/${project.id}/store/${receipt.id}/edit`" class="ui-btn-secondary">Edit</Link>
+                <button v-if="receipt.can_delete" type="button" class="text-sm text-red-700" @click="destroy">Delete</button>
             </PageHeader>
         </template>
         <div class="ui-card mb-4 grid gap-3 p-5 text-sm md:grid-cols-3">

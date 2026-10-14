@@ -14,8 +14,13 @@ const props = defineProps({
     vendors: { type: Array, default: () => [] },
 });
 
+const taxRates = ['0', '5', '12', '18', '28'];
+const poTaxRate = props.selectedOrder ? String(Number(props.selectedOrder.gst_percentage || 0)) : '';
+const poRateIsCustom = poTaxRate !== '' && !taxRates.includes(poTaxRate);
+
 const form = useForm({
     purchase_order_id: props.selectedOrder?.id || '',
+    tax_percentage: poRateIsCustom ? '' : (poTaxRate || '18'),
     vendor_id: '',
     invoice_number: props.invoice?.invoice_number || '',
     invoice_date: props.invoice?.invoice_date || new Date().toISOString().slice(0, 10),
@@ -42,6 +47,17 @@ const rows = computed(() => (props.selectedOrder?.lines || []).map((line, index)
     };
 }));
 
+const splitRates = computed(() => {
+    if (form.tax_percentage === '') {
+        return null;
+    }
+
+    const gst = Number(form.tax_percentage);
+    const cgst = Math.round((gst / 2 + Number.EPSILON) * 100) / 100;
+
+    return { cgst, sgst: Math.round((gst - cgst + Number.EPSILON) * 100) / 100 };
+});
+
 const totals = computed(() => {
     let taxable = 0;
     let tax = 0;
@@ -54,8 +70,10 @@ const totals = computed(() => {
         const discountRate = Number(row.discount_percentage || 0);
         const discount = Math.round(((row.gross * discountRate) / 100 + Number.EPSILON) * 100) / 100;
         const net = Math.max(0, Math.round((row.gross - discount + Number.EPSILON) * 100) / 100);
-        const cgst = Math.round(((net * Number(row.cgst_percentage || 0)) / 100 + Number.EPSILON) * 100) / 100;
-        const sgst = Math.round(((net * Number(row.sgst_percentage || 0)) / 100 + Number.EPSILON) * 100) / 100;
+        const cgstRate = splitRates.value ? splitRates.value.cgst : Number(row.cgst_percentage || 0);
+        const sgstRate = splitRates.value ? splitRates.value.sgst : Number(row.sgst_percentage || 0);
+        const cgst = Math.round(((net * cgstRate) / 100 + Number.EPSILON) * 100) / 100;
+        const sgst = Math.round(((net * sgstRate) / 100 + Number.EPSILON) * 100) / 100;
         taxable += net;
         tax += cgst + sgst;
     });
@@ -110,6 +128,13 @@ function submit() {
                 <label class="text-sm">Invoice Number<input v-model="form.invoice_number" required class="ui-input"></label>
                 <label class="text-sm">Invoice Date<input v-model="form.invoice_date" type="date" required class="ui-input"></label>
                 <label class="text-sm">Due Date<input v-model="form.due_date" type="date" class="ui-input"></label>
+                <label class="text-sm">Tax (GST)
+                    <select v-model="form.tax_percentage" class="ui-input">
+                        <option v-if="poRateIsCustom" value="">As per PO ({{ poTaxRate }}%)</option>
+                        <option v-for="rate in taxRates" :key="rate" :value="rate">{{ rate }}%</option>
+                    </select>
+                    <span v-if="form.errors.tax_percentage" class="mt-1 block text-red-700">{{ form.errors.tax_percentage }}</span>
+                </label>
                 <div class="md:col-span-2">
                     <FileUploadField
                         v-model="form.invoice_file"
@@ -162,7 +187,7 @@ function submit() {
                 <p v-if="form.errors.items" class="mt-3 text-sm text-red-700">{{ form.errors.items }}</p>
                 <div class="mt-4 ml-auto w-full max-w-xs space-y-1 text-sm">
                     <div class="flex justify-between"><span class="text-slate-500">Taxable amount</span><span class="tabular-nums">{{ formatInr(totals.taxable) }}</span></div>
-                    <div class="flex justify-between"><span class="text-slate-500">Tax</span><span class="tabular-nums">{{ formatInr(totals.tax) }}</span></div>
+                    <div class="flex justify-between"><span class="text-slate-500">Tax{{ form.tax_percentage === '' ? '' : ` (GST ${form.tax_percentage}%)` }}</span><span class="tabular-nums">{{ formatInr(totals.tax) }}</span></div>
                     <div class="flex justify-between font-semibold"><span>Invoice total</span><span class="tabular-nums">{{ formatInr(totals.total) }}</span></div>
                 </div>
             </section>

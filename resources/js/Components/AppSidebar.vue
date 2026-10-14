@@ -1,8 +1,10 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import {
+    BadgeCheck,
     Building2,
+    ListChecks,
     ClipboardList,
     FileSpreadsheet,
     FolderKanban,
@@ -39,6 +41,9 @@ const initials = computed(() => {
 });
 
 const emit = defineEmits(['close']);
+
+const page = usePage();
+const approvals = computed(() => page.props.approvals ?? null);
 
 function can(permission) {
     return props.user?.is_admin || (props.user?.permissions || []).includes(permission);
@@ -79,6 +84,14 @@ function itemClass(active) {
             <Link href="/" :class="itemClass(path === '/')" @click="emit('close')">
                 <LayoutDashboard class="h-4 w-4 shrink-0" />
                 Dashboard
+            </Link>
+            <Link v-if="approvals?.can_approve" href="/approvals" :class="itemClass(path === '/approvals')" @click="emit('close')">
+                <BadgeCheck class="h-4 w-4 shrink-0" />
+                <span class="flex-1">Approvals</span>
+                <span
+                    v-if="approvals.pending > 0"
+                    class="min-w-[1.5rem] rounded-full bg-amber-500 px-1.5 py-0.5 text-center text-xs font-semibold text-white"
+                >{{ approvals.pending > 99 ? '99+' : approvals.pending }}</span>
             </Link>
             <Link href="/projects" :class="itemClass(path.startsWith('/projects') && !project)" @click="emit('close')">
                 <FolderKanban class="h-4 w-4 shrink-0" />
@@ -162,7 +175,7 @@ function itemClass(active) {
                 </div>
             </div>
 
-            <div v-if="can('users.view') || can('roles.view') || can('settings.view')" class="space-y-1 pt-5">
+            <div v-if="can('users.view') || can('roles.view') || can('settings.view') || approvals?.can_configure" class="space-y-1 pt-5">
                 <p class="px-3 pb-2 text-xs font-medium text-slate-400">Admin</p>
                 <Link v-if="can('users.view')" href="/users" :class="itemClass(path.startsWith('/users'))" @click="emit('close')">
                     <Users class="h-4 w-4 shrink-0" />
@@ -171,6 +184,10 @@ function itemClass(active) {
                 <Link v-if="can('roles.view')" href="/roles" :class="itemClass(path.startsWith('/roles'))" @click="emit('close')">
                     <Users class="h-4 w-4 shrink-0" />
                     Roles & Permissions
+                </Link>
+                <Link v-if="approvals?.can_configure" href="/approvals/settings" :class="itemClass(path.startsWith('/approvals/settings'))" @click="emit('close')">
+                    <ListChecks class="h-4 w-4 shrink-0" />
+                    Approval Settings
                 </Link>
                 <Link v-if="can('settings.view')" href="/settings/company" :class="itemClass(path.startsWith('/settings'))" @click="emit('close')">
                     <Settings class="h-4 w-4 shrink-0" />

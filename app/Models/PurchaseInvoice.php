@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PurchaseInvoice extends Model
 {
+    public const TAX_RATES = ['0', '5', '12', '18', '28'];
+
     public const STATUS_RECORDED = 'recorded';
 
     public const STATUS_PARTIAL = 'partially_paid';
@@ -21,6 +23,7 @@ class PurchaseInvoice extends Model
         'invoice_number',
         'invoice_date',
         'invoice_amount',
+        'tax_percentage',
         'tax_amount',
         'total_amount',
         'due_date',
@@ -34,6 +37,7 @@ class PurchaseInvoice extends Model
         'invoice_date' => 'date',
         'due_date' => 'date',
         'invoice_amount' => 'decimal:2',
+        'tax_percentage' => 'decimal:2',
         'tax_amount' => 'decimal:2',
         'total_amount' => 'decimal:2',
     ];

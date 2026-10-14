@@ -181,6 +181,7 @@ class UserController extends Controller
                     'mode' => $user->permissionOverrides->firstWhere('permission', $permission)?->effect ?: 'inherit',
                     'effective' => $explained['effective'],
                     'source' => $explained['source'],
+                    'approval' => Permissions::isApproval($permission),
                 ];
             }
 
@@ -219,10 +220,10 @@ class UserController extends Controller
             }
         }
 
-        $user->permissionOverrides()->delete();
+        $user->permissionOverrides()->whereNotIn('permission', Permissions::approvals())->delete();
 
         foreach ($data['overrides'] as $override) {
-            if ($override['mode'] === 'inherit') {
+            if ($override['mode'] === 'inherit' || Permissions::isApproval($override['permission'])) {
                 continue;
             }
 

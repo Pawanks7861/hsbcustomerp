@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\BoqController;
 use App\Http\Controllers\BoqImportController;
 use App\Http\Controllers\BoqRevisionController;
@@ -29,6 +30,10 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'active', 'project.access'])->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+
+    Route::get('approvals', [ApprovalController::class, 'index'])->name('approvals.index');
+    Route::get('approvals/settings', [ApprovalController::class, 'settings'])->name('approvals.settings');
+    Route::put('approvals/settings', [ApprovalController::class, 'updateSettings'])->name('approvals.settings.update');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

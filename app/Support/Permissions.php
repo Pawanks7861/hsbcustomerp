@@ -46,6 +46,23 @@ class Permissions
         return $names;
     }
 
+    /**
+     * Approval rights are granted per user from Approval Settings, never by role.
+     *
+     * @return list<string>
+     */
+    public static function approvals(): array
+    {
+        return array_values(array_unique(array_merge(
+            ...array_column(\App\Services\ApprovalInbox::types(), 'permissions')
+        )));
+    }
+
+    public static function isApproval(string $permission): bool
+    {
+        return in_array($permission, self::approvals(), true);
+    }
+
     public static function exists(string $permission): bool
     {
         return in_array($permission, self::all(), true);

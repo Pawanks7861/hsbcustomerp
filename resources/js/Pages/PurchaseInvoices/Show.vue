@@ -54,7 +54,7 @@ function applyAdvance() {
                         <th class="text-right">Current Invoice Qty</th>
                         <th class="text-right">Rate</th>
                         <th class="text-right">Taxable Amount</th>
-                        <th class="text-right">Tax</th>
+                        <th class="text-right">Tax{{ invoice.tax_percentage === null ? '' : ` (GST ${Number(invoice.tax_percentage)}%)` }}</th>
                         <th class="text-right">Line Total</th>
                     </tr>
                 </thead>
