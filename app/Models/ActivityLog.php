@@ -9,12 +9,47 @@ class ActivityLog extends Model
 {
     public const UPDATED_AT = null;
 
+    public const EVENT_ACTION = 'action';
+
+    public const EVENT_CREATED = 'created';
+
+    public const EVENT_UPDATED = 'updated';
+
+    public const EVENT_DELETED = 'deleted';
+
+    public const EVENT_LOGIN = 'login';
+
+    public const EVENT_LOGOUT = 'logout';
+
+    public const EVENT_LOGIN_FAILED = 'login_failed';
+
+    public const EVENT_PASSWORD_RESET = 'password_reset';
+
+    public const EVENTS = [
+        self::EVENT_ACTION => 'Action',
+        self::EVENT_CREATED => 'Created',
+        self::EVENT_UPDATED => 'Updated',
+        self::EVENT_DELETED => 'Deleted',
+        self::EVENT_LOGIN => 'Login',
+        self::EVENT_LOGOUT => 'Logout',
+        self::EVENT_LOGIN_FAILED => 'Failed login',
+        self::EVENT_PASSWORD_RESET => 'Password reset',
+    ];
+
     protected $fillable = [
         'user_id',
         'action',
+        'event',
         'subject_type',
         'subject_id',
+        'subject_label',
+        'project_id',
         'properties',
+        'ip_address',
+        'user_agent',
+        'method',
+        'url',
+        'batch_id',
     ];
 
     protected $casts = [
@@ -24,5 +59,10 @@ class ActivityLog extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 }

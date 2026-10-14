@@ -436,6 +436,7 @@ class WorkOrderService
             ->with('user:id,name')
             ->where('subject_type', WorkOrder::class)
             ->where('subject_id', $workOrder->id)
+            ->where(fn ($query) => $query->whereNull('event')->orWhere('event', ActivityLog::EVENT_ACTION))
             ->orderBy('id')
             ->get()
             ->map(fn (ActivityLog $log) => [

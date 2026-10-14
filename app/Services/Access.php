@@ -17,6 +17,11 @@ class Access
         return $user->is_admin || $user->role?->slug === 'super_admin';
     }
 
+    public function canViewAuditLog(User $user): bool
+    {
+        return $this->canConfigureApprovals($user);
+    }
+
     public function canConfigureApprovals(User $user): bool
     {
         $user->loadMissing('role');
