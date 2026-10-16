@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\Project;
-use App\Models\Role;
 use App\Models\User;
 use App\Models\UserPermissionOverride;
 use App\Support\Permissions;
@@ -12,9 +11,7 @@ class Access
 {
     public function isSuperAdmin(User $user): bool
     {
-        $user->loadMissing('role');
-
-        return $user->is_admin || $user->role?->slug === 'super_admin';
+        return $user->is_admin || $user->hasRoleSlug('super_admin');
     }
 
     public function canViewAuditLog(User $user): bool
@@ -24,9 +21,7 @@ class Access
 
     public function canConfigureApprovals(User $user): bool
     {
-        $user->loadMissing('role');
-
-        return $this->isSuperAdmin($user) || $user->role?->slug === 'administrator';
+        return $this->isSuperAdmin($user) || $user->hasRoleSlug('administrator');
     }
 
     public function allows(User $user, string $permission): bool
@@ -39,7 +34,7 @@ class Access
      */
     public function explain(User $user, string $permission): array
     {
-        $user->loadMissing('role.permissions', 'permissionOverrides');
+        $user->loadMissing('roles.permissions', 'permissionOverrides');
 
         if ($this->isSuperAdmin($user)) {
             return ['effective' => true, 'source' => 'Granted by Role', 'mode' => 'inherit'];
@@ -65,12 +60,12 @@ class Access
             return ['effective' => true, 'source' => 'Individually Allowed', 'mode' => 'allow'];
         }
 
-        if ($user->role_id) {
-            $granted = $user->role?->grants($permission) ?? false;
+        if ($user->roles->isNotEmpty()) {
+            $granting = $user->roles->first(fn ($role) => $role->grants($permission));
 
             return [
-                'effective' => $granted,
-                'source' => $granted ? 'Granted by Role' : 'Not Granted',
+                'effective' => $granting !== null,
+                'source' => $granting ? 'Granted by '.$granting->name : 'Not Granted',
                 'mode' => 'inherit',
             ];
         }

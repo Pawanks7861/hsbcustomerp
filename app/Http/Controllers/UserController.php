@@ -24,7 +24,7 @@ class UserController extends Controller
     public function index(Request $request): Response
     {
         $users = User::query()
-            ->with(['role', 'projects'])
+            ->with(['roles', 'projects'])
             ->orderBy('name')
             ->get()
             ->map(fn (User $user) => [
@@ -33,7 +33,7 @@ class UserController extends Controller
                 'email' => $user->email,
                 'phone' => $user->phone,
                 'designation' => $user->designation,
-                'role' => $user->role?->name ?: ($user->is_admin ? 'Super Admin' : 'User'),
+                'role' => $this->roleLabels($user),
                 'projects' => $user->project_access === 'selected'
                     ? $user->projects->pluck('project_name')->join(', ')
                     : 'All projects',
@@ -60,9 +60,13 @@ class UserController extends Controller
     public function store(StoreUserRequest $request): RedirectResponse
     {
         $this->guardPrivilege($request, null);
-        $user = User::query()->create($request->safe()->except(['password_confirmation', 'project_ids']));
+        $user = User::query()->create($request->safe()->except(['password_confirmation', 'project_ids', 'role_ids']));
+        $this->syncRoles($request, $user);
         $this->syncProjects($request, $user);
-        $this->activity->log($request->user()->id, 'user.created', $user, ['email' => $user->email, 'role_id' => $user->role_id]);
+        $this->activity->log($request->user()->id, 'user.created', $user, [
+            'email' => $user->email,
+            'role_ids' => $user->roles()->pluck('roles.id')->all(),
+        ]);
 
         return redirect()
             ->route('users.index')
@@ -71,7 +75,7 @@ class UserController extends Controller
 
     public function edit(User $user): Response
     {
-        $user->load('projects');
+        $user->load('projects', 'roles');
 
         return Inertia::render('Users/Form', [
             'user' => [
@@ -82,7 +86,7 @@ class UserController extends Controller
                 'designation' => $user->designation,
                 'status' => $user->status,
                 'is_admin' => $user->is_admin,
-                'role_id' => $user->role_id,
+                'role_ids' => $user->roles->pluck('id')->values()->all(),
                 'project_access' => $user->project_access ?: 'all',
                 'project_ids' => $user->projects->pluck('id'),
                 'is_self' => $user->is(auth()->user()),
@@ -107,18 +111,31 @@ class UserController extends Controller
         }
 
         $this->guardPrivilege($request, $user);
-        $before = $user->only(['role_id', 'is_admin', 'status', 'project_access']);
-        $data = collect($request->validated())->except(['password', 'password_confirmation', 'project_ids'])->all();
+        $user->loadMissing('roles');
+        $before = [
+            'role_ids' => $user->roles->pluck('id')->sort()->values()->all(),
+            'is_admin' => $user->is_admin,
+            'status' => $user->status,
+            'project_access' => $user->project_access,
+        ];
+        $data = collect($request->validated())->except(['password', 'password_confirmation', 'project_ids', 'role_ids'])->all();
 
         if ($request->filled('password')) {
             $data['password'] = $request->validated('password');
         }
 
         $user->update($data);
+        $this->syncRoles($request, $user);
         $this->syncProjects($request, $user);
+        $user->load('roles');
         $this->activity->log($request->user()->id, 'user.updated', $user, [
             'before' => $before,
-            'after' => $user->only(['role_id', 'is_admin', 'status', 'project_access']),
+            'after' => [
+                'role_ids' => $user->roles->pluck('id')->sort()->values()->all(),
+                'is_admin' => $user->is_admin,
+                'status' => $user->status,
+                'project_access' => $user->project_access,
+            ],
             'password_reset' => $request->filled('password'),
         ]);
 
@@ -167,7 +184,7 @@ class UserController extends Controller
     public function permissions(Request $request, User $user): Response
     {
         abort_unless($this->access->allows($request->user(), 'users.edit'), 403);
-        $user->load('role.permissions', 'permissionOverrides');
+        $user->load('roles.permissions', 'permissionOverrides');
         $rows = [];
 
         foreach (Permissions::modules() as $module => $actions) {
@@ -189,7 +206,11 @@ class UserController extends Controller
         }
 
         return Inertia::render('Users/Permissions', [
-            'member' => ['id' => $user->id, 'name' => $user->name, 'role' => $user->role?->name],
+            'member' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'role' => $this->roleLabels($user),
+            ],
             'modules' => $rows,
         ]);
     }
@@ -243,27 +264,35 @@ class UserController extends Controller
     private function guardPrivilege(Request $request, ?User $user): void
     {
         $actor = $request->user();
+        $roleIds = collect($request->input('role_ids', []))->map(fn ($id) => (int) $id)->filter()->unique()->sort()->values()->all();
 
         if ($request->boolean('is_admin') && ! $actor->isSuperAdmin()) {
             abort(403);
         }
 
         if ($user && $user->is($actor)) {
-            if ($request->boolean('is_admin') !== (bool) $user->is_admin || (int) $request->input('role_id') !== (int) $user->role_id) {
+            $user->loadMissing('roles');
+            $current = $user->roles->pluck('id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+
+            if ($request->boolean('is_admin') !== (bool) $user->is_admin || $roleIds !== $current) {
                 abort(403, 'You cannot change your own access.');
             }
         }
 
-        if ($request->filled('role_id')) {
-            $role = Role::query()->with('permissions')->findOrFail($request->integer('role_id'));
+        if ($roleIds !== []) {
+            $roles = Role::query()->with('permissions')->whereIn('id', $roleIds)->get();
 
-            if (($role->slug === 'super_admin' || $role->is_system && $role->slug === 'super_admin') && ! $actor->isSuperAdmin()) {
+            abort_unless($roles->count() === count($roleIds), 422);
+
+            if ($roles->contains('slug', 'super_admin') && ! $actor->isSuperAdmin()) {
                 abort(403);
             }
 
             if (! $actor->isSuperAdmin()) {
-                foreach ($role->permissions as $permission) {
-                    abort_unless($this->access->allows($actor, $permission->permission), 403);
+                foreach ($roles as $role) {
+                    foreach ($role->permissions as $permission) {
+                        abort_unless($this->access->allows($actor, $permission->permission), 403);
+                    }
                 }
             }
         }
@@ -271,6 +300,14 @@ class UserController extends Controller
         if ($user && $user->is_admin && ! $request->boolean('is_admin') && $this->isLastSuperAdmin($user)) {
             abort(403, 'The last active Super Admin cannot be removed.');
         }
+    }
+
+    private function syncRoles(Request $request, User $user): void
+    {
+        $user->roles()->sync(
+            collect($request->input('role_ids', []))->map(fn ($id) => (int) $id)->filter()->unique()->values()->all()
+        );
+        $user->unsetRelation('roles');
     }
 
     private function syncProjects(Request $request, User $user): void
@@ -297,9 +334,20 @@ class UserController extends Controller
         return User::query()
             ->where('status', User::STATUS_ACTIVE)
             ->where(function ($query): void {
-                $query->where('is_admin', true)->orWhereHas('role', fn ($role) => $role->where('slug', 'super_admin'));
+                $query->where('is_admin', true)->orWhereHas('roles', fn ($role) => $role->where('slug', 'super_admin'));
             })
             ->count() <= 1;
+    }
+
+    private function roleLabels(User $user): string
+    {
+        $names = $user->roles->sortBy('name')->pluck('name')->values();
+
+        if ($names->isEmpty()) {
+            return $user->is_admin ? 'Super Admin' : 'No role';
+        }
+
+        return $names->join(', ');
     }
 
     /**

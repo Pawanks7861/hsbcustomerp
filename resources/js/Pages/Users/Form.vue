@@ -24,7 +24,7 @@ const form = useForm({
     designation: props.user?.designation ?? '',
     status: props.user?.status ?? 'active',
     is_admin: props.user?.is_admin ?? false,
-    role_id: props.user?.role_id ?? '',
+    role_ids: [...(props.user?.role_ids ?? [])],
     project_access: props.user?.project_access ?? 'all',
     project_ids: props.user?.project_ids ?? [],
     password: '',
@@ -82,13 +82,18 @@ function submit() {
                 </select>
                 <span v-if="form.errors.status" class="mt-1 block text-red-700">{{ form.errors.status }}</span>
             </label>
-            <label class="block text-sm">
-                <span class="font-medium">Role</span>
-                <select v-model="form.role_id" class="ui-input">
-                    <option value="">No role — keep the existing user access</option>
-                    <option v-for="role in roles" :key="role.id" :value="role.id">{{ role.name }}</option>
-                </select>
-            </label>
+            <div class="block text-sm">
+                <span class="font-medium">Roles</span>
+                <p class="mt-1 text-xs text-slate-500">Select one or more roles. Permissions from all selected roles are combined.</p>
+                <div class="mt-2 grid gap-2 sm:grid-cols-2">
+                    <label v-for="role in roles" :key="role.id" class="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                        <input v-model="form.role_ids" type="checkbox" :value="role.id" class="rounded border-slate-300">
+                        <span>{{ role.name }}</span>
+                    </label>
+                </div>
+                <p v-if="roles.length === 0" class="mt-2 text-slate-500">No active roles available.</p>
+                <span v-if="form.errors.role_ids" class="mt-1 block text-red-700">{{ form.errors.role_ids }}</span>
+            </div>
             <label class="block text-sm">
                 <span class="font-medium">Project access</span>
                 <select v-model="form.project_access" class="ui-input">

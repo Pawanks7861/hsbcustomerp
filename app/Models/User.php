@@ -5,7 +5,6 @@ namespace App\Models;
 use App\Services\Access;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -28,7 +27,6 @@ class User extends Authenticatable
         'designation',
         'status',
         'is_admin',
-        'role_id',
         'project_access',
         'last_login_at',
     ];
@@ -48,9 +46,9 @@ class User extends Authenticatable
         ];
     }
 
-    public function role(): BelongsTo
+    public function roles(): BelongsToMany
     {
-        return $this->belongsTo(Role::class);
+        return $this->belongsToMany(Role::class);
     }
 
     public function permissionOverrides(): HasMany
@@ -61,6 +59,13 @@ class User extends Authenticatable
     public function projects(): BelongsToMany
     {
         return $this->belongsToMany(Project::class);
+    }
+
+    public function hasRoleSlug(string $slug): bool
+    {
+        $this->loadMissing('roles');
+
+        return $this->roles->contains('slug', $slug);
     }
 
     public function allows(string $permission): bool

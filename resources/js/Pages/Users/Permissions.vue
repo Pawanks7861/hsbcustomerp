@@ -34,7 +34,7 @@ function save() {
     <AdminLayout>
         <template #header>
             <PageHeader :title="member.name" eyebrow="Individual permissions">
-                <span class="text-sm text-slate-500">{{ member.role || 'No role' }}</span>
+                <span class="text-sm text-slate-500">{{ member.role || 'No roles' }}</span>
             </PageHeader>
         </template>
         <form class="space-y-3" @submit.prevent="save">
@@ -57,7 +57,7 @@ function save() {
                                 <td>
                                     <a v-if="action.approval" href="/approvals/settings" class="text-xs text-slate-500 hover:underline">Set in Approval Settings</a>
                                     <select v-else-if="mode(action.permission)" v-model="mode(action.permission).mode" class="ui-input">
-                                        <option value="inherit">Inherit from role</option>
+                                        <option value="inherit">Inherit from roles</option>
                                         <option value="allow">Allow</option>
                                         <option value="deny">Deny</option>
                                     </select>

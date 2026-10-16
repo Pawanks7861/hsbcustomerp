@@ -2,6 +2,8 @@
 
 namespace Database\Factories;
 
+use App\Models\Role;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -42,6 +44,19 @@ class UserFactory extends Factory
             'is_admin' => true,
             'status' => 'active',
         ]);
+    }
+
+    /**
+     * @param  string|list<string>  $slugs
+     */
+    public function withRoles(string|array $slugs): static
+    {
+        $slugs = (array) $slugs;
+
+        return $this->afterCreating(function (User $user) use ($slugs): void {
+            $ids = Role::query()->whereIn('slug', $slugs)->pluck('id');
+            $user->roles()->sync($ids);
+        });
     }
 
     public function inactive(): static

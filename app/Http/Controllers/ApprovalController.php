@@ -54,7 +54,7 @@ class ApprovalController extends Controller
                 'name' => $user->name,
                 'email' => $user->email,
                 'designation' => $user->designation,
-                'role' => $user->role?->name,
+                'role' => $user->roles->sortBy('name')->pluck('name')->join(', ') ?: null,
                 'super_admin' => $this->access->isSuperAdmin($user),
             ])->values(),
             'types' => collect(ApprovalInbox::types())->map(fn (array $definition, string $key) => [
@@ -118,7 +118,7 @@ class ApprovalController extends Controller
     private function staff()
     {
         return User::query()
-            ->with(['role', 'permissionOverrides'])
+            ->with(['roles', 'permissionOverrides'])
             ->where('status', User::STATUS_ACTIVE)
             ->orderBy('name')
             ->get();
