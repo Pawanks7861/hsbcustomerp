@@ -17,7 +17,7 @@ defineProps({
 });
 
 const company = computed(() => usePage().props.company ?? null);
-const companyName = computed(() => company.value?.company_name || 'BOQ & Budget');
+const companyName = computed(() => company.value?.company_name || 'HSB Projects');
 const logoBroken = ref(false);
 const showLogo = computed(() => Boolean(company.value?.logo_url) && !logoBroken.value);
 

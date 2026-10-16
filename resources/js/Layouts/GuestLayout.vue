@@ -23,7 +23,7 @@ watch(() => company.value?.logo_url, () => {
                 class="mx-auto mb-3 h-12 max-h-12 w-auto max-w-[160px] object-contain"
                 @error="logoBroken = true"
             >
-            <p class="text-base font-semibold text-slate-900">{{ company?.company_name || 'BOQ & Budget' }}</p>
+            <p class="text-base font-semibold text-slate-900">{{ company?.company_name || 'HSB Projects' }}</p>
         </div>
         <div class="w-full max-w-md rounded-[24px] border border-slate-200/80 bg-white px-6 py-6">
             <slot />

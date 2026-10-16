@@ -4,7 +4,7 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title inertia>{{ config('app.name', 'BOQ & Budget') }}</title>
+        <title inertia>{{ config('app.name', 'HSB Projects') }}</title>
 
         @php($favicon = \App\Models\CompanySetting::faviconLink())
         @if ($favicon)

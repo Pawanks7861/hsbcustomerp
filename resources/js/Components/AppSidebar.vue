@@ -73,7 +73,7 @@ function itemClass(active) {
                     @error="logoBroken = true"
                 >
                 <span v-else class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-xs font-semibold text-slate-600">{{ initials }}</span>
-                <p class="truncate text-sm font-semibold text-slate-900">{{ company?.company_name || 'BOQ & Budget' }}</p>
+                <p class="truncate text-sm font-semibold text-slate-900">{{ company?.company_name || 'HSB Projects' }}</p>
             </div>
             <button type="button" class="rounded-lg p-1 text-slate-400 hover:bg-slate-50 lg:hidden" @click="emit('close')">
                 <X class="h-4 w-4" />
