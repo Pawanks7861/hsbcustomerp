@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Models\ActivityLog;
+use App\Models\CreditNote;
+use App\Models\DebitNote;
 use App\Models\InternalDeliveryNote;
 use App\Models\InventoryLocation;
 use App\Models\Project;
@@ -39,6 +41,19 @@ class AppServiceProvider extends ServiceProvider
 
         Route::bind('transfer', fn (string $value) => InternalDeliveryNote::query()->findOrFail($value));
         Route::bind('location', fn (string $value) => InventoryLocation::query()->findOrFail($value));
+        Route::bind('note', function (string $value, \Illuminate\Routing\Route $route) {
+            $name = $route->getName() ?? '';
+
+            if (str_contains($name, 'debit-notes')) {
+                return DebitNote::query()->findOrFail($value);
+            }
+
+            if (str_contains($name, 'credit-notes')) {
+                return CreditNote::query()->findOrFail($value);
+            }
+
+            abort(404);
+        });
 
         Project::created(function (Project $project): void {
             app(InventoryLocationService::class)->ensureProjectStore($project);

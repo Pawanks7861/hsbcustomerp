@@ -4,7 +4,7 @@ import { ref } from 'vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
-import { formatInr, formatQty } from '../../lib/money';
+import { formatQty } from '../../lib/money';
 
 const props = defineProps({
     project: { type: Object, required: true },
@@ -61,7 +61,6 @@ function applyFilters() {
                         <th class="px-4 py-3">Request Date</th>
                         <th class="px-4 py-3">Required Date</th>
                         <th class="px-4 py-3">Requested By</th>
-                        <th class="px-4 py-3 text-right font-medium text-slate-500">Estimated Total</th>
                         <th class="px-4 py-3">Status</th>
                         <th class="px-4 py-3">Qty Control</th>
                         <th class="px-4 py-3">Actions</th>
@@ -69,7 +68,7 @@ function applyFilters() {
                 </thead>
                 <tbody>
                     <tr v-if="purchaseRequests.length === 0">
-                        <td colspan="9" class="border border-slate-200 px-4 py-8 text-center text-slate-500">No purchase requests yet.</td>
+                        <td colspan="8" class="border border-slate-200 px-4 py-8 text-center text-slate-500">No purchase requests yet.</td>
                     </tr>
                     <tr v-for="record in purchaseRequests" :key="record.id" class="odd:bg-white even:bg-stone-50">
                         <td class="px-4 py-3.5 font-medium">{{ record.pr_number }}</td>
@@ -77,7 +76,6 @@ function applyFilters() {
                         <td class="px-4 py-3.5">{{ record.request_date }}</td>
                         <td class="px-4 py-3.5">{{ record.required_date || '—' }}</td>
                         <td class="px-4 py-3.5">{{ record.requested_by }}</td>
-                        <td class="px-4 py-3.5 text-right tabular-nums">{{ formatInr(record.estimated_total) }}</td>
                         <td class="px-4 py-3.5"><StatusBadge :status="record.status" /></td>
                         <td class="px-4 py-3.5">
                             <span v-if="record.quantity_control?.state === 'within'" class="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">Within BOQ</span>

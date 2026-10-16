@@ -7,6 +7,7 @@ use App\Models\Project;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\Vendor;
+use App\Services\Access;
 use App\Services\VendorBalanceService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -52,8 +53,10 @@ class VendorController extends Controller
         return redirect()->route('vendors.show', $vendor)->with('success', 'Vendor created.');
     }
 
-    public function show(Vendor $vendor, VendorBalanceService $balances, Request $request): Response
+    public function show(Vendor $vendor, VendorBalanceService $balances, Request $request, Access $access): Response
     {
+        abort_unless($access->allows($request->user(), 'vendors.view'), 403);
+
         $summary = $balances->summary($vendor);
 
         return Inertia::render('Vendors/Show', [
@@ -125,8 +128,10 @@ class VendorController extends Controller
         return redirect()->route('vendors.index')->with('success', 'Vendor deleted.');
     }
 
-    public function report(Request $request, VendorBalanceService $balances): Response
+    public function report(Request $request, VendorBalanceService $balances, Access $access): Response
     {
+        abort_unless($access->allows($request->user(), 'vendors.view'), 403);
+
         $vendorId = $request->integer('vendor_id') ?: null;
         $projectId = $request->integer('project_id') ?: null;
         $from = $request->string('from')->toString() ?: null;

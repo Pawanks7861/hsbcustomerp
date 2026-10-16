@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\CreditNote;
+use App\Models\DebitNote;
 use App\Models\PurchaseInvoice;
 use App\Models\Vendor;
 use App\Models\VendorAdvanceAdjustment;
@@ -12,8 +14,48 @@ use App\Support\Money;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
 
+/**
+ * Vendor balance summary (parallel to the payable ledger, not a second ledger).
+ *
+ * Payable outstanding:
+ * - Credit side: purchase invoices (+ vendor opening_outstanding when unscoped).
+ * - Debit side: invoice payments, advance adjustments, approved debit notes, approved credit notes.
+ * - Advance payments do not reduce outstanding until adjusted against invoices.
+ * - Refund due (recoveries marked) is tracked separately via refund_due; it does not change outstanding_payable.
+ * - Refunds received reduce refund_due only, not outstanding_payable.
+ * - Draft, submitted, and rejected debit/credit notes are excluded.
+ */
 class VendorBalanceService
 {
+    /**
+     * @return array{
+     *     invoice_credits: string,
+     *     payment_debits: string,
+     *     adjustment_debits: string,
+     *     notes_debits: string
+     * }
+     */
+    public function payableComponents(Vendor $vendor, ?int $projectId = null, ?string $from = null, ?string $to = null): array
+    {
+        $invoiceCredits = $this->sumInvoices($vendor, $projectId, $from, $to);
+        $paymentDebits = Money::add(
+            $this->sumPayments($vendor, VendorPayment::TYPE_INVOICE, $projectId, $from, $to),
+            $this->sumPayments($vendor, VendorPayment::TYPE_OTHER, $projectId, $from, $to),
+        );
+        $adjustmentDebits = $this->sumAdjustments($vendor, $projectId, $from, $to);
+        $notesDebits = Money::add(
+            $this->sumApprovedNotes($vendor, DebitNote::class, $projectId, $from, $to),
+            $this->sumApprovedNotes($vendor, CreditNote::class, $projectId, $from, $to),
+        );
+
+        return [
+            'invoice_credits' => $invoiceCredits,
+            'payment_debits' => $paymentDebits,
+            'adjustment_debits' => $adjustmentDebits,
+            'notes_debits' => $notesDebits,
+        ];
+    }
+
     /**
      * @return array<string, string>
      */
@@ -34,8 +76,12 @@ class VendorBalanceService
         $refundReceived = $this->sumRefundsReceived($vendor, $projectId, $from, $to);
         $poTotal = $this->sumApprovedPos($vendor, $projectId, $from, $to);
 
+        $debitNotesTotal = $this->sumApprovedNotes($vendor, DebitNote::class, $projectId, $from, $to);
+        $creditNotesTotal = $this->sumApprovedNotes($vendor, CreditNote::class, $projectId, $from, $to);
+        $notesTotal = Money::add($debitNotesTotal, $creditNotesTotal);
+
         $available = Money::sub(Money::sub($advancePaid, $adjusted), $marked);
-        $outstanding = Money::sub(Money::sub($invoiceTotal, $invoicePayments), $adjusted);
+        $outstanding = Money::sub(Money::sub(Money::sub($invoiceTotal, $invoicePayments), $adjusted), $notesTotal);
 
         if (! $filtered) {
             $outstanding = Money::add($outstanding, (string) $vendor->opening_outstanding);
@@ -55,6 +101,8 @@ class VendorBalanceService
             'marked_for_refund' => $marked,
             'refund_received' => $refundReceived,
             'refund_due' => $this->floor($refundDue),
+            'debit_notes_total' => $debitNotesTotal,
+            'credit_notes_total' => $creditNotesTotal,
         ];
     }
 
@@ -214,6 +262,20 @@ class VendorBalanceService
         $this->restrict($query, 'project_id', 'refund_date', $projectId, $from, $to);
 
         return $this->money((string) $query->sum('amount'));
+    }
+
+    /**
+     * @param  class-string<DebitNote|CreditNote>  $modelClass
+     */
+    private function sumApprovedNotes(Vendor $vendor, string $modelClass, ?int $projectId, ?string $from, ?string $to): string
+    {
+        $query = $modelClass::query()
+            ->where('vendor_id', $vendor->id)
+            ->where('status', DocumentStatus::APPROVED);
+
+        $this->restrict($query, 'project_id', 'date', $projectId, $from, $to);
+
+        return $this->money((string) $query->sum('total_amount'));
     }
 
     private function sumApprovedPos(Vendor $vendor, ?int $projectId, ?string $from, ?string $to): string

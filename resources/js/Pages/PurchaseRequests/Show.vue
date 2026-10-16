@@ -5,7 +5,7 @@ import AdminLayout from '../../Layouts/AdminLayout.vue';
 import CompanyHeader from '../../Components/CompanyHeader.vue';
 import DocumentPdfActions from '../../Components/DocumentPdfActions.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
-import { formatInr, formatQty } from '../../lib/money';
+import { formatQty } from '../../lib/money';
 
 const props = defineProps({
     project: { type: Object, required: true },
@@ -127,8 +127,6 @@ function destroy() {
                             <th class="px-3 py-2 font-medium text-slate-500">Description</th>
                             <th class="px-3 py-2 font-medium text-slate-500">Unit</th>
                             <th class="px-3 py-2 font-medium text-slate-500 text-right">Qty</th>
-                            <th class="px-3 py-2 font-medium text-slate-500 text-right">Estimated Rate</th>
-                            <th class="px-3 py-2 font-medium text-slate-500 text-right">Estimated Amount</th>
                             <th class="px-3 py-2 font-medium text-slate-500">Remarks</th>
                         </tr>
                     </thead>
@@ -143,18 +141,9 @@ function destroy() {
                             </td>
                             <td class="border border-slate-200 px-3 py-2">{{ line.unit || '—' }}</td>
                             <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ line.quantity }}</td>
-                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ line.estimated_rate === '' ? '—' : formatInr(line.estimated_rate) }}</td>
-                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ line.estimated_amount === null ? '—' : formatInr(line.estimated_amount) }}</td>
                             <td class="border border-slate-200 px-3 py-2">{{ line.remarks || '—' }}</td>
                         </tr>
                     </tbody>
-                    <tfoot>
-                        <tr>
-                            <td colspan="5" class="border border-slate-300 px-3 py-2 text-right font-medium">Total Estimated Amount</td>
-                            <td class="border border-slate-300 px-3 py-2 text-right font-semibold tabular-nums">{{ formatInr(purchaseRequest.estimated_total) }}</td>
-                            <td class="border border-slate-300"></td>
-                        </tr>
-                    </tfoot>
                 </table>
             </div>
 

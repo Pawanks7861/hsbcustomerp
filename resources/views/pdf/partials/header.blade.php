@@ -31,7 +31,7 @@
             @if($displayNumber !== '' || $subjectText !== '')
                 <div class="doc-number">{{ $displayNumber }}@if($displayNumber !== '' && $subjectText !== '') - @endif{{ $subjectText }}</div>
             @endif
-            @if($revision !== null && $revision !== '')
+            @if(($revision ?? null) !== null && $revision !== '')
                 <div class="line">Revision: REV {{ $revision }}</div>
             @endif
             @if(! empty($date))

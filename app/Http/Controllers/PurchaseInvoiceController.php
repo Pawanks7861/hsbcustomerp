@@ -8,12 +8,14 @@ use App\Models\PurchaseInvoiceItem;
 use App\Models\PurchaseOrder;
 use App\Models\Vendor;
 use App\Models\VendorAdvanceAdjustment;
+use App\Services\Access;
 use App\Services\DocumentPdf;
 use App\Services\PurchaseInvoiceLineService;
 use App\Services\VendorBalanceService;
 use App\Support\DocumentStatus;
 use App\Support\Money;
 use App\Support\PdfFormat;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -28,8 +30,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PurchaseInvoiceController extends Controller
 {
-    public function index(Project $project, VendorBalanceService $balances): Response
+    public function index(Request $request, Project $project, VendorBalanceService $balances, Access $access): Response
     {
+        abort_unless($access->allows($request->user(), 'invoices.view'), 403);
+
         $invoices = $project->purchaseInvoices()->with(['vendor', 'purchaseOrder'])->latest('invoice_date')->get();
 
         return Inertia::render('PurchaseInvoices/Index', [
@@ -48,8 +52,10 @@ class PurchaseInvoiceController extends Controller
         ]);
     }
 
-    public function create(Request $request, Project $project, PurchaseInvoiceLineService $lines): Response
+    public function create(Request $request, Project $project, PurchaseInvoiceLineService $lines, Access $access): Response
     {
+        abort_unless($access->allows($request->user(), 'invoices.create'), 403);
+
         $order = $this->orderForProject($project, $request->integer('purchase_order_id') ?: null, approved: true);
 
         return Inertia::render('PurchaseInvoices/Form', [
@@ -58,18 +64,23 @@ class PurchaseInvoiceController extends Controller
             'purchaseOrders' => $this->orderOptions($project),
             'selectedOrder' => $order ? $this->orderCard($order, $lines) : null,
             'vendors' => $this->vendorOptions(),
+            'canRoundOff' => $access->allows($request->user(), 'invoices.round_off') || $access->isSuperAdmin($request->user()),
         ]);
     }
 
-    public function store(Request $request, Project $project, PurchaseInvoiceLineService $lines): RedirectResponse
+    public function store(Request $request, Project $project, PurchaseInvoiceLineService $lines, Access $access): RedirectResponse
     {
+        abort_unless($access->allows($request->user(), 'invoices.create'), 403);
+
         $invoice = $this->persist($request, $project, null, $lines);
 
         return redirect()->route('projects.purchase-invoices.show', [$project, $invoice])->with('success', 'Purchase invoice recorded.');
     }
 
-    public function show(Project $project, PurchaseInvoice $invoice, VendorBalanceService $balances): Response
+    public function show(Request $request, Project $project, PurchaseInvoice $invoice, VendorBalanceService $balances, Access $access): Response
     {
+        abort_unless($access->allows($request->user(), 'invoices.view'), 403);
+
         $this->ensureInvoice($project, $invoice);
         $invoice->load(['vendor', 'purchaseOrder', 'items']);
         $payload = $this->invoicePayload($invoice, $balances);
@@ -82,18 +93,24 @@ class PurchaseInvoiceController extends Controller
         ]);
     }
 
-    public function pdf(Project $project, PurchaseInvoice $invoice, VendorBalanceService $balances, DocumentPdf $pdf): HttpResponse
+    public function pdf(Request $request, Project $project, PurchaseInvoice $invoice, VendorBalanceService $balances, DocumentPdf $pdf, Access $access): HttpResponse
     {
+        abort_unless($access->allows($request->user(), 'invoices.print'), 403);
+
         return $this->renderPdf($project, $invoice, $balances, $pdf, false);
     }
 
-    public function downloadPdf(Project $project, PurchaseInvoice $invoice, VendorBalanceService $balances, DocumentPdf $pdf): HttpResponse
+    public function downloadPdf(Request $request, Project $project, PurchaseInvoice $invoice, VendorBalanceService $balances, DocumentPdf $pdf, Access $access): HttpResponse
     {
+        abort_unless($access->allows($request->user(), 'invoices.print'), 403);
+
         return $this->renderPdf($project, $invoice, $balances, $pdf, true);
     }
 
-    public function update(Request $request, Project $project, PurchaseInvoice $invoice, PurchaseInvoiceLineService $lines): RedirectResponse
+    public function update(Request $request, Project $project, PurchaseInvoice $invoice, PurchaseInvoiceLineService $lines, Access $access): RedirectResponse
     {
+        abort_unless($access->allows($request->user(), 'invoices.edit'), 403);
+
         $this->ensureInvoice($project, $invoice);
 
         if ($invoice->hasSettlements()) {
@@ -105,8 +122,10 @@ class PurchaseInvoiceController extends Controller
         return redirect()->route('projects.purchase-invoices.show', [$project, $invoice])->with('success', 'Invoice updated.');
     }
 
-    public function destroy(Project $project, PurchaseInvoice $invoice): RedirectResponse
+    public function destroy(Request $request, Project $project, PurchaseInvoice $invoice, Access $access): RedirectResponse
     {
+        abort_unless($access->allows($request->user(), 'invoices.delete'), 403);
+
         $this->ensureInvoice($project, $invoice);
 
         if ($invoice->hasSettlements()) {
@@ -174,6 +193,8 @@ class PurchaseInvoiceController extends Controller
             'invoice_amount' => [$lineMode ? 'nullable' : 'required', 'numeric', 'gte:0'],
             'tax_amount' => ['nullable', 'numeric', 'gte:0'],
             'tax_percentage' => ['nullable', 'numeric', Rule::in(PurchaseInvoice::TAX_RATES)],
+            'round_off' => ['nullable', 'numeric', 'between:-100,100'],
+            'round_off_mode' => ['nullable', Rule::in(['auto', 'manual'])],
             'due_date' => ['nullable', 'date'],
             'remarks' => ['nullable', 'string', 'max:2000'],
             'invoice_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
@@ -194,22 +215,42 @@ class PurchaseInvoiceController extends Controller
             $order = $this->attachVendor($request, $order);
         }
 
+        $invoiceNumber = trim($validated['invoice_number']);
+        $this->ensureUniqueInvoiceNumber($order->vendor_id, $invoiceNumber, $invoice?->id);
+
         $amount = Money::scale($validated['invoice_amount'] ?? 0, 2) ?? '0.00';
         $taxPercentage = isset($validated['tax_percentage']) ? Money::scale($validated['tax_percentage'], 2) : null;
         $tax = $taxPercentage !== null && ! $lineMode
             ? Money::percentage($amount, $taxPercentage)
             : (Money::scale($validated['tax_amount'] ?? 0, 2) ?? '0.00');
+        $roundOffMode = $validated['round_off_mode'] ?? 'auto';
+        $manualRoundOff = $validated['round_off'] ?? null;
+        $beforeRound = Money::add($amount, $tax);
+        $canRoundOff = app(Access::class)->allows($request->user(), 'invoices.round_off')
+            || app(Access::class)->isSuperAdmin($request->user());
+
+        if (! $canRoundOff) {
+            $roundOffMode = 'auto';
+            $manualRoundOff = null;
+        } elseif ($roundOffMode === 'manual' || ($lineMode && $manualRoundOff !== null && bccomp((string) (Money::scale($manualRoundOff, 2) ?? '0.00'), '0.00', 2) !== 0)) {
+            // Manual / non-zero line round-off requires invoices.round_off (already checked).
+        }
+
+        $roundOff = $lineMode
+            ? ($canRoundOff ? (Money::scale($manualRoundOff ?? 0, 2) ?? '0.00') : '0.00')
+            : $this->resolveRoundOff($beforeRound, $roundOffMode, $canRoundOff ? $manualRoundOff : null);
 
         $attributes = [
             'project_id' => $project->id,
             'purchase_order_id' => $order->id,
             'vendor_id' => $order->vendor_id,
-            'invoice_number' => trim($validated['invoice_number']),
+            'invoice_number' => $invoiceNumber,
             'invoice_date' => $validated['invoice_date'],
             'invoice_amount' => $amount,
             'tax_percentage' => $taxPercentage,
             'tax_amount' => $tax,
-            'total_amount' => Money::add($amount, $tax),
+            'round_off' => $roundOff,
+            'total_amount' => Money::add($beforeRound, $roundOff),
             'due_date' => $validated['due_date'] ?? null,
             'remarks' => $validated['remarks'] ?? null,
         ];
@@ -224,26 +265,73 @@ class PurchaseInvoiceController extends Controller
             }
         }
 
-        $saved = DB::transaction(function () use ($invoice, $attributes, $request, $lineMode, $lines, $order, $taxPercentage): PurchaseInvoice {
-            if ($invoice) {
-                $invoice->update($attributes);
-                $saved = $invoice;
-            } else {
-                $saved = PurchaseInvoice::query()->create([
-                    ...$attributes,
-                    'status' => PurchaseInvoice::STATUS_RECORDED,
-                    'created_by' => $request->user()->id,
+        try {
+            $saved = DB::transaction(function () use ($invoice, $attributes, $request, $lineMode, $lines, $order, $taxPercentage, $roundOffMode, $manualRoundOff): PurchaseInvoice {
+                if ($invoice) {
+                    $invoice->update($attributes);
+                    $saved = $invoice;
+                } else {
+                    $saved = PurchaseInvoice::query()->create([
+                        ...$attributes,
+                        'status' => PurchaseInvoice::STATUS_RECORDED,
+                        'created_by' => $request->user()->id,
+                    ]);
+                }
+
+                if ($lineMode) {
+                    $saved->update($lines->sync(
+                        $saved,
+                        $order,
+                        $request->input('items', []),
+                        $taxPercentage,
+                        $roundOffMode,
+                        $manualRoundOff,
+                    ));
+                }
+
+                return $saved;
+            });
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages([
+                'invoice_number' => 'This invoice number is already recorded for this vendor.',
+            ]);
+        }
+
+        return $saved->fresh();
+    }
+
+    private function resolveRoundOff(string $beforeRound, string $mode, mixed $manual): string
+    {
+        if ($mode === 'manual') {
+            $value = Money::scale($manual ?? 0, 2) ?? '0.00';
+
+            if (bccomp(ltrim($value, '-'), '100.00', 2) === 1) {
+                throw ValidationException::withMessages([
+                    'round_off' => 'Round off cannot exceed ₹100.00.',
                 ]);
             }
 
-            if ($lineMode) {
-                $saved->update($lines->sync($saved, $order, $request->input('items', []), $taxPercentage));
-            }
+            return $value;
+        }
 
-            return $saved;
-        });
+        $nearest = Money::scale(round((float) $beforeRound), 2) ?? $beforeRound;
 
-        return $saved->fresh();
+        return Money::sub($nearest, $beforeRound);
+    }
+
+    private function ensureUniqueInvoiceNumber(int $vendorId, string $invoiceNumber, ?int $exceptId = null): void
+    {
+        $exists = PurchaseInvoice::query()
+            ->where('vendor_id', $vendorId)
+            ->where('invoice_number', $invoiceNumber)
+            ->when($exceptId, fn ($query) => $query->whereKeyNot($exceptId))
+            ->exists();
+
+        if ($exists) {
+            throw ValidationException::withMessages([
+                'invoice_number' => 'This invoice number is already recorded for this vendor.',
+            ]);
+        }
     }
 
     private function attachVendor(Request $request, PurchaseOrder $order): PurchaseOrder
@@ -355,6 +443,7 @@ class PurchaseInvoiceController extends Controller
             'invoice_amount' => (string) $invoice->invoice_amount,
             'tax_percentage' => $invoice->tax_percentage === null ? null : (string) $invoice->tax_percentage,
             'tax_amount' => (string) $invoice->tax_amount,
+            'round_off' => (string) ($invoice->round_off ?? '0.00'),
             'total_amount' => (string) $invoice->total_amount,
             'paid' => $balances->directInvoicePayments($invoice),
             'advance_applied' => $balances->advanceApplied($invoice),

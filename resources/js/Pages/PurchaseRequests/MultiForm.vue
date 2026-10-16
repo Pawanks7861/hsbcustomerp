@@ -129,8 +129,6 @@ function submit() {
                                 <th class="px-2 py-2 text-right">BOQ Qty</th>
                                 <th class="px-2 py-2 text-right">Previously Requested</th>
                                 <th class="px-2 py-2 text-right">Requested Qty</th>
-                                <th class="px-2 py-2 text-right">Rate</th>
-                                <th class="px-2 py-2 text-right">Amount</th>
                                 <th class="px-2 py-2"></th>
                             </tr>
                         </thead>
@@ -155,14 +153,12 @@ function submit() {
                                         <input v-model="row.quantity" type="number" min="0.001" step="0.001" required class="ui-input w-28 text-right">
                                         <p v-if="form.errors[`items.${index}.quantity`]" class="mt-1 text-red-700">{{ form.errors[`items.${index}.quantity`] }}</p>
                                     </td>
-                                    <td class="px-2 py-2 text-right tabular-nums">{{ rowState(row)?.item.rate ?? '—' }}</td>
-                                    <td class="px-2 py-2 text-right tabular-nums">{{ rowState(row)?.amount == null ? '—' : rowState(row).amount.toFixed(2) }}</td>
                                     <td class="px-2 py-2">
                                         <button v-if="form.items.length > 1" type="button" class="text-red-700" @click="removeItem(index)">Remove</button>
                                     </td>
                                 </tr>
                                 <tr v-if="rowState(row)?.exceeded">
-                                    <td colspan="9" class="px-2 pb-3 text-sm font-semibold text-orange-800">BOQ QUANTITY EXCEEDED — APPROVAL REQUIRED</td>
+                                    <td colspan="7" class="px-2 pb-3 text-sm font-semibold text-orange-800">BOQ QUANTITY EXCEEDED — APPROVAL REQUIRED</td>
                                 </tr>
                             </template>
                         </tbody>

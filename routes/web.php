@@ -4,7 +4,15 @@ use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\BoqController;
 use App\Http\Controllers\BoqImportController;
+use App\Http\Controllers\BoqItemBudgetController;
+use App\Http\Controllers\BoqItemProcurementController;
 use App\Http\Controllers\BoqRevisionController;
+use App\Http\Controllers\CompanySettingController;
+use App\Http\Controllers\CreditNoteController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DebitNoteController;
+use App\Http\Controllers\ExpenseCategoryController;
+use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\GoodsReceiptController;
 use App\Http\Controllers\InternalDeliveryController;
 use App\Http\Controllers\InventoryController;
@@ -12,25 +20,24 @@ use App\Http\Controllers\InventoryLocationController;
 use App\Http\Controllers\MaterialController;
 use App\Http\Controllers\MaterialIssueController;
 use App\Http\Controllers\MaterialReceiptController;
-use App\Http\Controllers\PurchaseInvoiceController;
-use App\Http\Controllers\VendorController;
-use App\Http\Controllers\VendorPaymentController;
-use App\Http\Controllers\VendorRecoveryController;
-use App\Http\Controllers\BoqItemBudgetController;
-use App\Http\Controllers\BoqItemProcurementController;
-use App\Http\Controllers\CompanySettingController;
-use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\PurchaseInvoiceController;
 use App\Http\Controllers\PurchaseOrderController;
 use App\Http\Controllers\PurchaseRequestController;
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\RoleController;
 use App\Http\Controllers\StockAdjustmentController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\VendorController;
+use App\Http\Controllers\VendorLedgerController;
+use App\Http\Controllers\VendorPaymentController;
+use App\Http\Controllers\VendorRecoveryController;
 use App\Http\Controllers\WorkOrderController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'active', 'project.access'])->group(function () {
-    Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/', [DashboardController::class, 'index'])->middleware('permission:dashboard.view')->name('dashboard');
 
     Route::get('approvals', [ApprovalController::class, 'index'])->name('approvals.index');
     Route::get('approvals/settings', [ApprovalController::class, 'settings'])->name('approvals.settings');
@@ -40,9 +47,41 @@ Route::middleware(['auth', 'active', 'project.access'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
 
-    Route::resource('projects', ProjectController::class);
+    Route::get('projects', [ProjectController::class, 'index'])->middleware('permission:projects.view')->name('projects.index');
+    Route::get('projects/create', [ProjectController::class, 'create'])->middleware('permission:projects.create')->name('projects.create');
+    Route::post('projects', [ProjectController::class, 'store'])->middleware('permission:projects.create')->name('projects.store');
+    Route::get('projects/{project}', [ProjectController::class, 'show'])->middleware('permission:projects.view')->name('projects.show');
+    Route::get('projects/{project}/edit', [ProjectController::class, 'edit'])->middleware('permission:projects.edit')->name('projects.edit');
+    Route::put('projects/{project}', [ProjectController::class, 'update'])->middleware('permission:projects.edit')->name('projects.update');
+    Route::delete('projects/{project}', [ProjectController::class, 'destroy'])->middleware('permission:projects.delete')->name('projects.destroy');
 
-    Route::get('vendors/report', [VendorController::class, 'report'])->name('vendors.report');
+    Route::get('reports', [ReportController::class, 'index'])->middleware('permission:reports.view')->name('reports.index');
+    Route::get('reports/{report}', [ReportController::class, 'show'])->middleware('permission:reports.view')->name('reports.show');
+    Route::get('reports/{report}/export/excel', [ReportController::class, 'exportExcel'])->middleware('permission:reports.export')->name('reports.export.excel');
+    Route::get('reports/{report}/export/pdf', [ReportController::class, 'exportPdf'])->name('reports.export.pdf');
+    Route::get('vendors/report', [VendorController::class, 'report'])->middleware('permission:vendors.view')->name('vendors.report');
+    Route::get('vendors/reconciliation', [VendorLedgerController::class, 'reconciliationIndex'])->middleware('permission:vendors.ledger')->name('vendors.reconciliation.index');
+    Route::get('vendors/{vendor}/reconciliation', [VendorLedgerController::class, 'reconciliationShow'])->middleware('permission:vendors.ledger')->name('vendors.reconciliation.show');
+    Route::get('vendors/{vendor}/ledger', [VendorLedgerController::class, 'show'])->middleware('permission:vendors.ledger')->name('vendors.ledger');
+
+    Route::get('expenses', [ExpenseController::class, 'index'])->middleware('permission:expenses.view')->name('expenses.index');
+    Route::get('expenses/create', [ExpenseController::class, 'create'])->middleware('permission:expenses.create')->name('expenses.create');
+    Route::post('expenses', [ExpenseController::class, 'store'])->middleware('permission:expenses.create')->name('expenses.store');
+    Route::get('expenses/{expense}', [ExpenseController::class, 'show'])->middleware('permission:expenses.view')->name('expenses.show');
+    Route::get('expenses/{expense}/pdf/download', [ExpenseController::class, 'downloadPdf'])->middleware('permission:expenses.print')->name('expenses.pdf.download');
+    Route::get('expenses/{expense}/pdf', [ExpenseController::class, 'pdf'])->middleware('permission:expenses.print')->name('expenses.pdf');
+    Route::get('expenses/{expense}/edit', [ExpenseController::class, 'edit'])->name('expenses.edit');
+    Route::put('expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
+    Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
+    Route::post('expenses/{expense}/submit', [ExpenseController::class, 'submit'])->name('expenses.submit');
+    Route::post('expenses/{expense}/approve', [ExpenseController::class, 'approve'])->middleware('permission:expenses.approve')->name('expenses.approve');
+    Route::post('expenses/{expense}/reject', [ExpenseController::class, 'reject'])->middleware('permission:expenses.reject')->name('expenses.reject');
+
+    Route::middleware('permission:expenses.manage_categories')->group(function () {
+        Route::get('expense-categories', [ExpenseCategoryController::class, 'index'])->name('expense-categories.index');
+        Route::post('expense-categories', [ExpenseCategoryController::class, 'store'])->name('expense-categories.store');
+        Route::put('expense-categories/{expense_category}', [ExpenseCategoryController::class, 'update'])->name('expense-categories.update');
+    });
     Route::patch('vendors/{vendor}/status', [VendorController::class, 'updateStatus'])->name('vendors.status');
     Route::get('vendors/{vendor}/payments/create', [VendorPaymentController::class, 'create'])->name('vendors.payments.create');
     Route::post('vendors/{vendor}/payments', [VendorPaymentController::class, 'store'])->name('vendors.payments.store');
@@ -144,6 +183,17 @@ Route::middleware(['auth', 'active', 'project.access'])->group(function () {
         Route::post('projects/{project}/purchase-orders/{purchase_order}/reject', [PurchaseOrderController::class, 'reject'])
             ->middleware('permission:purchase_orders.reject')
             ->name('projects.purchase-orders.reject');
+        Route::get('projects/{project}/purchase-orders/{purchase_order}/rate-history', [PurchaseOrderController::class, 'rateHistory'])
+            ->name('projects.purchase-orders.rate-history');
+        Route::post('projects/{project}/purchase-orders/{purchase_order}/rate-amendments', [PurchaseOrderController::class, 'storeRateAmendment'])
+            ->middleware('permission:purchase_orders.request_rate_amendment')
+            ->name('projects.purchase-orders.rate-amendments.store');
+        Route::post('projects/{project}/purchase-orders/{purchase_order}/rate-amendments/{rate_amendment}/approve', [PurchaseOrderController::class, 'approveRateAmendment'])
+            ->middleware('permission:purchase_orders.approve_rate_amendment')
+            ->name('projects.purchase-orders.rate-amendments.approve');
+        Route::post('projects/{project}/purchase-orders/{purchase_order}/rate-amendments/{rate_amendment}/reject', [PurchaseOrderController::class, 'rejectRateAmendment'])
+            ->middleware('permission:purchase_orders.reject_rate_amendment')
+            ->name('projects.purchase-orders.rate-amendments.reject');
 
         Route::get('projects/{project}/work-orders', [WorkOrderController::class, 'index'])
             ->middleware('permission:work_orders.view')
@@ -238,16 +288,55 @@ Route::middleware(['auth', 'active', 'project.access'])->group(function () {
         Route::get('projects/{project}/inventory/transfers', [InternalDeliveryController::class, 'index'])->name('projects.inventory.transfers.index');
         Route::get('projects/{project}/inventory/transfers/create', [InternalDeliveryController::class, 'create'])->name('projects.inventory.transfers.create');
 
-        Route::get('projects/{project}/purchase-invoices', [PurchaseInvoiceController::class, 'index'])->name('projects.purchase-invoices.index');
-        Route::get('projects/{project}/purchase-invoices/create', [PurchaseInvoiceController::class, 'create'])->name('projects.purchase-invoices.create');
-        Route::post('projects/{project}/purchase-invoices', [PurchaseInvoiceController::class, 'store'])->name('projects.purchase-invoices.store');
-        Route::get('projects/{project}/purchase-invoices/{invoice}/pdf/download', [PurchaseInvoiceController::class, 'downloadPdf'])->name('projects.purchase-invoices.pdf.download');
-        Route::get('projects/{project}/purchase-invoices/{invoice}/pdf', [PurchaseInvoiceController::class, 'pdf'])->name('projects.purchase-invoices.pdf');
-        Route::get('projects/{project}/purchase-invoices/{invoice}', [PurchaseInvoiceController::class, 'show'])->name('projects.purchase-invoices.show');
-        Route::put('projects/{project}/purchase-invoices/{invoice}', [PurchaseInvoiceController::class, 'update'])->name('projects.purchase-invoices.update');
-        Route::delete('projects/{project}/purchase-invoices/{invoice}', [PurchaseInvoiceController::class, 'destroy'])->name('projects.purchase-invoices.destroy');
+        Route::get('projects/{project}/purchase-invoices', [PurchaseInvoiceController::class, 'index'])->middleware('permission:invoices.view')->name('projects.purchase-invoices.index');
+        Route::get('projects/{project}/purchase-invoices/create', [PurchaseInvoiceController::class, 'create'])->middleware('permission:invoices.create')->name('projects.purchase-invoices.create');
+        Route::post('projects/{project}/purchase-invoices', [PurchaseInvoiceController::class, 'store'])->middleware('permission:invoices.create')->name('projects.purchase-invoices.store');
+        Route::get('projects/{project}/purchase-invoices/{invoice}/pdf/download', [PurchaseInvoiceController::class, 'downloadPdf'])->middleware('permission:invoices.print')->name('projects.purchase-invoices.pdf.download');
+        Route::get('projects/{project}/purchase-invoices/{invoice}/pdf', [PurchaseInvoiceController::class, 'pdf'])->middleware('permission:invoices.print')->name('projects.purchase-invoices.pdf');
+        Route::get('projects/{project}/purchase-invoices/{invoice}', [PurchaseInvoiceController::class, 'show'])->middleware('permission:invoices.view')->name('projects.purchase-invoices.show');
+        Route::put('projects/{project}/purchase-invoices/{invoice}', [PurchaseInvoiceController::class, 'update'])->middleware('permission:invoices.edit')->name('projects.purchase-invoices.update');
+        Route::delete('projects/{project}/purchase-invoices/{invoice}', [PurchaseInvoiceController::class, 'destroy'])->middleware('permission:invoices.delete')->name('projects.purchase-invoices.destroy');
         Route::get('projects/{project}/purchase-invoices/{invoice}/attachment', [PurchaseInvoiceController::class, 'attachment'])->name('projects.purchase-invoices.attachment');
         Route::post('projects/{project}/purchase-invoices/{invoice}/advance', [PurchaseInvoiceController::class, 'applyAdvance'])->name('projects.purchase-invoices.advance');
+
+        Route::get('projects/{project}/debit-notes', [DebitNoteController::class, 'index'])->middleware('permission:debit_notes.view')->name('projects.debit-notes.index');
+        Route::get('projects/{project}/debit-notes/create', [DebitNoteController::class, 'create'])->middleware('permission:debit_notes.create')->name('projects.debit-notes.create');
+        Route::post('projects/{project}/debit-notes', [DebitNoteController::class, 'store'])->middleware('permission:debit_notes.create')->name('projects.debit-notes.store');
+        Route::get('projects/{project}/debit-notes/{note}', [DebitNoteController::class, 'show'])->middleware('permission:debit_notes.view')->name('projects.debit-notes.show');
+        Route::get('projects/{project}/debit-notes/{note}/edit', [DebitNoteController::class, 'edit'])->name('projects.debit-notes.edit');
+        Route::put('projects/{project}/debit-notes/{note}', [DebitNoteController::class, 'update'])->name('projects.debit-notes.update');
+        Route::delete('projects/{project}/debit-notes/{note}', [DebitNoteController::class, 'destroy'])->name('projects.debit-notes.destroy');
+        Route::post('projects/{project}/debit-notes/{note}/submit', [DebitNoteController::class, 'submit'])->name('projects.debit-notes.submit');
+        Route::post('projects/{project}/debit-notes/{note}/approve', [DebitNoteController::class, 'approve'])->middleware('permission:debit_notes.approve')->name('projects.debit-notes.approve');
+        Route::post('projects/{project}/debit-notes/{note}/reject', [DebitNoteController::class, 'reject'])->middleware('permission:debit_notes.reject')->name('projects.debit-notes.reject');
+        Route::get('projects/{project}/debit-notes/{note}/pdf/download', [DebitNoteController::class, 'downloadPdf'])->name('projects.debit-notes.pdf.download');
+        Route::get('projects/{project}/debit-notes/{note}/pdf', [DebitNoteController::class, 'pdf'])->name('projects.debit-notes.pdf');
+
+        Route::get('projects/{project}/credit-notes', [CreditNoteController::class, 'index'])->middleware('permission:credit_notes.view')->name('projects.credit-notes.index');
+        Route::get('projects/{project}/credit-notes/create', [CreditNoteController::class, 'create'])->middleware('permission:credit_notes.create')->name('projects.credit-notes.create');
+        Route::post('projects/{project}/credit-notes', [CreditNoteController::class, 'store'])->middleware('permission:credit_notes.create')->name('projects.credit-notes.store');
+        Route::get('projects/{project}/credit-notes/{note}', [CreditNoteController::class, 'show'])->middleware('permission:credit_notes.view')->name('projects.credit-notes.show');
+        Route::get('projects/{project}/credit-notes/{note}/edit', [CreditNoteController::class, 'edit'])->name('projects.credit-notes.edit');
+        Route::put('projects/{project}/credit-notes/{note}', [CreditNoteController::class, 'update'])->name('projects.credit-notes.update');
+        Route::delete('projects/{project}/credit-notes/{note}', [CreditNoteController::class, 'destroy'])->name('projects.credit-notes.destroy');
+        Route::post('projects/{project}/credit-notes/{note}/submit', [CreditNoteController::class, 'submit'])->name('projects.credit-notes.submit');
+        Route::post('projects/{project}/credit-notes/{note}/approve', [CreditNoteController::class, 'approve'])->middleware('permission:credit_notes.approve')->name('projects.credit-notes.approve');
+        Route::post('projects/{project}/credit-notes/{note}/reject', [CreditNoteController::class, 'reject'])->middleware('permission:credit_notes.reject')->name('projects.credit-notes.reject');
+        Route::get('projects/{project}/credit-notes/{note}/pdf/download', [CreditNoteController::class, 'downloadPdf'])->name('projects.credit-notes.pdf.download');
+        Route::get('projects/{project}/credit-notes/{note}/pdf', [CreditNoteController::class, 'pdf'])->name('projects.credit-notes.pdf');
+
+        Route::get('projects/{project}/expenses', [ExpenseController::class, 'index'])->middleware('permission:expenses.view')->name('projects.expenses.index');
+        Route::get('projects/{project}/expenses/create', [ExpenseController::class, 'create'])->middleware('permission:expenses.create')->name('projects.expenses.create');
+        Route::post('projects/{project}/expenses', [ExpenseController::class, 'store'])->middleware('permission:expenses.create')->name('projects.expenses.store');
+        Route::get('projects/{project}/expenses/{expense}', [ExpenseController::class, 'show'])->middleware('permission:expenses.view')->name('projects.expenses.show');
+        Route::get('projects/{project}/expenses/{expense}/pdf/download', [ExpenseController::class, 'downloadPdf'])->middleware('permission:expenses.print')->name('projects.expenses.pdf.download');
+        Route::get('projects/{project}/expenses/{expense}/pdf', [ExpenseController::class, 'pdf'])->middleware('permission:expenses.print')->name('projects.expenses.pdf');
+        Route::get('projects/{project}/expenses/{expense}/edit', [ExpenseController::class, 'edit'])->name('projects.expenses.edit');
+        Route::put('projects/{project}/expenses/{expense}', [ExpenseController::class, 'update'])->name('projects.expenses.update');
+        Route::delete('projects/{project}/expenses/{expense}', [ExpenseController::class, 'destroy'])->name('projects.expenses.destroy');
+        Route::post('projects/{project}/expenses/{expense}/submit', [ExpenseController::class, 'submit'])->name('projects.expenses.submit');
+        Route::post('projects/{project}/expenses/{expense}/approve', [ExpenseController::class, 'approve'])->middleware('permission:expenses.approve')->name('projects.expenses.approve');
+        Route::post('projects/{project}/expenses/{expense}/reject', [ExpenseController::class, 'reject'])->middleware('permission:expenses.reject')->name('projects.expenses.reject');
     });
 
     Route::get('inventory/locations', [InventoryLocationController::class, 'index'])->name('inventory.locations.index');
@@ -284,11 +373,11 @@ Route::middleware(['auth', 'active', 'project.access'])->group(function () {
     });
 
     Route::middleware('permission:roles.view')->group(function () {
-        Route::get('roles', [\App\Http\Controllers\RoleController::class, 'index'])->name('roles.index');
-        Route::get('roles/create', [\App\Http\Controllers\RoleController::class, 'create'])->name('roles.create');
-        Route::post('roles', [\App\Http\Controllers\RoleController::class, 'store'])->name('roles.store');
-        Route::get('roles/{role}/edit', [\App\Http\Controllers\RoleController::class, 'edit'])->name('roles.edit');
-        Route::put('roles/{role}', [\App\Http\Controllers\RoleController::class, 'update'])->name('roles.update');
+        Route::get('roles', [RoleController::class, 'index'])->name('roles.index');
+        Route::get('roles/create', [RoleController::class, 'create'])->name('roles.create');
+        Route::post('roles', [RoleController::class, 'store'])->name('roles.store');
+        Route::get('roles/{role}/edit', [RoleController::class, 'edit'])->name('roles.edit');
+        Route::put('roles/{role}', [RoleController::class, 'update'])->name('roles.update');
     });
 
     Route::middleware('permission:settings.view')->group(function () {

@@ -89,6 +89,21 @@ class Vendor extends Model
         return $this->hasMany(WorkOrder::class);
     }
 
+    public function debitNotes(): HasMany
+    {
+        return $this->hasMany(DebitNote::class);
+    }
+
+    public function creditNotes(): HasMany
+    {
+        return $this->hasMany(CreditNote::class);
+    }
+
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(Expense::class);
+    }
+
     public function isActive(): bool
     {
         return $this->status === self::ACTIVE;
@@ -114,6 +129,9 @@ class Vendor extends Model
             || $this->adjustments()->exists()
             || $this->recoveries()->exists()
             || $this->refunds()->exists()
-            || $this->workOrders()->exists();
+            || $this->workOrders()->exists()
+            || $this->debitNotes()->exists()
+            || $this->creditNotes()->exists()
+            || $this->expenses()->exists();
     }
 }

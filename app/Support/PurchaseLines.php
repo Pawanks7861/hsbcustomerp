@@ -12,15 +12,14 @@ class PurchaseLines
     {
         return array_map(function (array $row): array {
             $quantity = Money::scale($row['quantity'], 3);
-            $rate = Money::scale($row['estimated_rate'] ?? null, 2);
 
             return [
                 'description' => trim((string) $row['description']),
                 'service_code' => self::nullable($row['service_code'] ?? null),
                 'unit' => self::nullable($row['unit'] ?? null),
                 'quantity' => $quantity,
-                'estimated_rate' => $rate,
-                'estimated_amount' => Money::itemAmount($quantity, $rate),
+                'estimated_rate' => null,
+                'estimated_amount' => null,
                 'remarks' => self::nullable($row['remarks'] ?? null),
             ];
         }, array_values($rows));

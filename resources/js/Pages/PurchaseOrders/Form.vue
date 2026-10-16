@@ -28,11 +28,15 @@ const form = useForm({
     subject: props.purchaseOrder.subject ?? '',
     terms_conditions: props.purchaseOrder.terms_conditions ?? '',
     remarks: props.purchaseOrder.remarks ?? '',
+    rate_change_reason: '',
     items: (props.purchaseOrder.items ?? []).map((line) => ({
+        rate: line.rate ?? '0',
         hsn_sac: line.hsn_sac ?? '',
         discount_percentage: line.discount_percentage ?? '0',
     })),
 });
+
+const canEditRates = computed(() => props.purchaseOrder.abilities?.edit_rates !== false);
 
 function roundMoney(value) {
     const number = Number(value);
@@ -61,7 +65,9 @@ const preview = computed(() => {
     let sgst = 0;
 
     lines.value.forEach((line, index) => {
-        const gross = Number(line.amount) || 0;
+        const qty = Number(line.quantity) || 0;
+        const rate = Number(form.items[index]?.rate ?? line.rate) || 0;
+        const gross = roundMoney(qty * rate);
         const discountAmount = percentOf(gross, form.items[index]?.discount_percentage);
         const taxableAmount = roundMoney(gross - discountAmount);
         subtotal = roundMoney(subtotal + gross);
@@ -198,16 +204,31 @@ function submit() {
                             </td>
                             <td class="border border-slate-200 px-3 py-2">{{ line.unit || '—' }}</td>
                             <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ line.quantity }}</td>
-                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ formatInr(line.rate) }}</td>
+                            <td class="border border-slate-200 px-3 py-2 text-right">
+                                <input
+                                    v-if="form.items[index] && canEditRates"
+                                    v-model="form.items[index].rate"
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    class="ui-input w-28 text-right"
+                                >
+                                <span v-else class="tabular-nums">{{ formatInr(line.rate) }}</span>
+                            </td>
                             <td class="border border-slate-200 px-3 py-2 text-right">
                                 <input v-if="form.items[index]" v-model="form.items[index].discount_percentage" type="number" min="0" max="100" step="0.01" class="ui-input w-20 text-right">
                             </td>
-                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ formatInr(line.amount) }}</td>
+                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ formatInr(roundMoney((Number(line.quantity) || 0) * (Number(form.items[index]?.rate ?? line.rate) || 0))) }}</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
-            <p class="text-sm text-slate-500">Quantity, rate, and description stay copied from the purchase request. HSN and discount can be edited while this order is a draft. CGST and SGST apply to the taxable value after discount.</p>
+            <label v-if="canEditRates" class="block text-sm">
+                <span class="font-medium">Rate change reason</span>
+                <textarea v-model="form.rate_change_reason" rows="2" class="ui-textarea" placeholder="Required when any line rate changes"></textarea>
+                <span v-if="form.errors.rate_change_reason" class="mt-1 block text-red-700">{{ form.errors.rate_change_reason }}</span>
+            </label>
+            <p class="text-sm text-slate-500">Quantity and description stay locked from the purchase request. Rate, HSN, and discount can be edited on drafts. Changing a rate requires a reason and is written to the audit log.</p>
             <dl class="grid gap-2 text-sm sm:ml-auto sm:w-80">
                 <div class="flex justify-between"><dt>Subtotal</dt><dd class="tabular-nums">{{ formatInr(preview.subtotal) }}</dd></div>
                 <div class="flex justify-between"><dt>Discount</dt><dd class="tabular-nums">{{ formatInr(preview.discount ? -preview.discount : 0) }}</dd></div>

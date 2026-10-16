@@ -53,6 +53,10 @@
                 <td class="num">{{ \App\Support\PdfFormat::money($invoice['tax_amount']) }}</td>
             </tr>
             <tr>
+                <td>Round Off</td>
+                <td class="num">{{ \App\Support\PdfFormat::money($invoice['round_off'] ?? '0.00') }}</td>
+            </tr>
+            <tr>
                 <td>Total Amount</td>
                 <td class="num">{{ \App\Support\PdfFormat::money($invoice['total_amount']) }}</td>
             </tr>

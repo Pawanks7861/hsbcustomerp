@@ -25,6 +25,7 @@ class PurchaseInvoice extends Model
         'invoice_amount',
         'tax_percentage',
         'tax_amount',
+        'round_off',
         'total_amount',
         'due_date',
         'invoice_file_path',
@@ -39,6 +40,7 @@ class PurchaseInvoice extends Model
         'invoice_amount' => 'decimal:2',
         'tax_percentage' => 'decimal:2',
         'tax_amount' => 'decimal:2',
+        'round_off' => 'decimal:2',
         'total_amount' => 'decimal:2',
     ];
 

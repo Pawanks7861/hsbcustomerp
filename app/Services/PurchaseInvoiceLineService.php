@@ -50,17 +50,23 @@ class PurchaseInvoiceLineService
 
     /**
      * @param  array<int, array<string, mixed>>  $rows
-     * @return array{invoice_amount: string, tax_amount: string, total_amount: string}
+     * @return array{invoice_amount: string, tax_percentage: string, tax_amount: string, round_off: string, total_amount: string}
      */
-    public function sync(PurchaseInvoice $invoice, PurchaseOrder $order, array $rows, ?string $taxPercentage = null): array
-    {
+    public function sync(
+        PurchaseInvoice $invoice,
+        PurchaseOrder $order,
+        array $rows,
+        ?string $taxPercentage = null,
+        string $roundOffMode = 'auto',
+        mixed $manualRoundOff = null,
+    ): array {
         if ($order->status !== DocumentStatus::APPROVED) {
             throw ValidationException::withMessages([
                 'purchase_order_id' => 'Select an approved purchase order.',
             ]);
         }
 
-        return DB::transaction(function () use ($invoice, $order, $rows, $taxPercentage): array {
+        return DB::transaction(function () use ($invoice, $order, $rows, $taxPercentage, $roundOffMode, $manualRoundOff): array {
             $requested = $this->requestedQuantities($rows);
             $ids = array_keys($requested);
             sort($ids);
@@ -131,6 +137,9 @@ class PurchaseInvoiceLineService
             $commercial = $taxPercentage === null ? $this->commercial($order) : [];
             $rate = $taxPercentage ?? $order->gst_percentage;
             $priced = PurchaseLines::price($pricedRows, $rate, $commercial);
+            $preRound = PurchaseLines::summarize($priced, $rate, $commercial);
+            $beforeRound = Money::add($preRound['taxable_value'], $preRound['gst_amount']);
+            $commercial['round_off'] = $this->resolveRoundOff($beforeRound, $roundOffMode, $manualRoundOff);
             $totals = PurchaseLines::summarize($priced, $rate, $commercial);
 
             $invoice->items()->delete();
@@ -162,6 +171,7 @@ class PurchaseInvoiceLineService
                 'invoice_amount' => $totals['taxable_value'],
                 'tax_percentage' => $totals['gst_percentage'],
                 'tax_amount' => $totals['gst_amount'],
+                'round_off' => $totals['round_off'],
                 'total_amount' => $totals['grand_total'],
             ];
         });
@@ -246,5 +256,24 @@ class PurchaseInvoiceLineService
             'cgst_percentage' => $order->cgst_percentage ?? 0,
             'sgst_percentage' => $order->sgst_percentage ?? 0,
         ];
+    }
+
+    private function resolveRoundOff(string $beforeRound, string $mode, mixed $manual): string
+    {
+        if ($mode === 'manual') {
+            $value = Money::scale($manual ?? 0, 2) ?? '0.00';
+
+            if (bccomp(ltrim($value, '-'), '100.00', 2) === 1) {
+                throw ValidationException::withMessages([
+                    'round_off' => 'Round off cannot exceed ₹100.00.',
+                ]);
+            }
+
+            return $value;
+        }
+
+        $nearest = Money::scale(round((float) $beforeRound), 2) ?? $beforeRound;
+
+        return Money::sub($nearest, $beforeRound);
     }
 }

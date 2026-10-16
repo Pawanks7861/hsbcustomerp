@@ -26,8 +26,10 @@ class PurchaseOrderItemRequest extends FormRequest
             'freight' => ['nullable', 'numeric', 'gte:0'],
             'round_off' => ['nullable', 'numeric', 'between:-1000,1000'],
             'items' => ['nullable', 'array'],
+            'items.*.rate' => ['nullable', 'numeric', 'gte:0'],
             'items.*.hsn_sac' => ['nullable', 'string', 'max:20'],
             'items.*.discount_percentage' => ['nullable', 'numeric', 'gte:0', 'lte:100'],
+            'rate_change_reason' => ['nullable', 'string', 'max:1000'],
             'terms_conditions' => ['nullable', 'string', 'max:5000'],
             'remarks' => ['nullable', 'string', 'max:5000'],
         ];

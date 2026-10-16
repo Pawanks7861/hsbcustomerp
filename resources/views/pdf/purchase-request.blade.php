@@ -46,11 +46,9 @@
             <tr>
                 <th class="center" style="width: 8%;">Sr.</th>
                 <th>Description</th>
-                <th class="center" style="width: 10%;">Unit</th>
-                <th class="num" style="width: 12%;">Quantity</th>
-                <th class="num" style="width: 14%;">Estimated Rate</th>
-                <th class="num" style="width: 16%;">Estimated Amount</th>
-                <th style="width: 16%;">Remarks</th>
+                <th class="center" style="width: 12%;">Unit</th>
+                <th class="num" style="width: 14%;">Quantity</th>
+                <th style="width: 24%;">Remarks</th>
             </tr>
         </thead>
         <tbody>
@@ -65,19 +63,10 @@
                     </td>
                     <td class="center">{{ $line['unit'] ?: '—' }}</td>
                     <td class="num">{{ \App\Support\PdfFormat::qty($line['quantity']) }}</td>
-                    <td class="num">{{ $line['estimated_rate'] === '' || $line['estimated_rate'] === null ? '—' : \App\Support\PdfFormat::money($line['estimated_rate']) }}</td>
-                    <td class="num">{{ $line['estimated_amount'] === null || $line['estimated_amount'] === '' ? '—' : \App\Support\PdfFormat::money($line['estimated_amount']) }}</td>
                     <td class="wrap">{{ $line['remarks'] ?: '' }}</td>
                 </tr>
             @endforeach
         </tbody>
-        <tfoot>
-            <tr>
-                <td colspan="5" class="num">Total Estimated Amount</td>
-                <td class="num">{{ \App\Support\PdfFormat::money($document['estimated_total']) }}</td>
-                <td></td>
-            </tr>
-        </tfoot>
     </table>
 
     @if(! empty($document['description']))

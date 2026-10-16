@@ -1,6 +1,6 @@
 <script setup>
-import { Head, Link, router } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import CompanyHeader from '../../Components/CompanyHeader.vue';
 import DocumentPdfActions from '../../Components/DocumentPdfActions.vue';
@@ -17,6 +17,55 @@ const props = defineProps({
 const rejecting = ref(false);
 const reason = ref('');
 const reasonError = ref('');
+
+const amendmentForm = useForm({
+    purchase_order_item_id: '',
+    proposed_rate: '',
+    reason: '',
+});
+
+const canViewRates = computed(() => props.abilities?.view_rates !== false);
+const moneyOrHidden = (value) => (canViewRates.value ? formatInr(value) : '—');
+
+const pendingAmendments = computed(() => props.purchaseOrder.pending_rate_amendments ?? []);
+
+const amendableItems = computed(() =>
+    (props.purchaseOrder.items ?? []).filter(
+        (line) => !pendingAmendments.value.some((row) => row.purchase_order_item_id === line.id),
+    ),
+);
+
+function submitRateAmendment() {
+    amendmentForm.post(`/projects/${props.project.id}/purchase-orders/${props.purchaseOrder.id}/rate-amendments`, {
+        preserveScroll: true,
+        onSuccess: () => amendmentForm.reset('proposed_rate', 'reason'),
+    });
+}
+
+function approveAmendment(amendmentId) {
+    if (!confirm('Approve this rate amendment?')) {
+        return;
+    }
+
+    router.post(
+        `/projects/${props.project.id}/purchase-orders/${props.purchaseOrder.id}/rate-amendments/${amendmentId}/approve`,
+        {},
+        { preserveScroll: true },
+    );
+}
+
+function rejectAmendment(amendmentId) {
+    const comment = window.prompt('Optional rejection comment');
+    if (comment === null) {
+        return;
+    }
+
+    router.post(
+        `/projects/${props.project.id}/purchase-orders/${props.purchaseOrder.id}/rate-amendments/${amendmentId}/reject`,
+        { decision_comment: comment },
+        { preserveScroll: true },
+    );
+}
 
 function submit() {
     if (!confirm('Submit this purchase order?')) {
@@ -134,7 +183,7 @@ function destroy() {
                             <td class="border border-slate-200 px-3 py-2">{{ line.hsn_sac || '—' }}</td>
                             <td class="border border-slate-200 px-3 py-2">{{ line.unit || '—' }}</td>
                             <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ line.quantity }}</td>
-                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ formatInr(line.rate) }}</td>
+                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ moneyOrHidden(line.rate) }}</td>
                             <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ line.discount_percentage }}</td>
                             <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ formatInr(line.taxable_amount) }}</td>
                             <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ formatInr(line.cgst_amount) }}</td>
@@ -163,6 +212,95 @@ function destroy() {
             </section>
             <p v-if="purchaseOrder.terms_conditions" class="whitespace-pre-line text-sm"><span class="font-medium">Terms &amp; conditions: </span>{{ purchaseOrder.terms_conditions }}</p>
             <p v-if="purchaseOrder.remarks" class="text-sm"><span class="font-medium">Remarks: </span>{{ purchaseOrder.remarks }}</p>
+
+            <section
+                v-if="abilities.view_rate_history || pendingAmendments.length || abilities.request_rate_amendment"
+                class="space-y-4 rounded-md border border-slate-200 bg-stone-50 p-4 text-sm print:hidden"
+            >
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <h2 class="font-semibold">Rate amendments</h2>
+                    <Link
+                        v-if="abilities.view_rate_history"
+                        :href="`/projects/${project.id}/purchase-orders/${purchaseOrder.id}/rate-history`"
+                        class="text-amber-700 hover:underline"
+                    >
+                        View rate history
+                    </Link>
+                </div>
+
+                <div v-if="pendingAmendments.length" class="overflow-x-auto">
+                    <table class="min-w-full border-collapse text-sm">
+                        <thead>
+                            <tr>
+                                <th class="px-2 py-1 text-left font-medium text-slate-500">Line</th>
+                                <th class="px-2 py-1 text-right font-medium text-slate-500">Current</th>
+                                <th class="px-2 py-1 text-right font-medium text-slate-500">Proposed</th>
+                                <th class="px-2 py-1 text-left font-medium text-slate-500">Reason</th>
+                                <th class="px-2 py-1 text-left font-medium text-slate-500">Requested</th>
+                                <th v-if="abilities.approve_rate_amendment || abilities.reject_rate_amendment" class="px-2 py-1 text-left font-medium text-slate-500">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="row in pendingAmendments" :key="row.id">
+                                <td class="border border-slate-200 px-2 py-1">{{ row.item_description || '—' }}</td>
+                                <td class="border border-slate-200 px-2 py-1 text-right tabular-nums">{{ formatInr(row.previous_rate) }}</td>
+                                <td class="border border-slate-200 px-2 py-1 text-right tabular-nums">{{ formatInr(row.proposed_rate) }}</td>
+                                <td class="border border-slate-200 px-2 py-1">{{ row.reason }}</td>
+                                <td class="border border-slate-200 px-2 py-1 text-xs text-slate-600">
+                                    {{ row.requested_by || '—' }}<br />{{ row.requested_at }}
+                                </td>
+                                <td v-if="abilities.approve_rate_amendment || abilities.reject_rate_amendment" class="border border-slate-200 px-2 py-1">
+                                    <div class="flex flex-wrap gap-2">
+                                        <button
+                                            v-if="abilities.approve_rate_amendment"
+                                            type="button"
+                                            class="rounded bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-700"
+                                            @click="approveAmendment(row.id)"
+                                        >
+                                            Approve
+                                        </button>
+                                        <button
+                                            v-if="abilities.reject_rate_amendment"
+                                            type="button"
+                                            class="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700"
+                                            @click="rejectAmendment(row.id)"
+                                        >
+                                            Reject
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p v-else class="text-slate-600">No pending rate amendments.</p>
+
+                <form v-if="abilities.request_rate_amendment && amendableItems.length" class="grid gap-3 sm:grid-cols-2" @submit.prevent="submitRateAmendment">
+                    <label class="block sm:col-span-2">
+                        <span class="font-medium">Line</span>
+                        <select v-model="amendmentForm.purchase_order_item_id" required class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2">
+                            <option value="" disabled>Select a line</option>
+                            <option v-for="line in amendableItems" :key="line.id" :value="line.id">
+                                {{ line.description }} ({{ formatInr(line.rate) }})
+                            </option>
+                        </select>
+                        <span v-if="amendmentForm.errors.purchase_order_item_id" class="mt-1 block text-red-700">{{ amendmentForm.errors.purchase_order_item_id }}</span>
+                    </label>
+                    <label class="block">
+                        <span class="font-medium">New rate</span>
+                        <input v-model="amendmentForm.proposed_rate" type="number" step="0.01" min="0" required class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 tabular-nums" />
+                        <span v-if="amendmentForm.errors.proposed_rate" class="mt-1 block text-red-700">{{ amendmentForm.errors.proposed_rate }}</span>
+                    </label>
+                    <label class="block sm:col-span-2">
+                        <span class="font-medium">Reason</span>
+                        <textarea v-model="amendmentForm.reason" rows="2" required class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2"></textarea>
+                        <span v-if="amendmentForm.errors.reason" class="mt-1 block text-red-700">{{ amendmentForm.errors.reason }}</span>
+                    </label>
+                    <div class="sm:col-span-2">
+                        <button type="submit" class="ui-btn-primary" :disabled="amendmentForm.processing">Request rate amendment</button>
+                    </div>
+                </form>
+            </section>
 
             <div v-if="purchaseOrder.approved_by || purchaseOrder.rejection_reason" class="rounded-md border border-slate-200 bg-stone-50 p-4 text-sm">
                 <p v-if="purchaseOrder.approved_by">Approved by {{ purchaseOrder.approved_by }} on {{ purchaseOrder.approved_at }}</p>

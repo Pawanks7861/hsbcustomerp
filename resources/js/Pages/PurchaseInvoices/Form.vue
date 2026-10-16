@@ -12,6 +12,7 @@ const props = defineProps({
     purchaseOrders: { type: Array, required: true },
     selectedOrder: { type: Object, default: null },
     vendors: { type: Array, default: () => [] },
+    canRoundOff: { type: Boolean, default: false },
 });
 
 const taxRates = ['0', '5', '12', '18', '28'];
@@ -21,6 +22,8 @@ const poRateIsCustom = poTaxRate !== '' && !taxRates.includes(poTaxRate);
 const form = useForm({
     purchase_order_id: props.selectedOrder?.id || '',
     tax_percentage: poRateIsCustom ? '' : (poTaxRate || '18'),
+    round_off_mode: 'auto',
+    round_off: '0',
     vendor_id: '',
     invoice_number: props.invoice?.invoice_number || '',
     invoice_date: props.invoice?.invoice_date || new Date().toISOString().slice(0, 10),
@@ -78,10 +81,17 @@ const totals = computed(() => {
         tax += cgst + sgst;
     });
 
+    const before = Math.round((taxable + tax + Number.EPSILON) * 100) / 100;
+    const roundOff = form.round_off_mode === 'manual'
+        ? Math.round((Number(form.round_off || 0) + Number.EPSILON) * 100) / 100
+        : Math.round((Math.round(before) - before + Number.EPSILON) * 100) / 100;
+
     return {
         taxable: Math.round((taxable + Number.EPSILON) * 100) / 100,
         tax: Math.round((tax + Number.EPSILON) * 100) / 100,
-        total: Math.round((taxable + tax + Number.EPSILON) * 100) / 100,
+        before,
+        roundOff,
+        total: Math.round((before + roundOff + Number.EPSILON) * 100) / 100,
     };
 });
 
@@ -125,7 +135,10 @@ function submit() {
                     <Link v-if="vendors.length === 0" href="/vendors/create" class="mt-2 inline-block text-sm underline">Add a vendor first</Link>
                 </label>
                 <p v-if="form.errors.vendor_id" class="text-sm text-red-700 md:col-span-2">{{ form.errors.vendor_id }}</p>
-                <label class="text-sm">Invoice Number<input v-model="form.invoice_number" required class="ui-input"></label>
+                <label class="text-sm">Invoice Number
+                    <input v-model="form.invoice_number" required class="ui-input">
+                    <span v-if="form.errors.invoice_number" class="mt-1 block text-red-700">{{ form.errors.invoice_number }}</span>
+                </label>
                 <label class="text-sm">Invoice Date<input v-model="form.invoice_date" type="date" required class="ui-input"></label>
                 <label class="text-sm">Due Date<input v-model="form.due_date" type="date" class="ui-input"></label>
                 <label class="text-sm">Tax (GST)
@@ -185,10 +198,24 @@ function submit() {
                     </tbody>
                 </table>
                 <p v-if="form.errors.items" class="mt-3 text-sm text-red-700">{{ form.errors.items }}</p>
-                <div class="mt-4 ml-auto w-full max-w-xs space-y-1 text-sm">
+                <div class="mt-4 ml-auto w-full max-w-sm space-y-2 text-sm">
                     <div class="flex justify-between"><span class="text-slate-500">Taxable amount</span><span class="tabular-nums">{{ formatInr(totals.taxable) }}</span></div>
                     <div class="flex justify-between"><span class="text-slate-500">Tax{{ form.tax_percentage === '' ? '' : ` (GST ${form.tax_percentage}%)` }}</span><span class="tabular-nums">{{ formatInr(totals.tax) }}</span></div>
-                    <div class="flex justify-between font-semibold"><span>Invoice total</span><span class="tabular-nums">{{ formatInr(totals.total) }}</span></div>
+                    <div class="flex justify-between"><span class="text-slate-500">Total before round off</span><span class="tabular-nums">{{ formatInr(totals.before) }}</span></div>
+                    <label v-if="canRoundOff" class="flex items-center justify-between gap-3">
+                        <span class="text-slate-500">Round off</span>
+                        <select v-model="form.round_off_mode" class="ui-input w-32">
+                            <option value="auto">Auto</option>
+                            <option value="manual">Manual</option>
+                        </select>
+                    </label>
+                    <label v-if="canRoundOff && form.round_off_mode === 'manual'" class="flex items-center justify-between gap-3">
+                        <span class="text-slate-500">Amount (±₹100)</span>
+                        <input v-model="form.round_off" type="number" step="0.01" min="-100" max="100" class="ui-input w-32 text-right">
+                    </label>
+                    <div v-else class="flex justify-between"><span class="text-slate-500">Round off</span><span class="tabular-nums">{{ formatInr(totals.roundOff) }}</span></div>
+                    <span v-if="form.errors.round_off" class="block text-red-700">{{ form.errors.round_off }}</span>
+                    <div class="flex justify-between font-semibold"><span>Final invoice total</span><span class="tabular-nums">{{ formatInr(totals.total) }}</span></div>
                 </div>
             </section>
             <button class="ui-btn-primary" :disabled="form.processing || !selectedOrder">Save Invoice</button>

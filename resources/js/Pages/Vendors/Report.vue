@@ -22,6 +22,7 @@ function apply(event) {
     <AdminLayout>
         <template #header>
             <PageHeader title="Vendor Report" eyebrow="All vendors">
+                <Link href="/vendors/reconciliation" class="ui-btn-secondary">Reconciliation</Link>
                 <Link href="/vendors" class="ui-btn-secondary">Vendors</Link>
             </PageHeader>
         </template>

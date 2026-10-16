@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
-import { formatInr, formatQty, lineAmount } from '../../lib/money';
+import { formatQty } from '../../lib/money';
 
 const props = defineProps({
     project: { type: Object, required: true },
@@ -13,7 +13,7 @@ const props = defineProps({
 });
 
 function blankLine(serviceCode = '') {
-    return { description: '', service_code: serviceCode, unit: '', quantity: '', estimated_rate: '', remarks: '' };
+    return { description: '', service_code: serviceCode, unit: '', quantity: '', remarks: '' };
 }
 
 const form = useForm({
@@ -27,7 +27,6 @@ const form = useForm({
             service_code: line.service_code ?? '',
             unit: line.unit ?? '',
             quantity: line.quantity,
-            estimated_rate: line.estimated_rate ?? '',
             remarks: line.remarks ?? '',
         }))
         : [blankLine(props.item.service_code ?? '')],
@@ -160,8 +159,6 @@ function submit() {
                             <th class="px-3 py-2 font-medium text-slate-500">Description</th>
                             <th class="px-3 py-2 font-medium text-slate-500">Unit</th>
                             <th class="px-3 py-2 font-medium text-slate-500">Qty</th>
-                            <th class="px-3 py-2 font-medium text-slate-500">Estimated Rate</th>
-                            <th class="px-3 py-2 font-medium text-slate-500 text-right">Estimated Amount</th>
                             <th class="px-3 py-2 font-medium text-slate-500">Remarks</th>
                             <th class="px-3 py-2 font-medium text-slate-500"></th>
                         </tr>
@@ -179,12 +176,6 @@ function submit() {
                             </td>
                             <td class="border border-slate-200 px-2 py-2">
                                 <input v-model="line.quantity" type="number" min="0" step="0.001" required class="w-24 rounded border border-slate-300 px-2 py-1 text-right">
-                            </td>
-                            <td class="border border-slate-200 px-2 py-2">
-                                <input v-model="line.estimated_rate" type="number" min="0" step="0.01" class="w-28 rounded border border-slate-300 px-2 py-1 text-right">
-                            </td>
-                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">
-                                {{ lineAmount(line.quantity, line.estimated_rate) === null ? '—' : formatInr(lineAmount(line.quantity, line.estimated_rate)) }}
                             </td>
                             <td class="border border-slate-200 px-2 py-2">
                                 <input v-model="line.remarks" type="text" class="w-full rounded border border-slate-300 px-2 py-1">

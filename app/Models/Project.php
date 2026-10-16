@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Access;
 use Database\Factories\ProjectFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -79,9 +80,24 @@ class Project extends Model
         return $this->hasMany(InventoryLocation::class);
     }
 
+    public function debitNotes(): HasMany
+    {
+        return $this->hasMany(DebitNote::class);
+    }
+
+    public function creditNotes(): HasMany
+    {
+        return $this->hasMany(CreditNote::class);
+    }
+
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(Expense::class);
+    }
+
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
-        if (app(\App\Services\Access::class)->seesAllProjects($user)) {
+        if (app(Access::class)->seesAllProjects($user)) {
             return $query;
         }
 
