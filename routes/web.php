@@ -36,6 +36,13 @@ use App\Http\Controllers\VendorRecoveryController;
 use App\Http\Controllers\WorkOrderController;
 use Illuminate\Support\Facades\Route;
 
+/*
+| Standalone error pages (full HTML documents).
+| Used so Inertia can force a full-page visit instead of showing a modal.
+*/
+Route::get('/error/403', fn () => response()->view('errors.403', [], 403))->name('errors.403');
+Route::get('/error/404', fn () => response()->view('errors.404', [], 404))->name('errors.404');
+
 Route::middleware(['auth', 'active', 'project.access'])->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->middleware('permission:dashboard.view')->name('dashboard');
 

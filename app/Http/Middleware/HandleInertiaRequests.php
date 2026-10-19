@@ -4,6 +4,8 @@ namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Inertia\Support\Header;
+use Symfony\Component\HttpFoundation\Response;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -20,6 +22,21 @@ class HandleInertiaRequests extends Middleware
     public function version(Request $request): ?string
     {
         return parent::version($request);
+    }
+
+    /**
+     * Keep exception-handler error locations instead of reloading the forbidden URL
+     * (which would still be blocked, and used to surface as an Inertia HTML modal).
+     */
+    public function onVersionChange(Request $request, Response $response): Response
+    {
+        $location = $response->headers->get(Header::LOCATION);
+
+        if (is_string($location) && str_contains($location, '/error/')) {
+            return $response;
+        }
+
+        return parent::onVersionChange($request, $response);
     }
 
     /**
