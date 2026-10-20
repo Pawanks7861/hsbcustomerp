@@ -1,6 +1,7 @@
 <script setup>
 import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
+import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
 import { formatInr } from '../../lib/money';
@@ -16,6 +17,7 @@ defineProps({
     <AdminLayout :project="project">
         <template #header>
             <PageHeader title="Credit Notes" :eyebrow="project.project_name">
+                <ImportButton module="credit_notes" permission="credit_notes.import" :return-url="`/projects/${project.id}/credit-notes`" :project-id="project.id" />
                 <Link :href="`/projects/${project.id}/credit-notes/create`" class="ui-btn-primary">+ Credit Note</Link>
             </PageHeader>
         </template>

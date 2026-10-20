@@ -2,6 +2,7 @@
 import { Head, useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
+import ImportButton from '../../../Components/ImportButton.vue';
 import PageHeader from '../../../Components/PageHeader.vue';
 
 const props = defineProps({
@@ -54,7 +55,9 @@ function reset() {
     <Head title="Locations" />
     <AdminLayout>
         <template #header>
-            <PageHeader title="Locations" eyebrow="Inventory" />
+            <PageHeader title="Locations" eyebrow="Inventory">
+                <ImportButton module="inventory_locations" permission="inventory.import" return-url="/inventory/locations" />
+            </PageHeader>
         </template>
         <div class="grid gap-6 lg:grid-cols-[320px_1fr]">
             <form v-if="canManage" class="ui-card space-y-3 p-4" @submit.prevent="submit">

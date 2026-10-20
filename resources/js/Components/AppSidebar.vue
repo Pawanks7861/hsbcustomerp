@@ -98,6 +98,10 @@ function itemClass(active) {
                 <FolderKanban class="h-4 w-4 shrink-0" />
                 Projects
             </Link>
+            <Link v-if="can('projects.view')" href="/imports/history" :class="itemClass(path.startsWith('/imports'))" @click="emit('close')">
+                <FileSpreadsheet class="h-4 w-4 shrink-0" />
+                Imports
+            </Link>
             <Link v-if="can('vendors.view')" href="/vendors" :class="itemClass(path.startsWith('/vendors'))" @click="emit('close')">
                 <Building2 class="h-4 w-4 shrink-0" />
                 Vendors

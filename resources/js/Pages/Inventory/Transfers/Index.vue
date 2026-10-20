@@ -1,6 +1,7 @@
 <script setup>
 import { Head, Link, router } from '@inertiajs/vue3';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
+import ImportButton from '../../../Components/ImportButton.vue';
 import PageHeader from '../../../Components/PageHeader.vue';
 import StatusBadge from '../../../Components/StatusBadge.vue';
 
@@ -23,6 +24,7 @@ function apply(event) {
     <AdminLayout :project="project">
         <template #header>
             <PageHeader title="Internal Delivery Notes" :eyebrow="project?.project_name || 'Inventory'">
+                <ImportButton module="idn" permission="idn.import" :return-url="project ? `/projects/${project.id}/inventory/transfers` : '/inventory/transfers'" :project-id="project?.id" />
                 <Link href="/inventory/transfers/create" class="ui-btn-primary">New transfer</Link>
             </PageHeader>
         </template>

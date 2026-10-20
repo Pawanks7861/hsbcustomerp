@@ -14,6 +14,7 @@ use App\Http\Controllers\DebitNoteController;
 use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\GoodsReceiptController;
+use App\Http\Controllers\ImportController;
 use App\Http\Controllers\InternalDeliveryController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\InventoryLocationController;
@@ -45,6 +46,13 @@ Route::get('/error/404', fn () => response()->view('errors.404', [], 404))->name
 
 Route::middleware(['auth', 'active', 'project.access'])->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->middleware('permission:dashboard.view')->name('dashboard');
+
+    Route::get('imports/history', [ImportController::class, 'history'])->name('imports.history');
+    Route::post('imports/batches/{batch}/confirm', [ImportController::class, 'confirm'])->name('imports.confirm');
+    Route::get('imports/batches/{batch}/errors', [ImportController::class, 'errorReport'])->name('imports.errors');
+    Route::get('imports/{module}/template', [ImportController::class, 'template'])->name('imports.template');
+    Route::post('imports/{module}/preview', [ImportController::class, 'preview'])->name('imports.preview');
+    Route::get('imports/{module}', [ImportController::class, 'show'])->name('imports.show');
 
     Route::get('approvals', [ApprovalController::class, 'index'])->name('approvals.index');
     Route::get('approvals/settings', [ApprovalController::class, 'settings'])->name('approvals.settings');

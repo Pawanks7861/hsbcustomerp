@@ -1,6 +1,7 @@
 <script setup>
 import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
+import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 
 defineProps({
@@ -14,6 +15,7 @@ defineProps({
     <AdminLayout :project="project">
         <template #header>
             <PageHeader title="Store" :eyebrow="project.project_name">
+                <ImportButton module="store" permission="store.import" :return-url="`/projects/${project.id}/store`" :project-id="project.id" />
                 <Link :href="`/projects/${project.id}/grns`" class="ui-btn-secondary">Goods Receipt Notes</Link>
                 <Link :href="`/projects/${project.id}/store/create`" class="ui-btn-primary">Receive Material</Link>
             </PageHeader>

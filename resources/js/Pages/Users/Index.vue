@@ -4,6 +4,7 @@ import { ref } from 'vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import ActionMenu from '../../Components/ActionMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
+import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
 
@@ -54,6 +55,7 @@ function initials(name) {
     <AdminLayout>
         <template #header>
             <PageHeader title="Users" eyebrow="Admin">
+                <ImportButton module="users" permission="users.import" return-url="/users" />
                 <Link href="/users/create" class="ui-btn-primary">+ Add User</Link>
             </PageHeader>
         </template>

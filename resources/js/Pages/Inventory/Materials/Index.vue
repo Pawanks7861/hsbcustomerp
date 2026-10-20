@@ -2,6 +2,7 @@
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
+import ImportButton from '../../../Components/ImportButton.vue';
 import PageHeader from '../../../Components/PageHeader.vue';
 
 const props = defineProps({
@@ -71,7 +72,9 @@ function destroy(material) {
     <Head title="Material Master" />
     <AdminLayout :project="project">
         <template #header>
-            <PageHeader title="Material Master" :eyebrow="project.project_name" />
+            <PageHeader title="Material Master" :eyebrow="project.project_name">
+                <ImportButton module="materials" permission="inventory.import" :return-url="`/projects/${project.id}/inventory/materials`" :project-id="project.id" />
+            </PageHeader>
         </template>
 
         <form class="ui-card mb-4 grid gap-3 p-4 sm:grid-cols-2" @submit.prevent="save">

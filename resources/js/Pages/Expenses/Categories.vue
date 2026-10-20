@@ -1,6 +1,7 @@
 <script setup>
 import { Head, useForm } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
+import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 
 defineProps({ categories: { type: Array, required: true } });
@@ -15,7 +16,11 @@ function update(category) {
 <template>
     <Head title="Expense Categories" />
     <AdminLayout>
-        <template #header><PageHeader title="Expense Categories" eyebrow="Admin" /></template>
+        <template #header>
+            <PageHeader title="Expense Categories" eyebrow="Admin">
+                <ImportButton module="expense_categories" permission="expenses.import" return-url="/expense-categories" />
+            </PageHeader>
+        </template>
         <form class="ui-card mb-4 flex gap-2 p-4" @submit.prevent="createForm.post('/expense-categories')">
             <input v-model="createForm.name" required placeholder="New category" class="ui-input flex-1">
             <button class="ui-btn-primary">Add</button>

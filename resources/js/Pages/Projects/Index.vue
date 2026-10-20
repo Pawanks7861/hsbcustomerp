@@ -5,6 +5,7 @@ import AdminLayout from '../../Layouts/AdminLayout.vue';
 import ActionMenu from '../../Components/ActionMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import EmptyState from '../../Components/EmptyState.vue';
+import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import { formatInr } from '../../lib/money';
 
@@ -29,6 +30,7 @@ function destroy() {
     <AdminLayout>
         <template #header>
             <PageHeader title="Projects" eyebrow="Construction">
+                <ImportButton module="projects" permission="projects.import" return-url="/projects" />
                 <Link href="/projects/create" class="ui-btn-primary">+ New Project</Link>
             </PageHeader>
         </template>

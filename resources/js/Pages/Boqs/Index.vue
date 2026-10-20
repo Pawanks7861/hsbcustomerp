@@ -5,6 +5,7 @@ import AdminLayout from '../../Layouts/AdminLayout.vue';
 import ActionMenu from '../../Components/ActionMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import EmptyState from '../../Components/EmptyState.vue';
+import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import { formatInr } from '../../lib/money';
 
@@ -30,6 +31,7 @@ function destroy() {
     <AdminLayout :project="project">
         <template #header>
             <PageHeader title="BOQ" :eyebrow="project.project_name">
+                <ImportButton module="boq" permission="boq.import" :return-url="`/projects/${project.id}/boqs`" :project-id="project.id" />
                 <Link :href="`/projects/${project.id}/boqs/create`" class="ui-btn-primary">+ New BOQ</Link>
             </PageHeader>
         </template>

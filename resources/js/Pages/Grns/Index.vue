@@ -2,6 +2,7 @@
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
+import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 
 const props = defineProps({
@@ -35,7 +36,9 @@ function apply() {
     <Head title="Goods Receipt Notes" />
     <AdminLayout :project="project">
         <template #header>
-            <PageHeader title="Goods Receipt Notes" :eyebrow="project.project_name" />
+            <PageHeader title="Goods Receipt Notes" :eyebrow="project.project_name">
+                <ImportButton module="grn" permission="grn.import" :return-url="`/projects/${project.id}/grns`" :project-id="project.id" />
+            </PageHeader>
         </template>
         <form class="mb-4 flex flex-wrap items-end gap-3" @submit.prevent="apply">
             <label class="text-sm"><span class="mb-1 block font-medium">Search</span><input v-model="search" class="ui-input w-48" placeholder="GRN, PO, challan"></label>

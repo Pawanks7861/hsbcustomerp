@@ -1,6 +1,7 @@
 <script setup>
 import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
+import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
 import { formatInr } from '../../lib/money';
@@ -18,6 +19,7 @@ const base = props.project ? `/projects/${props.project.id}/expenses` : '/expens
     <AdminLayout :project="project">
         <template #header>
             <PageHeader title="Expenses" :eyebrow="project?.project_name || 'All projects'">
+                <ImportButton module="expenses" permission="expenses.import" :return-url="base" :project-id="project?.id" />
                 <Link :href="`${base}/create`" class="ui-btn-primary">+ Expense</Link>
             </PageHeader>
         </template>

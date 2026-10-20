@@ -1,6 +1,7 @@
 <script setup>
 import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
+import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 
 defineProps({
@@ -13,6 +14,7 @@ defineProps({
     <AdminLayout>
         <template #header>
             <PageHeader title="Vendors">
+                <ImportButton module="vendors" permission="vendors.import" return-url="/vendors" />
                 <Link href="/vendors/report" class="ui-btn-secondary">Vendor Report</Link>
                 <Link href="/vendors/create" class="ui-btn-primary">+ Add Vendor</Link>
             </PageHeader>

@@ -1,6 +1,7 @@
 <script setup>
 import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
+import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import { formatInr } from '../../lib/money';
 
@@ -15,6 +16,7 @@ defineProps({
     <AdminLayout :project="project">
         <template #header>
             <PageHeader title="Purchase Invoices" :eyebrow="project.project_name">
+                <ImportButton module="invoices" permission="invoices.import" :return-url="`/projects/${project.id}/purchase-invoices`" :project-id="project.id" />
                 <Link :href="`/projects/${project.id}/purchase-invoices/create`" class="ui-btn-primary">+ Invoice</Link>
             </PageHeader>
         </template>
