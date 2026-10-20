@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { Head, usePage } from '@inertiajs/vue3';
 import AppHeader from '../Components/AppHeader.vue';
 import AppSidebar from '../Components/AppSidebar.vue';
+import ErpAssistant from '../Components/ErpAssistant.vue';
 
 defineProps({
     project: {
@@ -49,5 +50,6 @@ const sidebarOpen = ref(false);
                 </main>
             </div>
         </div>
+        <ErpAssistant />
     </div>
 </template>

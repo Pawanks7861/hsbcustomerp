@@ -4,6 +4,7 @@ use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\BoqController;
 use App\Http\Controllers\BoqImportController;
+use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\BoqItemBudgetController;
 use App\Http\Controllers\BoqItemProcurementController;
 use App\Http\Controllers\BoqRevisionController;
@@ -46,6 +47,10 @@ Route::get('/error/404', fn () => response()->view('errors.404', [], 404))->name
 
 Route::middleware(['auth', 'active', 'project.access'])->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->middleware('permission:dashboard.view')->name('dashboard');
+
+    Route::post('assistant/ask', [ChatbotController::class, 'ask'])->name('assistant.ask');
+    Route::get('assistant/suggestions', [ChatbotController::class, 'suggestions'])->name('assistant.suggestions');
+    Route::post('assistant/clear', [ChatbotController::class, 'clear'])->name('assistant.clear');
 
     Route::get('imports/history', [ImportController::class, 'history'])->name('imports.history');
     Route::post('imports/batches/{batch}/confirm', [ImportController::class, 'confirm'])->name('imports.confirm');
