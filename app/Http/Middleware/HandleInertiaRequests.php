@@ -64,6 +64,23 @@ class HandleInertiaRequests extends Middleware
                 'pending' => app(\App\Services\ApprovalInbox::class)->count($user),
                 'can_configure' => app(\App\Services\Access::class)->canConfigureApprovals($user),
             ] : null,
+            'menu_tutorial' => function () use ($user) {
+                if (! $user) {
+                    return null;
+                }
+
+                $access = app(\App\Services\Access::class);
+                $user->loadMissing('roles');
+
+                if ($access->isSuperAdmin($user) || $user->hasRoleSlug('administrator')) {
+                    return null;
+                }
+
+                return [
+                    'roles' => $user->roles->sortBy('name')->pluck('name')->values()->all(),
+                    'menus' => \App\Support\RoleMenus::forPermissions($access->grantedNames($user)),
+                ];
+            },
             'company' => fn () => \App\Models\CompanySetting::shared(),
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),

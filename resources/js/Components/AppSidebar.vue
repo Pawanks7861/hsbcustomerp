@@ -82,11 +82,11 @@ function itemClass(active) {
         </div>
 
         <nav class="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-            <Link href="/" :class="itemClass(path === '/')" @click="emit('close')">
+            <Link href="/" data-tour="dashboard" :class="itemClass(path === '/')" @click="emit('close')">
                 <LayoutDashboard class="h-4 w-4 shrink-0" />
                 Dashboard
             </Link>
-            <Link v-if="approvals?.can_approve" href="/approvals" :class="itemClass(path === '/approvals')" @click="emit('close')">
+            <Link v-if="approvals?.can_approve" href="/approvals" data-tour="approvals" :class="itemClass(path === '/approvals')" @click="emit('close')">
                 <BadgeCheck class="h-4 w-4 shrink-0" />
                 <span class="flex-1">Approvals</span>
                 <span
@@ -94,23 +94,23 @@ function itemClass(active) {
                     class="min-w-[1.5rem] rounded-full bg-amber-500 px-1.5 py-0.5 text-center text-xs font-semibold text-white"
                 >{{ approvals.pending > 99 ? '99+' : approvals.pending }}</span>
             </Link>
-            <Link href="/projects" :class="itemClass(path.startsWith('/projects') && !project)" @click="emit('close')">
+            <Link href="/projects" data-tour="projects" :class="itemClass(path.startsWith('/projects') && !project)" @click="emit('close')">
                 <FolderKanban class="h-4 w-4 shrink-0" />
                 Projects
             </Link>
-            <Link v-if="can('projects.view')" href="/imports/history" :class="itemClass(path.startsWith('/imports'))" @click="emit('close')">
+            <Link v-if="can('projects.view')" href="/imports/history" data-tour="imports" :class="itemClass(path.startsWith('/imports'))" @click="emit('close')">
                 <FileSpreadsheet class="h-4 w-4 shrink-0" />
                 Imports
             </Link>
-            <Link v-if="can('vendors.view')" href="/vendors" :class="itemClass(path.startsWith('/vendors'))" @click="emit('close')">
+            <Link v-if="can('vendors.view')" href="/vendors" data-tour="vendors" :class="itemClass(path.startsWith('/vendors'))" @click="emit('close')">
                 <Building2 class="h-4 w-4 shrink-0" />
                 Vendors
             </Link>
-            <Link v-if="can('expenses.view')" href="/expenses" :class="itemClass(path.startsWith('/expenses') || path.startsWith('/expense-categories'))" @click="emit('close')">
+            <Link v-if="can('expenses.view')" href="/expenses" data-tour="expenses" :class="itemClass(path.startsWith('/expenses') || path.startsWith('/expense-categories'))" @click="emit('close')">
                 <FileText class="h-4 w-4 shrink-0" />
                 Expenses
             </Link>
-            <Link v-if="can('reports.view')" href="/reports" :class="itemClass(path.startsWith('/reports'))" @click="emit('close')">
+            <Link v-if="can('reports.view')" href="/reports" data-tour="reports" :class="itemClass(path.startsWith('/reports'))" @click="emit('close')">
                 <FileSpreadsheet class="h-4 w-4 shrink-0" />
                 Reports
             </Link>
@@ -118,49 +118,49 @@ function itemClass(active) {
             <div v-if="project" class="pt-5">
                 <p class="px-3 pb-2 text-xs font-medium text-slate-400">{{ project.project_code }}</p>
                 <div class="space-y-1">
-                    <Link :href="`/projects/${project.id}`" :class="itemClass(path === `/projects/${project.id}`)" @click="emit('close')">
+                    <Link :href="`/projects/${project.id}`" data-tour="project-dashboard" :class="itemClass(path === `/projects/${project.id}`)" @click="emit('close')">
                         <LayoutDashboard class="h-4 w-4 shrink-0" />
                         Project Dashboard
                     </Link>
-                    <Link v-if="can('boq.view')" :href="`/projects/${project.id}/boqs`" :class="itemClass(path.startsWith(`/projects/${project.id}/boqs`))" @click="emit('close')">
+                    <Link v-if="can('boq.view')" :href="`/projects/${project.id}/boqs`" data-tour="boq" :class="itemClass(path.startsWith(`/projects/${project.id}/boqs`))" @click="emit('close')">
                         <FileSpreadsheet class="h-4 w-4 shrink-0" />
                         BOQ
                     </Link>
-                    <Link v-if="can('purchase_requests.view')" :href="`/projects/${project.id}/purchase-requests`" :class="itemClass(path.startsWith(`/projects/${project.id}/purchase-requests`))" @click="emit('close')">
+                    <Link v-if="can('purchase_requests.view')" :href="`/projects/${project.id}/purchase-requests`" data-tour="purchase-requests" :class="itemClass(path.startsWith(`/projects/${project.id}/purchase-requests`))" @click="emit('close')">
                         <ClipboardList class="h-4 w-4 shrink-0" />
                         Purchase Requests
                     </Link>
-                    <Link v-if="can('purchase_orders.view')" :href="`/projects/${project.id}/purchase-orders`" :class="itemClass(path.startsWith(`/projects/${project.id}/purchase-orders`))" @click="emit('close')">
+                    <Link v-if="can('purchase_orders.view')" :href="`/projects/${project.id}/purchase-orders`" data-tour="purchase-orders" :class="itemClass(path.startsWith(`/projects/${project.id}/purchase-orders`))" @click="emit('close')">
                         <ShoppingCart class="h-4 w-4 shrink-0" />
                         Purchase Orders
                     </Link>
-                    <Link v-if="can('work_orders.view')" :href="`/projects/${project.id}/work-orders`" :class="itemClass(path.startsWith(`/projects/${project.id}/work-orders`))" @click="emit('close')">
+                    <Link v-if="can('work_orders.view')" :href="`/projects/${project.id}/work-orders`" data-tour="work-orders" :class="itemClass(path.startsWith(`/projects/${project.id}/work-orders`))" @click="emit('close')">
                         <Hammer class="h-4 w-4 shrink-0" />
                         Work Orders
                     </Link>
-                    <Link v-if="can('store.view')" :href="`/projects/${project.id}/store`" :class="itemClass(path.startsWith(`/projects/${project.id}/store`))" @click="emit('close')">
+                    <Link v-if="can('store.view')" :href="`/projects/${project.id}/store`" data-tour="store" :class="itemClass(path.startsWith(`/projects/${project.id}/store`))" @click="emit('close')">
                         <Package class="h-4 w-4 shrink-0" />
                         Store
                     </Link>
-                    <Link v-if="can('invoices.view')" :href="`/projects/${project.id}/purchase-invoices`" :class="itemClass(path.startsWith(`/projects/${project.id}/purchase-invoices`))" @click="emit('close')">
+                    <Link v-if="can('invoices.view')" :href="`/projects/${project.id}/purchase-invoices`" data-tour="invoices" :class="itemClass(path.startsWith(`/projects/${project.id}/purchase-invoices`))" @click="emit('close')">
                         <Receipt class="h-4 w-4 shrink-0" />
                         Purchase Invoices
                     </Link>
-                    <Link v-if="can('debit_notes.view')" :href="`/projects/${project.id}/debit-notes`" :class="itemClass(path.startsWith(`/projects/${project.id}/debit-notes`))" @click="emit('close')">
+                    <Link v-if="can('debit_notes.view')" :href="`/projects/${project.id}/debit-notes`" data-tour="debit-notes" :class="itemClass(path.startsWith(`/projects/${project.id}/debit-notes`))" @click="emit('close')">
                         <FileText class="h-4 w-4 shrink-0" />
                         Debit Notes
                     </Link>
-                    <Link v-if="can('credit_notes.view')" :href="`/projects/${project.id}/credit-notes`" :class="itemClass(path.startsWith(`/projects/${project.id}/credit-notes`))" @click="emit('close')">
+                    <Link v-if="can('credit_notes.view')" :href="`/projects/${project.id}/credit-notes`" data-tour="credit-notes" :class="itemClass(path.startsWith(`/projects/${project.id}/credit-notes`))" @click="emit('close')">
                         <FileText class="h-4 w-4 shrink-0" />
                         Credit Notes
                     </Link>
-                    <Link v-if="can('expenses.view')" :href="`/projects/${project.id}/expenses`" :class="itemClass(path.startsWith(`/projects/${project.id}/expenses`))" @click="emit('close')">
+                    <Link v-if="can('expenses.view')" :href="`/projects/${project.id}/expenses`" data-tour="project-expenses" :class="itemClass(path.startsWith(`/projects/${project.id}/expenses`))" @click="emit('close')">
                         <FileText class="h-4 w-4 shrink-0" />
                         Project Expenses
                     </Link>
                     <template v-if="can('inventory.view')">
                         <p class="px-3 pb-2 pt-4 text-xs font-medium text-slate-400">Inventory</p>
-                        <Link :href="`/projects/${project.id}/inventory`" :class="itemClass(path === `/projects/${project.id}/inventory`)" @click="emit('close')">
+                        <Link :href="`/projects/${project.id}/inventory`" data-tour="inventory" :class="itemClass(path === `/projects/${project.id}/inventory`)" @click="emit('close')">
                             <Warehouse class="h-4 w-4 shrink-0" />
                             Inventory Dashboard
                         </Link>
@@ -181,7 +181,7 @@ function itemClass(active) {
                             Material Issues
                         </Link>
                     </template>
-                    <Link v-if="can('grn.view')" :href="`/projects/${project.id}/grns`" :class="itemClass(path.startsWith(`/projects/${project.id}/grns`))" @click="emit('close')">
+                    <Link v-if="can('grn.view')" :href="`/projects/${project.id}/grns`" data-tour="grn" :class="itemClass(path.startsWith(`/projects/${project.id}/grns`))" @click="emit('close')">
                         <Package class="h-4 w-4 shrink-0" />
                         Goods Receipt Notes
                     </Link>
@@ -189,7 +189,7 @@ function itemClass(active) {
                         <ClipboardList class="h-4 w-4 shrink-0" />
                         Stock Adjustments
                     </Link>
-                    <Link v-if="can('idn.view')" :href="`/projects/${project.id}/inventory/transfers`" :class="itemClass(path.includes('/inventory/transfers') || path.startsWith('/inventory/transfers'))" @click="emit('close')">
+                    <Link v-if="can('idn.view')" :href="`/projects/${project.id}/inventory/transfers`" data-tour="idn" :class="itemClass(path.includes('/inventory/transfers') || path.startsWith('/inventory/transfers'))" @click="emit('close')">
                         <ClipboardList class="h-4 w-4 shrink-0" />
                         Internal Delivery Notes
                     </Link>

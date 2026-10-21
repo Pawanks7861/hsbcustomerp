@@ -1,9 +1,10 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, provide, ref } from 'vue';
 import { Head, usePage } from '@inertiajs/vue3';
 import AppHeader from '../Components/AppHeader.vue';
 import AppSidebar from '../Components/AppSidebar.vue';
 import ErpAssistant from '../Components/ErpAssistant.vue';
+import MenuTutorial from '../Components/MenuTutorial.vue';
 
 defineProps({
     project: {
@@ -19,6 +20,7 @@ const error = computed(() => page.props.flash?.error ?? null);
 const user = computed(() => page.props.auth?.user ?? null);
 const company = computed(() => page.props.company ?? null);
 const sidebarOpen = ref(false);
+provide('sidebarOpen', sidebarOpen);
 </script>
 
 <template>
@@ -50,6 +52,7 @@ const sidebarOpen = ref(false);
                 </main>
             </div>
         </div>
+        <MenuTutorial />
         <ErpAssistant />
     </div>
 </template>

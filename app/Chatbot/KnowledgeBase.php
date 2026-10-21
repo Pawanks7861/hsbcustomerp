@@ -210,6 +210,19 @@ class KnowledgeBase
                 'route' => '/projects',
                 'permission' => 'work_orders.create',
             ],
+            [
+                'id' => 'help.create_user',
+                'questions' => [
+                    'how to create a user', 'how do i create a user', 'add user', 'create user',
+                    'how to add staff', 'assign a role',
+                ],
+                'keywords' => ['user', 'staff', 'role'],
+                'topics' => ['user', 'users', 'role'],
+                'answer' => "To create a staff user:\n1. Open **Users** (Admin section).\n2. Click **Create user**.\n3. Enter name, email, and password.\n4. Assign one or more **staff roles** (Project Manager, Purchase Manager, Storekeeper, Accounts, and so on).\n5. The form shows the **sidebar menus** that role can use.\n6. Set project access (all projects or selected only), then Save.\n\nDo **not** assign Super Admin or Administrator for normal staff. Those roles skip the menu tutorial because they can see every screen. Use a staff role so the person only gets the menus for their job.",
+                'module' => 'users',
+                'route' => '/users/create',
+                'permission' => 'users.create',
+            ],
         ];
     }
 
@@ -302,7 +315,7 @@ class KnowledgeBase
             'inventory', 'material', 'materials', 'stock', 'vendor', 'supplier', 'project',
             'boq', 'pr', 'purchase request', 'purchase requisition', 'po', 'purchase order',
             'grn', 'invoice', 'payment', 'expense', 'expenses', 'work order', 'wo',
-            'import', 'excel', 'report',
+            'import', 'excel', 'report', 'user', 'users', 'role',
         ];
 
         $found = [];

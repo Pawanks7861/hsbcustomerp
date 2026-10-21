@@ -11,6 +11,7 @@ use App\Models\UserPermissionOverride;
 use App\Services\Access;
 use App\Services\ActivityLogger;
 use App\Support\Permissions;
+use App\Support\RoleMenus;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -54,6 +55,7 @@ class UserController extends Controller
             'user' => null,
             'roles' => $this->roleOptions(),
             'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_name']),
+            'can_assign_super_admin' => $this->access->isSuperAdmin(request()->user()),
         ]);
     }
 
@@ -91,8 +93,9 @@ class UserController extends Controller
                 'project_ids' => $user->projects->pluck('id'),
                 'is_self' => $user->is(auth()->user()),
             ],
-            'roles' => $this->roleOptions(),
+            'roles' => $this->roleOptions($user),
             'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_name']),
+            'can_assign_super_admin' => $this->access->isSuperAdmin(request()->user()),
         ]);
     }
 
@@ -351,10 +354,39 @@ class UserController extends Controller
     }
 
     /**
-     * @return list<array{id: int, name: string}>
+     * Staff roles for the create/edit form. Super Admin and Administrator are skipped
+     * so the menu tutorial only covers ordinary role-based access.
+     *
+     * @return list<array{id: int, name: string, slug: string, privileged: bool, menus: list<array{group: string, items: list<array{label: string, target: ?string, hint: string, action: string}>}>}>
      */
-    private function roleOptions(): array
+    private function roleOptions(?User $target = null): array
     {
-        return Role::query()->where('is_active', true)->orderBy('name')->get(['id', 'name'])->all();
+        $query = Role::query()
+            ->with('permissions')
+            ->where('is_active', true)
+            ->orderBy('name');
+
+        return $query->get()
+            ->filter(function (Role $role) use ($target) {
+                if (! RoleMenus::isPrivileged($role->slug)) {
+                    return true;
+                }
+
+                // Keep a privileged role visible only if the user already has it (edit).
+                return $target?->roles->contains('slug', $role->slug) === true;
+            })
+            ->map(function (Role $role) {
+                $permissions = $role->permissions->pluck('permission')->all();
+
+                return [
+                    'id' => $role->id,
+                    'name' => $role->name,
+                    'slug' => $role->slug,
+                    'privileged' => RoleMenus::isPrivileged($role->slug),
+                    'menus' => RoleMenus::forPermissions($permissions),
+                ];
+            })
+            ->values()
+            ->all();
     }
 }
