@@ -28,12 +28,13 @@ defineProps({
                         <th>Phone</th>
                         <th>GST</th>
                         <th>Status</th>
+                        <th>Profile</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr v-if="vendors.length === 0">
-                        <td colspan="6" class="py-8 text-center text-slate-400">No vendors yet.</td>
+                        <td colspan="7" class="py-8 text-center text-slate-400">No vendors yet.</td>
                     </tr>
                     <tr v-for="vendor in vendors" :key="vendor.id">
                         <td>{{ vendor.vendor_code }}</td>
@@ -41,6 +42,10 @@ defineProps({
                         <td>{{ vendor.phone || '—' }}</td>
                         <td>{{ vendor.gst_number || '—' }}</td>
                         <td class="capitalize">{{ vendor.status }}</td>
+                        <td>
+                            <span v-if="vendor.profile_complete" class="text-xs text-emerald-700">Complete</span>
+                            <span v-else class="text-xs text-amber-700">Incomplete</span>
+                        </td>
                         <td class="text-right"><Link :href="`/vendors/${vendor.id}`" class="text-sm font-medium hover:underline">View</Link></td>
                     </tr>
                 </tbody>

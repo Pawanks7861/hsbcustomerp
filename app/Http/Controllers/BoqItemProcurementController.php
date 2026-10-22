@@ -44,6 +44,7 @@ class BoqItemProcurementController extends Controller
         $progress = [
             'ordered_quantity' => $receipts->orderedFor([$item->id])[$item->id] ?? '0.000',
             'accepted_quantity' => $receipts->acceptedFor([$item->id])[$item->id] ?? '0.000',
+            'received_quantity' => $receipts->recordedFor([$item->id])[$item->id] ?? '0.000',
             'invoiced_quantity' => $receipts->invoicedFor([$item->id])[$item->id] ?? '0.000',
         ];
 

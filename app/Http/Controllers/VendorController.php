@@ -9,6 +9,7 @@ use App\Models\PurchaseOrder;
 use App\Models\Vendor;
 use App\Services\Access;
 use App\Services\VendorBalanceService;
+use App\Support\VendorRules;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +27,7 @@ class VendorController extends Controller
             'phone' => $vendor->phone,
             'gst_number' => $vendor->gst_number,
             'status' => $vendor->status,
+            'profile_complete' => VendorRules::profileIsComplete($vendor),
         ]);
 
         return Inertia::render('Vendors/Index', [
@@ -33,15 +35,19 @@ class VendorController extends Controller
         ]);
     }
 
-    public function create(): Response
+    public function create(Request $request, Access $access): Response
     {
+        abort_unless($access->allows($request->user(), 'vendors.create'), 403);
+
         return Inertia::render('Vendors/Form', [
             'vendor' => null,
         ]);
     }
 
-    public function store(VendorRequest $request): RedirectResponse
+    public function store(VendorRequest $request, Access $access): RedirectResponse
     {
+        abort_unless($access->allows($request->user(), 'vendors.create'), 403);
+
         $vendor = DB::transaction(function () use ($request) {
             return Vendor::query()->create([
                 ...$request->validated(),
@@ -101,8 +107,10 @@ class VendorController extends Controller
         ]);
     }
 
-    public function update(VendorRequest $request, Vendor $vendor): RedirectResponse
+    public function update(VendorRequest $request, Vendor $vendor, Access $access): RedirectResponse
     {
+        abort_unless($access->allows($request->user(), 'vendors.edit'), 403);
+
         $vendor->update($request->validated());
 
         return redirect()->route('vendors.show', $vendor)->with('success', 'Vendor updated.');

@@ -84,7 +84,9 @@ class ExpensesImport extends AbstractImportDefinition
 
         $category = ExpenseCategory::query()->whereRaw('LOWER(name) = ?', [strtolower((string) ($data['category_name'] ?? ''))])->first();
         if (! $category) {
-            $errors[] = 'Category was not found. Import categories first.';
+            $errors[] = 'Expense Head was not found. Import expense heads first.';
+        } elseif (! $category->is_active) {
+            $errors[] = 'Inactive expense heads cannot be assigned to new expenses.';
         } else {
             $data['category_id'] = $category->id;
         }

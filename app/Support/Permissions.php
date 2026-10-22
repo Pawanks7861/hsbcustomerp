@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Services\ApprovalInbox;
+use Illuminate\Support\Str;
 
 class Permissions
 {
@@ -35,6 +36,18 @@ class Permissions
             ],
             'Work Orders' => ['view' => 'work_orders.view', 'create' => 'work_orders.create', 'edit' => 'work_orders.edit', 'submit' => 'work_orders.submit', 'approve' => 'work_orders.approve', 'reject' => 'work_orders.reject', 'issue' => 'work_orders.issue', 'execute' => 'work_orders.execute', 'amend' => 'work_orders.amend', 'cancel' => 'work_orders.cancel', 'print' => 'work_orders.print', 'import' => 'work_orders.import'],
             'Vendors' => ['view' => 'vendors.view', 'create' => 'vendors.create', 'edit' => 'vendors.edit', 'ledger' => 'vendors.ledger', 'print' => 'vendors.print', 'import' => 'vendors.import'],
+            'Clients' => ['view' => 'clients.view', 'create' => 'clients.create', 'edit' => 'clients.edit', 'ledger' => 'clients.ledger', 'print' => 'clients.print'],
+            'Client Invoices' => [
+                'view' => 'client_invoices.view',
+                'create' => 'client_invoices.create',
+                'edit' => 'client_invoices.edit',
+                'submit' => 'client_invoices.submit',
+                'approve' => 'client_invoices.approve',
+                'reject' => 'client_invoices.reject',
+                'delete' => 'client_invoices.delete',
+                'record_payment' => 'client_invoices.record_payment',
+                'print' => 'client_invoices.print',
+            ],
             'Store' => ['view' => 'store.view', 'create' => 'store.create', 'edit' => 'store.edit', 'submit' => 'store.submit', 'print' => 'store.print', 'import' => 'store.import'],
             'GRN' => ['view' => 'grn.view', 'create' => 'grn.create', 'edit' => 'grn.edit', 'submit' => 'grn.submit', 'approve' => 'grn.approve', 'reject' => 'grn.reject', 'post' => 'grn.post', 'print' => 'grn.print', 'import' => 'grn.import'],
             'Inventory' => ['view' => 'inventory.view', 'create' => 'inventory.create', 'edit' => 'inventory.edit', 'approve' => 'inventory.approve', 'post' => 'inventory.post', 'adjust' => 'inventory.adjust', 'print' => 'inventory.print', 'import' => 'inventory.import'],
@@ -45,6 +58,7 @@ class Permissions
                 'edit' => 'invoices.edit',
                 'submit' => 'invoices.submit',
                 'approve' => 'invoices.approve',
+                'reject' => 'invoices.reject',
                 'delete' => 'invoices.delete',
                 'round_off' => 'invoices.round_off',
                 'print' => 'invoices.print',
@@ -127,6 +141,49 @@ class Permissions
         return in_array($permission, self::all(), true);
     }
 
+    public static function actionTitle(string $action): string
+    {
+        $custom = [
+            'edit_rates' => 'Edit Rates',
+            'view_rates' => 'View Rates',
+            'view_rate_history' => 'View Rate History',
+            'request_rate_amendment' => 'Request Rate Amendment',
+            'approve_rate_amendment' => 'Approve Rate Amendment',
+            'reject_rate_amendment' => 'Reject Rate Amendment',
+            'manage_categories' => 'Manage Expense Heads',
+            'round_off' => 'Apply Round Off',
+            'record_payment' => 'Record Payment',
+            'ledger' => 'View Ledger',
+        ];
+
+        return $custom[$action] ?? Str::headline(str_replace('_', ' ', $action));
+    }
+
+    public static function label(string $permission): string
+    {
+        foreach (self::modules() as $module => $actions) {
+            foreach ($actions as $action => $key) {
+                if ($key !== $permission) {
+                    continue;
+                }
+
+                if ($action === 'manage_categories') {
+                    return 'Manage Expense Heads';
+                }
+                if ($action === 'record_payment') {
+                    return 'Record Client Payment';
+                }
+                if ($action === 'ledger' && $module === 'Clients') {
+                    return 'View Client Ledger';
+                }
+
+                return self::actionTitle($action).' '.$module;
+            }
+        }
+
+        return $permission;
+    }
+
     /**
      * Permissions a user without a role keeps, matching the previous admin-flag behavior.
      *
@@ -142,7 +199,8 @@ class Permissions
             'grn.approve', 'grn.reject', 'grn.post',
             'inventory.approve', 'inventory.post', 'inventory.adjust',
             'idn.approve', 'idn.reject', 'idn.dispatch', 'idn.receive',
-            'invoices.approve', 'payments.approve',
+            'invoices.approve', 'invoices.reject', 'payments.approve',
+            'client_invoices.approve', 'client_invoices.reject',
             'work_orders.approve', 'work_orders.reject', 'work_orders.issue', 'work_orders.amend', 'work_orders.cancel',
             'users.view', 'users.create', 'users.edit',
             'roles.view', 'roles.create', 'roles.edit',
@@ -172,6 +230,8 @@ class Permissions
                 'inventory.view', 'inventory.print',
                 'idn.view', 'idn.create', 'idn.edit', 'idn.submit', 'idn.approve', 'idn.print',
                 'invoices.view', 'invoices.print', 'reports.view', 'reports.print',
+                'clients.view', 'clients.print',
+                'client_invoices.view', 'client_invoices.create', 'client_invoices.edit', 'client_invoices.submit', 'client_invoices.print',
                 'work_orders.view', 'work_orders.create', 'work_orders.edit', 'work_orders.submit', 'work_orders.approve', 'work_orders.reject', 'work_orders.issue', 'work_orders.execute', 'work_orders.amend', 'work_orders.cancel', 'work_orders.print', 'work_orders.import',
                 'expenses.view', 'expenses.import', 'debit_notes.view', 'credit_notes.view',
             ],
@@ -180,7 +240,8 @@ class Permissions
                 'purchase_requests.view', 'purchase_requests.create', 'purchase_requests.edit', 'purchase_requests.submit', 'purchase_requests.approve', 'purchase_requests.reject', 'purchase_requests.print', 'purchase_requests.import',
                 'purchase_orders.view', 'purchase_orders.create', 'purchase_orders.edit', 'purchase_orders.edit_rates', 'purchase_orders.view_rates', 'purchase_orders.view_rate_history', 'purchase_orders.request_rate_amendment', 'purchase_orders.approve_rate_amendment', 'purchase_orders.reject_rate_amendment', 'purchase_orders.submit', 'purchase_orders.approve', 'purchase_orders.reject', 'purchase_orders.print', 'purchase_orders.import',
                 'vendors.view', 'vendors.create', 'vendors.edit', 'vendors.print', 'vendors.import',
-                'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.print', 'invoices.import',
+                'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.submit', 'invoices.print', 'invoices.import',
+                'clients.view', 'client_invoices.view', 'client_invoices.print',
                 'debit_notes.view', 'debit_notes.create', 'debit_notes.edit', 'debit_notes.submit', 'debit_notes.print', 'debit_notes.import',
                 'credit_notes.view', 'credit_notes.create', 'credit_notes.edit', 'credit_notes.submit', 'credit_notes.print', 'credit_notes.import',
                 'expenses.view',
@@ -220,11 +281,13 @@ class Permissions
             ],
             'accounts' => [
                 'dashboard.view', 'projects.view', 'vendors.view', 'vendors.ledger', 'vendors.print', 'vendors.import',
-                'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.submit', 'invoices.approve', 'invoices.print', 'invoices.round_off', 'invoices.import',
+                'invoices.view', 'invoices.create', 'invoices.edit', 'invoices.submit', 'invoices.approve', 'invoices.reject', 'invoices.print', 'invoices.round_off', 'invoices.import',
+                'clients.view', 'clients.create', 'clients.edit', 'clients.ledger', 'clients.print',
+                'client_invoices.view', 'client_invoices.create', 'client_invoices.edit', 'client_invoices.submit', 'client_invoices.approve', 'client_invoices.reject', 'client_invoices.delete', 'client_invoices.record_payment', 'client_invoices.print',
                 'payments.view', 'payments.create', 'payments.edit', 'payments.approve',
                 'debit_notes.view', 'debit_notes.create', 'debit_notes.edit', 'debit_notes.submit', 'debit_notes.approve', 'debit_notes.reject', 'debit_notes.print', 'debit_notes.import',
                 'credit_notes.view', 'credit_notes.create', 'credit_notes.edit', 'credit_notes.submit', 'credit_notes.approve', 'credit_notes.reject', 'credit_notes.print', 'credit_notes.import',
-                'expenses.view', 'expenses.create', 'expenses.edit', 'expenses.submit', 'expenses.approve', 'expenses.print', 'expenses.import',
+                'expenses.view', 'expenses.create', 'expenses.edit', 'expenses.submit', 'expenses.approve', 'expenses.reject', 'expenses.print', 'expenses.manage_categories', 'expenses.import',
                 'work_orders.view', 'work_orders.print',
                 'reports.view', 'reports.export', 'reports.print',
             ],

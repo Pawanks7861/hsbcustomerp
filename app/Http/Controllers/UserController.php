@@ -197,6 +197,8 @@ class UserController extends Controller
                 $explained = $this->access->explain($user, $permission);
                 $items[] = [
                     'action' => $action,
+                    'label' => Permissions::label($permission),
+                    'action_label' => Permissions::actionTitle($action),
                     'permission' => $permission,
                     'mode' => $user->permissionOverrides->firstWhere('permission', $permission)?->effect ?: 'inherit',
                     'effective' => $explained['effective'],

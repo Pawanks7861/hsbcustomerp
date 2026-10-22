@@ -12,6 +12,10 @@ const props = defineProps({
     invoices: { type: Array, required: true },
 });
 
+function emptyLine() {
+    return { purchase_order_item_id: '', description: '', unit: '', quantity: '', rate: '', remarks: '' };
+}
+
 const form = useForm({
     date: props.note?.date || new Date().toISOString().slice(0, 10),
     vendor_id: props.note?.vendor_id || '',
@@ -22,13 +26,26 @@ const form = useForm({
     subtotal: props.note?.subtotal || '',
     tax_amount: props.note?.tax_amount || '0',
     round_off: props.note?.round_off || '0',
+    items: (props.note?.items?.length
+        ? props.note.items.map((line) => ({
+            purchase_order_item_id: line.purchase_order_item_id || '',
+            description: line.description || '',
+            unit: line.unit || '',
+            quantity: line.quantity || '',
+            rate: line.rate || '',
+            remarks: line.remarks || '',
+        }))
+        : [emptyLine()]),
 });
 
-const total = computed(() => {
-    const sum = Number(form.subtotal || 0) + Number(form.tax_amount || 0) + Number(form.round_off || 0);
-    return sum.toFixed(2);
-});
-
+const selectedOrder = computed(() => props.purchaseOrders.find((row) => String(row.id) === String(form.purchase_order_id)) ?? null);
+const itemMode = computed(() => form.items.some((line) => line.description || line.quantity || line.rate));
+const itemsSubtotal = computed(() => form.items.reduce((sum, line) => {
+    const amount = (Number(line.quantity) || 0) * (Number(line.rate) || 0);
+    return Math.round((sum + amount + Number.EPSILON) * 100) / 100;
+}, 0));
+const subtotalValue = computed(() => (itemMode.value ? itemsSubtotal.value : Number(form.subtotal || 0)));
+const total = computed(() => (subtotalValue.value + Number(form.tax_amount || 0) + Number(form.round_off || 0)).toFixed(2));
 const filteredOrders = computed(() => purchaseOrdersFor(form.vendor_id));
 const filteredInvoices = computed(() => invoicesFor(form.vendor_id));
 
@@ -45,10 +62,37 @@ watch(() => form.vendor_id, () => {
     form.purchase_invoice_id = '';
 });
 
+function applyPoLine(index) {
+    const line = form.items[index];
+    const match = selectedOrder.value?.items?.find((item) => String(item.id) === String(line.purchase_order_item_id));
+    if (!match) {
+        return;
+    }
+    line.description = match.description;
+    line.unit = match.unit || '';
+    if (!line.rate) {
+        line.rate = match.rate;
+    }
+}
+
+function addLine() {
+    form.items.push(emptyLine());
+}
+
+function removeLine(index) {
+    form.items.splice(index, 1);
+    if (form.items.length === 0) {
+        form.items.push(emptyLine());
+    }
+}
+
 function submit() {
     const url = props.note
         ? `/projects/${props.project.id}/debit-notes/${props.note.id}`
         : `/projects/${props.project.id}/debit-notes`;
+    if (itemMode.value) {
+        form.subtotal = itemsSubtotal.value.toFixed(2);
+    }
     props.note ? form.put(url) : form.post(url);
 }
 </script>
@@ -59,7 +103,7 @@ function submit() {
         <template #header>
             <PageHeader :title="note ? note.number : 'New Debit Note'" :eyebrow="project.project_name" />
         </template>
-        <form class="ui-card max-w-3xl space-y-4 p-5" @submit.prevent="submit">
+        <form class="ui-card max-w-5xl space-y-4 p-5" @submit.prevent="submit">
             <div class="grid gap-4 md:grid-cols-2">
                 <label class="text-sm">Date<input v-model="form.date" type="date" required class="ui-input mt-1 w-full"></label>
                 <label class="text-sm">Vendor
@@ -83,8 +127,44 @@ function submit() {
             </div>
             <label class="block text-sm">Reason<input v-model="form.reason" required class="ui-input mt-1 w-full"></label>
             <textarea v-model="form.remarks" rows="3" placeholder="Remarks" class="ui-input w-full"></textarea>
+            <div class="overflow-x-auto">
+                <table class="min-w-full border-collapse text-sm">
+                    <thead>
+                        <tr>
+                            <th class="px-2 py-1 text-left font-medium text-slate-500">PO line</th>
+                            <th class="px-2 py-1 text-left font-medium text-slate-500">Description</th>
+                            <th class="px-2 py-1 text-left font-medium text-slate-500">Unit</th>
+                            <th class="px-2 py-1 text-right font-medium text-slate-500">Qty</th>
+                            <th class="px-2 py-1 text-right font-medium text-slate-500">Rate</th>
+                            <th class="px-2 py-1 text-right font-medium text-slate-500">Amount</th>
+                            <th class="px-2 py-1"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="(line, index) in form.items" :key="index">
+                            <td class="border border-slate-200 p-1">
+                                <select v-model="line.purchase_order_item_id" class="ui-input w-40" @change="applyPoLine(index)">
+                                    <option value="">Amount-only / manual</option>
+                                    <option v-for="item in selectedOrder?.items || []" :key="item.id" :value="item.id">{{ item.description }}</option>
+                                </select>
+                            </td>
+                            <td class="border border-slate-200 p-1"><input v-model="line.description" class="ui-input w-full"></td>
+                            <td class="border border-slate-200 p-1"><input v-model="line.unit" class="ui-input w-20"></td>
+                            <td class="border border-slate-200 p-1"><input v-model="line.quantity" type="number" min="0" step="0.001" class="ui-input w-24 text-right"></td>
+                            <td class="border border-slate-200 p-1"><input v-model="line.rate" type="number" min="0" step="0.01" class="ui-input w-24 text-right"></td>
+                            <td class="border border-slate-200 p-1 text-right tabular-nums">{{ ((Number(line.quantity) || 0) * (Number(line.rate) || 0)).toFixed(2) }}</td>
+                            <td class="border border-slate-200 p-1"><button type="button" class="text-xs text-red-700" @click="removeLine(index)">Remove</button></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <button type="button" class="text-sm text-amber-700 hover:underline" @click="addLine">Add line</button>
+            <p class="text-xs text-slate-500">Leave item lines empty to record an amount-only adjustment. Quantity lines calculate the subtotal automatically.</p>
             <div class="grid gap-4 md:grid-cols-4">
-                <label class="text-sm">Subtotal<input v-model="form.subtotal" type="number" min="0" step="0.01" required class="ui-input mt-1 w-full"></label>
+                <label class="text-sm">Subtotal
+                    <input v-if="!itemMode" v-model="form.subtotal" type="number" min="0" step="0.01" required class="ui-input mt-1 w-full">
+                    <p v-else class="mt-2 font-semibold">{{ itemsSubtotal.toFixed(2) }}</p>
+                </label>
                 <label class="text-sm">Tax<input v-model="form.tax_amount" type="number" step="0.01" class="ui-input mt-1 w-full"></label>
                 <label class="text-sm">Round off<input v-model="form.round_off" type="number" step="0.01" class="ui-input mt-1 w-full"></label>
                 <label class="text-sm">Total<p class="mt-2 font-semibold">{{ total }}</p></label>

@@ -31,6 +31,8 @@ const filteredModules = computed(() => {
             actions: module.actions.filter((action) => {
                 return module.module.toLowerCase().includes(query)
                     || action.action.toLowerCase().includes(query)
+                    || (action.label || '').toLowerCase().includes(query)
+                    || (action.action_label || '').toLowerCase().includes(query)
                     || action.permission.toLowerCase().includes(query)
                     || action.source.toLowerCase().includes(query);
             }),
@@ -112,7 +114,7 @@ function save() {
                         </thead>
                         <tbody>
                             <tr v-for="action in module.actions" :key="action.permission" class="border-t border-slate-100">
-                                <td class="py-2 pr-4 capitalize">{{ action.action.replaceAll('_', ' ') }}</td>
+                                <td class="py-2 pr-4">{{ action.label || action.action_label || action.action.replaceAll('_', ' ') }}</td>
                                 <td class="py-2 pr-4 font-mono text-xs text-slate-600">{{ action.permission }}</td>
                                 <td class="py-2 pr-4 text-slate-600">{{ action.source }}</td>
                                 <td class="py-2 pr-4">
@@ -137,7 +139,10 @@ function save() {
                 </div>
             </section>
             <p v-if="filteredModules.length === 0" class="text-sm text-slate-500">No permissions match your search.</p>
-            <button class="ui-btn-primary" :disabled="form.processing">Save permissions</button>
+            <div class="flex flex-wrap items-center gap-3">
+                <button class="ui-btn-primary" :disabled="form.processing">Save permissions</button>
+                <a href="/users" class="text-sm text-slate-600 hover:underline">Cancel</a>
+            </div>
         </form>
     </AdminLayout>
 </template>

@@ -68,12 +68,14 @@ class BoqController extends Controller
         ])->values();
         $ids = collect($payload['items'])->pluck('id')->filter()->map(fn ($id) => (int) $id)->all();
         $accepted = $receipts->acceptedFor($ids);
-        $payload['items'] = collect($payload['items'])->map(function (array $item) use ($accepted) {
-            $received = $accepted[(int) ($item['id'] ?? 0)] ?? '0.000';
+        $recorded = $receipts->recordedFor($ids);
+        $payload['items'] = collect($payload['items'])->map(function (array $item) use ($accepted, $recorded) {
+            $used = $accepted[(int) ($item['id'] ?? 0)] ?? '0.000';
+            $received = $recorded[(int) ($item['id'] ?? 0)] ?? '0.000';
             $boqQuantity = $item['quantity'] === null || $item['quantity'] === '' ? null : (string) $item['quantity'];
-            $item['quantity_usage'] = $boqQuantity !== null && bccomp($received, '0', 3) === 1
+            $item['quantity_usage'] = $boqQuantity !== null && (bccomp($received, '0', 3) === 1 || bccomp($used, '0', 3) === 1)
                 ? [
-                    'used_quantity' => $received,
+                    'used_quantity' => $used,
                     'received_quantity' => $received,
                     'boq_quantity' => $boqQuantity,
                     'exceeded' => bccomp($received, $boqQuantity, 3) === 1,

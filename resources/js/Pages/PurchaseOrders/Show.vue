@@ -121,6 +121,7 @@ function destroy() {
                 </div>
                 <div class="flex flex-wrap items-center justify-end gap-2">
                     <DocumentPdfActions
+                        v-if="abilities.print"
                         :view-url="`/projects/${project.id}/purchase-orders/${purchaseOrder.id}/pdf`"
                         :download-url="`/projects/${project.id}/purchase-orders/${purchaseOrder.id}/pdf/download`"
                     />
@@ -145,7 +146,7 @@ function destroy() {
                 <div><dt class="text-slate-500">PR number</dt><dd><Link :href="`/projects/${project.id}/purchase-requests/${purchaseOrder.purchase_request_id}`" class="font-medium text-amber-700 hover:underline">{{ purchaseOrder.pr_number }}</Link></dd></div>
                 <div><dt class="text-slate-500">Requested BOQ Qty</dt><dd class="tabular-nums">{{ purchaseOrder.requested_boq_quantity === null ? '—' : `${Number(purchaseOrder.requested_boq_quantity).toLocaleString('en-IN', { maximumFractionDigits: 3 })}${purchaseOrder.boq_unit ? ` ${purchaseOrder.boq_unit}` : ''}` }}</dd></div>
                 <div><dt class="text-slate-500">BOQ</dt><dd>{{ purchaseOrder.boq_title }}</dd></div>
-                <div><dt class="text-slate-500">BOQ item</dt><dd>{{ purchaseOrder.boq_item }}</dd></div>
+                <div><dt class="text-slate-500">Item description</dt><dd>{{ purchaseOrder.boq_item }}</dd></div>
             </dl>
 
             <section class="text-sm">
@@ -302,8 +303,10 @@ function destroy() {
                 </form>
             </section>
 
-            <div v-if="purchaseOrder.approved_by || purchaseOrder.rejection_reason" class="rounded-md border border-slate-200 bg-stone-50 p-4 text-sm">
-                <p v-if="purchaseOrder.approved_by">Approved by {{ purchaseOrder.approved_by }} on {{ purchaseOrder.approved_at }}</p>
+            <div class="rounded-md border border-slate-200 bg-stone-50 p-4 text-sm">
+                <h2 class="mb-2 font-semibold">Approvals</h2>
+                <p>First approval: {{ purchaseOrder.first_approved_by ? `${purchaseOrder.first_approved_by} on ${purchaseOrder.first_approved_at}` : 'Pending' }}</p>
+                <p>Second approval: {{ purchaseOrder.second_approved_by ? `${purchaseOrder.second_approved_by} on ${purchaseOrder.second_approved_at}` : 'Pending' }}</p>
                 <p v-if="purchaseOrder.rejection_reason">Rejected by {{ purchaseOrder.rejected_by }} on {{ purchaseOrder.rejected_at }}: {{ purchaseOrder.rejection_reason }}</p>
             </div>
 
@@ -311,7 +314,7 @@ function destroy() {
                 <Link v-if="abilities.update" :href="`/projects/${project.id}/purchase-orders/${purchaseOrder.id}/edit`" class="ui-btn-secondary">Edit</Link>
                 <button v-if="abilities.delete" type="button" class="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700" @click="destroy">Delete</button>
                 <button v-if="abilities.submit" type="button" class="ui-btn-primary" @click="submit">Submit</button>
-                <button v-if="abilities.approve" type="button" class="ui-btn bg-emerald-600 text-white hover:bg-emerald-700" @click="approve">Approve</button>
+                <button v-if="abilities.approve" type="button" class="ui-btn bg-emerald-600 text-white hover:bg-emerald-700" @click="approve">{{ purchaseOrder.first_approved_by ? 'Record second approval' : 'Approve' }}</button>
                 <button v-if="abilities.reject" type="button" class="ui-btn bg-red-600 text-white hover:bg-red-700" @click="rejecting = !rejecting">Reject</button>
                 <button v-if="abilities.reopen" type="button" class="ui-btn-secondary" @click="reopen">Move to draft</button>
             </div>

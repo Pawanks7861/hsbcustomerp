@@ -11,7 +11,17 @@ const props = defineProps({
     invoice: { type: Object, required: true },
     availableAdvance: { type: String, required: true },
     canSettle: { type: Boolean, required: true },
+    abilities: { type: Object, default: () => ({}) },
 });
+
+const rejectForm = useForm({ rejection_reason: '' });
+
+function post(action) {
+    rejectForm.post(`/projects/${props.project.id}/purchase-invoices/${props.invoice.id}/${action}`, {
+        preserveScroll: true,
+        onSuccess: () => rejectForm.reset(),
+    });
+}
 
 const advance = useForm({ amount: '', remarks: '' });
 
@@ -41,8 +51,19 @@ function applyAdvance() {
             <div><p class="text-slate-500">Paid</p><p>{{ formatInr(invoice.paid) }}</p></div>
             <div><p class="text-slate-500">Advance Applied</p><p>{{ formatInr(invoice.advance_applied) }}</p></div>
             <div><p class="text-slate-500">Outstanding</p><p class="font-semibold">{{ formatInr(invoice.outstanding) }}</p></div>
-            <div><p class="text-slate-500">Status</p><p class="capitalize">{{ invoice.status.replaceAll('_', ' ') }}</p></div>
+            <div><p class="text-slate-500">Settlement</p><p class="capitalize">{{ invoice.status.replaceAll('_', ' ') }}</p></div>
+            <div><p class="text-slate-500">Approval</p><p class="capitalize">{{ (invoice.approval_status || 'approved').replaceAll('_', ' ') }}</p></div>
+            <p v-if="invoice.approved_by" class="md:col-span-3 text-sm">Approved by {{ invoice.approved_by }} on {{ invoice.approved_at }}</p>
+            <p v-if="invoice.rejection_reason" class="md:col-span-3 text-sm text-rose-600">Rejected by {{ invoice.rejected_by }}: {{ invoice.rejection_reason }}</p>
         </div>
+        <div class="mb-4 flex flex-wrap gap-2">
+            <button v-if="abilities.submit" type="button" class="ui-btn-primary" @click="post('submit')">Submit for approval</button>
+            <button v-if="abilities.approve" type="button" class="ui-btn-primary" @click="post('approve')">Approve</button>
+        </div>
+        <form v-if="abilities.reject" class="ui-card mb-4 max-w-lg space-y-3 p-4" @submit.prevent="post('reject')">
+            <textarea v-model="rejectForm.rejection_reason" required placeholder="Rejection reason" class="ui-input w-full"></textarea>
+            <button class="ui-btn-secondary">Reject</button>
+        </form>
         <div v-if="invoice.items?.length" class="ui-table-wrap mb-4 overflow-x-auto">
             <table class="ui-table min-w-[880px]">
                 <thead>

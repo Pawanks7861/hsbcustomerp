@@ -234,7 +234,7 @@ class VendorLedgerService
     {
         $rows = [];
 
-        $invoiceQuery = $vendor->invoices();
+        $invoiceQuery = $vendor->invoices()->where('approval_status', PurchaseInvoice::APPROVAL_APPROVED);
         if ($projectId !== null) {
             $invoiceQuery->where('project_id', $projectId);
         }

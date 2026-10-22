@@ -54,11 +54,12 @@ function submit() {
                         <option v-for="row in projects" :key="row.id" :value="row.id">{{ row.project_name }}</option>
                     </select>
                 </label>
-                <label class="text-sm">Category
+                <label class="text-sm">Expense Head
                     <select v-model="form.category_id" required class="ui-input mt-1 w-full">
                         <option value="">Select</option>
-                        <option v-for="category in categories" :key="category.id" :value="category.id">{{ category.name }}</option>
+                        <option v-for="category in categories" :key="category.id" :value="category.id">{{ category.name }}{{ category.is_active === false ? ' (inactive)' : '' }}</option>
                     </select>
+                    <span v-if="form.errors.category_id" class="mt-1 block text-red-700">{{ form.errors.category_id }}</span>
                 </label>
                 <label class="text-sm">Payment status
                     <select v-model="form.payment_status" class="ui-input mt-1 w-full">

@@ -7,6 +7,7 @@ import PageHeader from '../../Components/PageHeader.vue';
 const props = defineProps({
     catalog: { type: Array, default: () => [] },
     vendors: { type: Array, required: true },
+    clients: { type: Array, default: () => [] },
     projects: { type: Array, required: true },
 });
 

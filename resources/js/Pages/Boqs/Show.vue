@@ -347,7 +347,7 @@ const budgetTotal = computed(() => items.value.reduce((sum, row) => sum + (Numbe
                                 v-if="row.quantity_usage"
                                 class="mb-1 text-[11px] leading-tight"
                                 :class="row.quantity_usage.exceeded ? 'font-medium text-orange-700' : 'text-slate-500'"
-                                :title="`Accepted on posted GRNs: ${formatQty(row.quantity_usage.received_quantity || row.quantity_usage.used_quantity, row.quantity_usage.unit)}`"
+                                :title="`Recorded on posted GRNs: ${formatQty(row.quantity_usage.received_quantity || row.quantity_usage.used_quantity, row.quantity_usage.unit)}`"
                             >
                                 {{ formatQty(row.quantity_usage.received_quantity || row.quantity_usage.used_quantity) }} / {{ formatQty(row.quantity_usage.boq_quantity) }}
                                 <span v-if="row.quantity_usage.exceeded" class="block">Exceeded</span>

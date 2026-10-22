@@ -55,6 +55,10 @@ class PurchaseOrder extends Model
         'submitted_at',
         'approved_at',
         'approved_by',
+        'first_approved_by',
+        'first_approved_at',
+        'second_approved_by',
+        'second_approved_at',
         'rejected_at',
         'rejected_by',
         'rejection_reason',
@@ -77,6 +81,8 @@ class PurchaseOrder extends Model
         'grand_total' => 'decimal:2',
         'submitted_at' => 'datetime',
         'approved_at' => 'datetime',
+        'first_approved_at' => 'datetime',
+        'second_approved_at' => 'datetime',
         'rejected_at' => 'datetime',
     ];
 
@@ -133,5 +139,27 @@ class PurchaseOrder extends Model
     public function rejectedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'rejected_by');
+    }
+
+    public function firstApprovedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'first_approved_by');
+    }
+
+    public function secondApprovedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'second_approved_by');
+    }
+
+    public function isFullyApproved(): bool
+    {
+        return $this->status === \App\Support\DocumentStatus::APPROVED
+            && $this->first_approved_by
+            && $this->second_approved_by;
+    }
+
+    public function printable(): bool
+    {
+        return $this->status === \App\Support\DocumentStatus::APPROVED;
     }
 }

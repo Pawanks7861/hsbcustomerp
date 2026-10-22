@@ -75,6 +75,7 @@ class RoleController extends Controller
                 'description' => $role->description,
                 'is_active' => $role->is_active,
                 'is_system' => $role->is_system,
+                'slug' => $role->slug,
                 'users' => $role->users->map(fn ($user) => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email]),
             ],
             'modules' => $this->matrix($role->permissions->pluck('permission')->all()),
@@ -109,7 +110,7 @@ class RoleController extends Controller
             'description' => ['nullable', 'string', 'max:2000'],
             'is_active' => ['nullable', 'boolean'],
             'permissions' => ['nullable', 'array'],
-            'permissions.*' => ['string'],
+            'permissions.*' => ['string', Rule::in(Permissions::all())],
         ]);
     }
 
@@ -148,6 +149,8 @@ class RoleController extends Controller
             foreach ($actions as $action => $permission) {
                 $items[] = [
                     'action' => $action,
+                    'label' => Permissions::label($permission),
+                    'action_label' => Permissions::actionTitle($action),
                     'permission' => $permission,
                     'granted' => in_array($permission, $granted, true),
                     'approval' => Permissions::isApproval($permission),

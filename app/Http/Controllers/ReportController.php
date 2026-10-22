@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Client;
 use App\Models\Project;
 use App\Models\Vendor;
 use App\Services\Access;
@@ -24,6 +25,7 @@ class ReportController extends Controller
         return Inertia::render('Reports/Index', [
             'catalog' => ReportCatalog::all(),
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name', 'vendor_code']),
+            'clients' => Client::query()->orderBy('name')->get(['id', 'name', 'client_code']),
             'projects' => Project::query()->visibleTo($request->user())->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
         ]);
     }
@@ -103,6 +105,7 @@ class ReportController extends Controller
             'sections' => $payload['sections'] ?? [],
             'projects' => Project::query()->visibleTo($user)->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name', 'vendor_code']),
+            'clients' => Client::query()->orderBy('name')->get(['id', 'name', 'client_code']),
             'statusOptions' => DocumentStatus::all(),
             'abilities' => [
                 'export' => $access->allows($user, 'reports.export'),
@@ -119,6 +122,7 @@ class ReportController extends Controller
         return [
             'project_id' => $request->integer('project_id') ?: null,
             'vendor_id' => $request->integer('vendor_id') ?: null,
+            'client_id' => $request->integer('client_id') ?: null,
             'from' => $request->string('from')->toString() ?: null,
             'to' => $request->string('to')->toString() ?: null,
             'status' => $request->string('status')->toString() ?: null,
@@ -141,6 +145,11 @@ class ReportController extends Controller
         if ($filters['vendor_id']) {
             $vendor = Vendor::query()->find($filters['vendor_id']);
             $labels[] = ['label' => 'Vendor', 'value' => $vendor?->name ?? (string) $filters['vendor_id']];
+        }
+
+        if ($filters['client_id']) {
+            $client = Client::query()->find($filters['client_id']);
+            $labels[] = ['label' => 'Client', 'value' => $client?->name ?? (string) $filters['client_id']];
         }
 
         if ($filters['from']) {

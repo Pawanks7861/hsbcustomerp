@@ -21,6 +21,7 @@ class ExpenseCategoryController extends Controller
                 'name' => $category->name,
                 'is_active' => $category->is_active,
             ]),
+            'title' => 'Expense Heads',
         ]);
     }
 

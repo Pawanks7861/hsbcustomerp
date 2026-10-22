@@ -95,6 +95,11 @@ class Project extends Model
         return $this->hasMany(Expense::class);
     }
 
+    public function clientInvoices(): HasMany
+    {
+        return $this->hasMany(ClientInvoice::class);
+    }
+
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         if (app(Access::class)->seesAllProjects($user)) {

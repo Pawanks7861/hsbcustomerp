@@ -30,12 +30,28 @@ class PurchaseOrderPolicy
     {
         return app(Access::class)->allows($user, 'purchase_orders.approve')
             && $user->isActive()
-            && $purchaseOrder->status === DocumentStatus::SUBMITTED;
+            && $purchaseOrder->status === DocumentStatus::SUBMITTED
+            && ! $purchaseOrder->second_approved_by
+            && (int) $purchaseOrder->first_approved_by !== (int) $user->id;
+    }
+
+    public function print(User $user, PurchaseOrder $purchaseOrder): bool
+    {
+        return $purchaseOrder->printable()
+            && $user->isActive()
+            && (
+                app(Access::class)->allows($user, 'purchase_orders.print')
+                || app(Access::class)->allows($user, 'purchase_orders.view')
+                || $user->isSuperAdmin()
+            );
     }
 
     public function reject(User $user, PurchaseOrder $purchaseOrder): bool
     {
-        return $this->approve($user, $purchaseOrder);
+        return app(Access::class)->allows($user, 'purchase_orders.reject')
+            && $user->isActive()
+            && $purchaseOrder->status === DocumentStatus::SUBMITTED
+            && ! $purchaseOrder->second_approved_by;
     }
 
     public function reopen(User $user, PurchaseOrder $purchaseOrder): bool

@@ -39,6 +39,30 @@ function post(action) {
             <p>Invoice: {{ note.invoice_number || '—' }}</p>
             <p class="md:col-span-2">Reason: {{ note.reason }}</p>
             <p v-if="note.remarks" class="md:col-span-2">{{ note.remarks }}</p>
+        </section>
+        <div v-if="note.items?.length" class="ui-table-wrap mb-4">
+            <table class="ui-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Unit</th>
+                        <th class="text-right">Qty</th>
+                        <th class="text-right">Rate</th>
+                        <th class="text-right">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="line in note.items" :key="line.id">
+                        <td>{{ line.description }}</td>
+                        <td>{{ line.unit || '—' }}</td>
+                        <td class="text-right tabular-nums">{{ line.quantity }}</td>
+                        <td class="text-right tabular-nums">{{ formatInr(line.rate) }}</td>
+                        <td class="text-right tabular-nums">{{ formatInr(line.amount) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <section class="ui-card mb-4 grid gap-2 p-5 text-sm md:grid-cols-2">
             <p>Subtotal: {{ formatInr(note.subtotal) }}</p>
             <p>Tax: {{ formatInr(note.tax_amount) }}</p>
             <p>Round off: {{ formatInr(note.round_off) }}</p>

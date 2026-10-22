@@ -8,6 +8,7 @@ use App\Imports\Support\DuplicateMode;
 use App\Imports\Support\ImportContext;
 use App\Imports\Support\RowOutcome;
 use App\Models\Vendor;
+use App\Support\VendorRules;
 use Illuminate\Support\Facades\DB;
 
 class VendorsImport extends AbstractImportDefinition
@@ -66,36 +67,40 @@ class VendorsImport extends AbstractImportDefinition
             'contact_person' => 'Ravi',
             'phone' => '9876543210',
             'email' => 'acme@example.com',
+            'address' => '12 Industrial Area',
             'city' => 'Pune',
             'state' => 'Maharashtra',
+            'pincode' => '411001',
             'gst_number' => '27AAAAA0000A1Z5',
+            'pan_number' => 'AAAAA0000A',
+            'bank_name' => 'HDFC Bank',
+            'account_number' => '123456789012',
+            'ifsc' => 'HDFC0001234',
             'status' => 'active',
         ]];
     }
 
     public function instructions(): string
     {
-        return 'Match existing vendors by Vendor Code when using update modes. Opening balances are set only on create. Party Type: vendor, contractor, or both.';
+        return 'Create rows must include contact, address, GST, PAN, and bank details. Match existing vendors by Vendor Code when using update modes. Opening balances are set only on create. Party Type: vendor, contractor, or both.';
     }
 
     public function validateRow(int $rowNumber, array $raw, ImportContext $context): RowOutcome
     {
         $cast = $this->castRow($raw);
         $errors = $cast['errors'];
-        $data = $cast['data'];
-
-        if (! empty($data['email']) && ! filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
-            $errors[] = 'Email is invalid.';
-        }
-
-        if (($data['opening_advance'] ?? 0) < 0 || ($data['opening_outstanding'] ?? 0) < 0) {
-            $errors[] = 'Opening amounts cannot be negative.';
-        }
+        $data = VendorRules::normalize($cast['data']);
 
         $existing = null;
         if (! empty($data['vendor_code'])) {
             $existing = Vendor::query()->where('vendor_code', $data['vendor_code'])->first();
         }
+
+        $creating = $existing === null;
+        if ($creating) {
+            $data['party_type'] = $data['party_type'] ?? Vendor::VENDOR;
+        }
+        $errors = [...$errors, ...VendorRules::importErrors($data, $creating)];
 
         if ($errors !== []) {
             return new RowOutcome($rowNumber, RowOutcome::INVALID, $data, $errors);

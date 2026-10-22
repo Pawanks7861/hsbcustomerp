@@ -102,7 +102,7 @@ function submit() {
         <template #header>
             <div>
                 <h1 class="text-xl font-semibold">{{ purchaseOrder.id ? 'Edit purchase order' : 'Create purchase order' }}</h1>
-                <p class="text-sm text-slate-500">From {{ purchaseRequest.pr_number }} · {{ item.item_number }} {{ item.description }}</p>
+                <p class="text-sm text-slate-500">From {{ purchaseRequest.pr_number }} · {{ item.description }}</p>
             </div>
         </template>
 
@@ -189,6 +189,7 @@ function submit() {
                             <th class="px-3 py-2 font-medium text-slate-500">HSN/SAC</th>
                             <th class="px-3 py-2 font-medium text-slate-500">Unit</th>
                             <th class="px-3 py-2 font-medium text-slate-500 text-right">Qty</th>
+                            <th class="px-3 py-2 font-medium text-slate-500 text-right">Previous GRN qty</th>
                             <th class="px-3 py-2 font-medium text-slate-500 text-right">Rate</th>
                             <th class="px-3 py-2 font-medium text-slate-500 text-right">Disc %</th>
                             <th class="px-3 py-2 font-medium text-slate-500 text-right">Amount</th>
@@ -204,6 +205,7 @@ function submit() {
                             </td>
                             <td class="border border-slate-200 px-3 py-2">{{ line.unit || '—' }}</td>
                             <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ line.quantity }}</td>
+                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ line.previous_grn_quantity ?? '0.000' }}</td>
                             <td class="border border-slate-200 px-3 py-2 text-right">
                                 <input
                                     v-if="form.items[index] && canEditRates"

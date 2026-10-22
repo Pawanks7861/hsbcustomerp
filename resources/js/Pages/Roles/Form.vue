@@ -63,11 +63,11 @@ function save() {
                     <template v-for="action in module.actions" :key="action.permission">
                         <a v-if="action.approval" href="/approvals/settings" class="flex items-center gap-2 text-sm text-slate-400 hover:underline" title="Approvers are chosen per staff member in Approval Settings">
                             <input type="checkbox" disabled>
-                            {{ action.action }} (Approval Settings)
+                            {{ action.label || action.action_label || action.action }} (Approval Settings)
                         </a>
-                        <label v-else class="flex items-center gap-2 text-sm">
-                            <input type="checkbox" :checked="form.permissions.includes(action.permission)" @change="toggle(action.permission, $event.target.checked)">
-                            {{ action.action }}
+                        <label v-else class="flex items-center gap-2 text-sm" :title="action.permission">
+                            <input type="checkbox" :checked="form.permissions.includes(action.permission)" :disabled="role?.slug === 'super_admin' || (role?.is_system && role?.name === 'Super Admin')" @change="toggle(action.permission, $event.target.checked)">
+                            {{ action.label || action.action_label || action.action }}
                         </label>
                     </template>
                 </div>
@@ -75,7 +75,11 @@ function save() {
             <div v-if="role?.users?.length" class="text-sm text-slate-600">
                 Assigned users: {{ role.users.map((user) => user.name).join(', ') }}
             </div>
-            <button class="ui-btn-primary" :disabled="form.processing">Save role</button>
+            <div class="flex flex-wrap items-center gap-3">
+                <button class="ui-btn-primary" :disabled="form.processing || (role?.is_system && role?.name === 'Super Admin')">Save role</button>
+                <a href="/roles" class="text-sm text-slate-600 hover:underline">Cancel</a>
+                <button v-if="role" type="button" class="text-sm text-slate-500 hover:underline" @click="form.permissions = modules.flatMap((module) => module.actions.filter((action) => action.granted && !action.approval).map((action) => action.permission))">Reset</button>
+            </div>
         </form>
     </AdminLayout>
 </template>

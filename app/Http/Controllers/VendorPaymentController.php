@@ -27,7 +27,7 @@ class VendorPaymentController extends Controller
             'vendor' => ['id' => $vendor->id, 'name' => $vendor->name, 'vendor_code' => $vendor->vendor_code],
             'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_name']),
             'purchaseOrders' => $vendor->purchaseOrders()->orderByDesc('po_date')->get(['id', 'po_number', 'project_id', 'grand_total']),
-            'invoices' => $vendor->invoices()->with('purchaseOrder:id,po_number')->orderByDesc('invoice_date')->get(),
+            'invoices' => $vendor->invoices()->where('approval_status', PurchaseInvoice::APPROVAL_APPROVED)->with('purchaseOrder:id,po_number')->orderByDesc('invoice_date')->get(),
             'invoice' => $invoice ? $this->invoiceCard($invoice, $balances) : null,
             'preset' => [
                 'payment_type' => $request->string('payment_type')->toString() ?: ($invoice ? VendorPayment::TYPE_INVOICE : VendorPayment::TYPE_ADVANCE),
@@ -61,6 +61,12 @@ class VendorPaymentController extends Controller
             if (! $invoice || (int) $invoice->vendor_id !== (int) $vendor->id) {
                 throw ValidationException::withMessages([
                     'purchase_invoice_id' => 'Choose an invoice for this vendor.',
+                ]);
+            }
+
+            if (! $invoice->isApproved()) {
+                throw ValidationException::withMessages([
+                    'purchase_invoice_id' => 'Payments can only be recorded against an approved invoice.',
                 ]);
             }
 

@@ -15,6 +15,7 @@ use App\Services\Access;
 use App\Services\ActivityLogger;
 use App\Services\DocumentNumber;
 use App\Services\DocumentPdf;
+use App\Services\BoqReceiptProgress;
 use App\Services\PoReceiptProgress;
 use App\Services\PurchaseOrderRateAmendmentService;
 use App\Support\DocumentStatus;
@@ -68,7 +69,8 @@ class PurchaseOrderController extends Controller
                 'id' => $record->id,
                 'po_number' => $record->po_number,
                 'pr_number' => $record->purchaseRequest?->pr_number,
-                'boq_item' => trim(($record->boqItem?->item_number ?? '').' '.($record->boqItem?->description ?? '')),
+                'boq_item' => $record->boqItem?->description ?? '',
+                'printable' => $record->printable(),
                 'supplier_name' => $record->supplier_name,
                 'po_date' => $record->po_date?->toDateString(),
                 'grand_total' => (string) $record->grand_total,
@@ -144,7 +146,7 @@ class PurchaseOrderController extends Controller
     {
         $this->ensureOrder($project, $purchaseOrder);
         $purchaseOrder->load([
-            'boq', 'boqItem', 'purchaseRequest', 'items', 'createdBy', 'approvedBy', 'rejectedBy',
+            'boq', 'boqItem', 'purchaseRequest', 'items', 'createdBy', 'approvedBy', 'rejectedBy', 'firstApprovedBy', 'secondApprovedBy',
             'rateAmendments.purchaseOrderItem', 'rateAmendments.requestedBy', 'rateAmendments.approvedBy', 'rateAmendments.rejectedBy',
         ]);
 
@@ -292,6 +294,12 @@ class PurchaseOrderController extends Controller
             'rejection_reason' => null,
             'rejected_at' => null,
             'rejected_by' => null,
+            'approved_by' => null,
+            'approved_at' => null,
+            'first_approved_by' => null,
+            'first_approved_at' => null,
+            'second_approved_by' => null,
+            'second_approved_at' => null,
         ]);
 
         return back()->with('success', 'Purchase order submitted.');
@@ -302,10 +310,24 @@ class PurchaseOrderController extends Controller
         $this->ensureOrder($project, $purchaseOrder);
         $this->authorize('approve', $purchaseOrder);
 
+        $now = now();
+        $userId = $request->user()->id;
+
+        if (! $purchaseOrder->first_approved_by) {
+            $purchaseOrder->update([
+                'first_approved_by' => $userId,
+                'first_approved_at' => $now,
+            ]);
+
+            return back()->with('success', 'First approval recorded. A second approver is required before this purchase order can be printed.');
+        }
+
         $purchaseOrder->update([
+            'second_approved_by' => $userId,
+            'second_approved_at' => $now,
             'status' => DocumentStatus::APPROVED,
-            'approved_at' => now(),
-            'approved_by' => $request->user()->id,
+            'approved_at' => $now,
+            'approved_by' => $userId,
         ]);
 
         return back()->with('success', 'Purchase order approved.');
@@ -321,6 +343,12 @@ class PurchaseOrderController extends Controller
             'rejected_at' => now(),
             'rejected_by' => $request->user()->id,
             'rejection_reason' => $request->validated('rejection_reason'),
+            'approved_by' => null,
+            'approved_at' => null,
+            'first_approved_by' => null,
+            'first_approved_at' => null,
+            'second_approved_by' => null,
+            'second_approved_at' => null,
         ]);
 
         return back()->with('success', 'Purchase order rejected.');
@@ -333,6 +361,12 @@ class PurchaseOrderController extends Controller
 
         $purchaseOrder->update([
             'status' => DocumentStatus::DRAFT,
+            'approved_by' => null,
+            'approved_at' => null,
+            'first_approved_by' => null,
+            'first_approved_at' => null,
+            'second_approved_by' => null,
+            'second_approved_at' => null,
         ]);
 
         return back()->with('success', 'Purchase order returned to draft.');
@@ -434,6 +468,8 @@ class PurchaseOrderController extends Controller
     private function renderPdf(Project $project, PurchaseOrder $purchaseOrder, DocumentPdf $pdf, bool $download): HttpResponse
     {
         $this->ensureOrder($project, $purchaseOrder);
+        abort_unless($purchaseOrder->printable(), 403);
+        $this->authorize('print', $purchaseOrder);
         $purchaseOrder->load(['boq', 'boqItem.revision', 'purchaseRequest', 'items', 'createdBy', 'approvedBy', 'rejectedBy']);
         $document = $this->detailPayload($purchaseOrder);
         $revision = $purchaseOrder->boqItem?->revision?->revision_number;
@@ -691,6 +727,7 @@ class PurchaseOrderController extends Controller
             'view_rate_history' => $this->access->allows($user, 'purchase_orders.view_rate_history')
                 || $this->access->allows($user, 'purchase_orders.view')
                 || $user->isSuperAdmin(),
+            'print' => $user->can('print', $purchaseOrder),
         ];
     }
 
@@ -737,12 +774,17 @@ class PurchaseOrderController extends Controller
                 : (string) $record->purchaseRequest->requested_boq_quantity,
             'boq_unit' => $record->boqItem?->unit,
             'boq_title' => $record->boq?->title,
-            'boq_item' => trim(($record->boqItem?->item_number ?? '').' '.($record->boqItem?->description ?? '')),
+            'boq_item' => $record->boqItem?->description ?? '',
             'status' => $record->status,
             'created_by' => $record->createdBy?->name,
             'submitted_at' => $record->submitted_at?->toDateTimeString(),
             'approved_at' => $record->approved_at?->toDateTimeString(),
             'approved_by' => $record->approvedBy?->name,
+            'first_approved_by' => $record->firstApprovedBy?->name,
+            'first_approved_at' => $record->first_approved_at?->toDateTimeString(),
+            'second_approved_by' => $record->secondApprovedBy?->name,
+            'second_approved_at' => $record->second_approved_at?->toDateTimeString(),
+            'printable' => $record->printable(),
             'rejected_at' => $record->rejected_at?->toDateTimeString(),
             'rejected_by' => $record->rejectedBy?->name,
             'rejection_reason' => $record->rejection_reason,
@@ -809,12 +851,23 @@ class PurchaseOrderController extends Controller
      */
     private function linesFromRequest(PurchaseRequest $purchaseRequest): array
     {
-        return collect($this->storedLines($purchaseRequest))->map(fn (array $line) => [
+        $lines = $this->storedLines($purchaseRequest);
+        $ids = collect($lines)
+            ->pluck('boq_item_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+        $recorded = app(BoqReceiptProgress::class)->recordedFor($ids);
+
+        return collect($lines)->map(fn (array $line) => [
             'service_code' => $line['service_code'] ?? '',
             'description' => $line['description'],
             'hsn_sac' => '',
             'unit' => $line['unit'] ?? '',
             'quantity' => (string) $line['quantity'],
+            'previous_grn_quantity' => $recorded[(int) ($line['boq_item_id'] ?? 0)] ?? '0.000',
             'rate' => (string) $line['rate'],
             'amount' => (string) $line['amount'],
             'discount_percentage' => '0',
@@ -837,10 +890,15 @@ class PurchaseOrderController extends Controller
                 $rate = Money::scale($boqItem?->rate, 2) ?? '0.00';
             }
 
+            $description = trim((string) $line->description);
+            if ($description === '') {
+                $description = trim((string) ($line->boqItem?->description ?? $purchaseRequest->boqItem?->description ?? ''));
+            }
+
             return [
-                'boq_item_id' => $line->boq_item_id,
+                'boq_item_id' => $line->boq_item_id ?: $purchaseRequest->boq_item_id,
                 'service_code' => $line->service_code,
-                'description' => $line->description,
+                'description' => $description,
                 'unit' => $line->unit,
                 'quantity' => $quantity,
                 'rate' => $rate,

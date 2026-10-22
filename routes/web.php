@@ -5,6 +5,8 @@ use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\BoqController;
 use App\Http\Controllers\BoqImportController;
 use App\Http\Controllers\ChatbotController;
+use App\Http\Controllers\ClientController;
+use App\Http\Controllers\ClientInvoiceController;
 use App\Http\Controllers\BoqItemBudgetController;
 use App\Http\Controllers\BoqItemProcurementController;
 use App\Http\Controllers\BoqRevisionController;
@@ -109,6 +111,16 @@ Route::middleware(['auth', 'active', 'project.access'])->group(function () {
     Route::post('vendors/{vendor}/recoveries', [VendorRecoveryController::class, 'store'])->name('vendors.recoveries.store');
     Route::post('vendors/{vendor}/recoveries/{recovery}/refunds', [VendorRecoveryController::class, 'receive'])->name('vendors.recoveries.refunds.store');
     Route::resource('vendors', VendorController::class);
+
+    Route::get('clients', [ClientController::class, 'index'])->middleware('permission:clients.view')->name('clients.index');
+    Route::get('clients/create', [ClientController::class, 'create'])->middleware('permission:clients.create')->name('clients.create');
+    Route::post('clients', [ClientController::class, 'store'])->middleware('permission:clients.create')->name('clients.store');
+    Route::get('clients/{client}/ledger', [ClientController::class, 'ledger'])->middleware('permission:clients.ledger')->name('clients.ledger');
+    Route::get('clients/{client}/edit', [ClientController::class, 'edit'])->middleware('permission:clients.edit')->name('clients.edit');
+    Route::get('clients/{client}', [ClientController::class, 'show'])->middleware('permission:clients.view')->name('clients.show');
+    Route::put('clients/{client}', [ClientController::class, 'update'])->middleware('permission:clients.edit')->name('clients.update');
+
+    Route::get('client-invoices', [ClientInvoiceController::class, 'index'])->middleware('permission:client_invoices.view')->name('client-invoices.index');
 
     Route::scopeBindings()->group(function () {
         Route::resource('projects.boqs', BoqController::class)->except(['edit']);
@@ -318,6 +330,23 @@ Route::middleware(['auth', 'active', 'project.access'])->group(function () {
         Route::delete('projects/{project}/purchase-invoices/{invoice}', [PurchaseInvoiceController::class, 'destroy'])->middleware('permission:invoices.delete')->name('projects.purchase-invoices.destroy');
         Route::get('projects/{project}/purchase-invoices/{invoice}/attachment', [PurchaseInvoiceController::class, 'attachment'])->name('projects.purchase-invoices.attachment');
         Route::post('projects/{project}/purchase-invoices/{invoice}/advance', [PurchaseInvoiceController::class, 'applyAdvance'])->name('projects.purchase-invoices.advance');
+        Route::post('projects/{project}/purchase-invoices/{invoice}/submit', [PurchaseInvoiceController::class, 'submit'])->middleware('permission:invoices.submit')->name('projects.purchase-invoices.submit');
+        Route::post('projects/{project}/purchase-invoices/{invoice}/approve', [PurchaseInvoiceController::class, 'approve'])->middleware('permission:invoices.approve')->name('projects.purchase-invoices.approve');
+        Route::post('projects/{project}/purchase-invoices/{invoice}/reject', [PurchaseInvoiceController::class, 'reject'])->middleware('permission:invoices.reject')->name('projects.purchase-invoices.reject');
+
+        Route::get('projects/{project}/client-invoices', [ClientInvoiceController::class, 'index'])->middleware('permission:client_invoices.view')->name('projects.client-invoices.index');
+        Route::get('projects/{project}/client-invoices/create', [ClientInvoiceController::class, 'create'])->middleware('permission:client_invoices.create')->name('projects.client-invoices.create');
+        Route::post('projects/{project}/client-invoices', [ClientInvoiceController::class, 'store'])->middleware('permission:client_invoices.create')->name('projects.client-invoices.store');
+        Route::get('projects/{project}/client-invoices/{client_invoice}/pdf/download', [ClientInvoiceController::class, 'downloadPdf'])->middleware('permission:client_invoices.print')->name('projects.client-invoices.pdf.download');
+        Route::get('projects/{project}/client-invoices/{client_invoice}/pdf', [ClientInvoiceController::class, 'pdf'])->middleware('permission:client_invoices.print')->name('projects.client-invoices.pdf');
+        Route::get('projects/{project}/client-invoices/{client_invoice}/edit', [ClientInvoiceController::class, 'edit'])->middleware('permission:client_invoices.edit')->name('projects.client-invoices.edit');
+        Route::get('projects/{project}/client-invoices/{client_invoice}', [ClientInvoiceController::class, 'show'])->middleware('permission:client_invoices.view')->name('projects.client-invoices.show');
+        Route::put('projects/{project}/client-invoices/{client_invoice}', [ClientInvoiceController::class, 'update'])->middleware('permission:client_invoices.edit')->name('projects.client-invoices.update');
+        Route::delete('projects/{project}/client-invoices/{client_invoice}', [ClientInvoiceController::class, 'destroy'])->middleware('permission:client_invoices.delete')->name('projects.client-invoices.destroy');
+        Route::post('projects/{project}/client-invoices/{client_invoice}/submit', [ClientInvoiceController::class, 'submit'])->middleware('permission:client_invoices.submit')->name('projects.client-invoices.submit');
+        Route::post('projects/{project}/client-invoices/{client_invoice}/approve', [ClientInvoiceController::class, 'approve'])->middleware('permission:client_invoices.approve')->name('projects.client-invoices.approve');
+        Route::post('projects/{project}/client-invoices/{client_invoice}/reject', [ClientInvoiceController::class, 'reject'])->middleware('permission:client_invoices.reject')->name('projects.client-invoices.reject');
+        Route::post('projects/{project}/client-invoices/{client_invoice}/payments', [ClientInvoiceController::class, 'storePayment'])->middleware('permission:client_invoices.record_payment')->name('projects.client-invoices.payments.store');
 
         Route::get('projects/{project}/debit-notes', [DebitNoteController::class, 'index'])->middleware('permission:debit_notes.view')->name('projects.debit-notes.index');
         Route::get('projects/{project}/debit-notes/create', [DebitNoteController::class, 'create'])->middleware('permission:debit_notes.create')->name('projects.debit-notes.create');

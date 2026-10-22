@@ -90,6 +90,7 @@ class PurchaseInvoiceLineService
             foreach (PurchaseInvoiceItem::query()
                 ->whereIn('purchase_order_item_id', $ids)
                 ->where('purchase_invoice_id', '!=', $invoice->id)
+                ->whereHas('invoice', fn ($query) => $query->where('approval_status', '!=', PurchaseInvoice::APPROVAL_REJECTED))
                 ->orderBy('id')
                 ->lockForUpdate()
                 ->get() as $existing) {
@@ -190,6 +191,7 @@ class PurchaseInvoiceLineService
         $rows = PurchaseInvoiceItem::query()
             ->selectRaw('purchase_order_item_id, SUM(quantity) as invoiced')
             ->whereIn('purchase_order_item_id', $poItemIds)
+            ->whereHas('invoice', fn ($query) => $query->where('approval_status', '!=', PurchaseInvoice::APPROVAL_REJECTED))
             ->when($exceptInvoiceId, fn ($query) => $query->where('purchase_invoice_id', '!=', $exceptInvoiceId))
             ->groupBy('purchase_order_item_id')
             ->get();

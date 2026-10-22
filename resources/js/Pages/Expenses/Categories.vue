@@ -14,15 +14,15 @@ function update(category) {
 </script>
 
 <template>
-    <Head title="Expense Categories" />
+    <Head title="Expense Heads" />
     <AdminLayout>
         <template #header>
-            <PageHeader title="Expense Categories" eyebrow="Admin">
+            <PageHeader title="Expense Heads" eyebrow="Admin">
                 <ImportButton module="expense_categories" permission="expenses.import" return-url="/expense-categories" />
             </PageHeader>
         </template>
         <form class="ui-card mb-4 flex gap-2 p-4" @submit.prevent="createForm.post('/expense-categories')">
-            <input v-model="createForm.name" required placeholder="New category" class="ui-input flex-1">
+            <input v-model="createForm.name" required placeholder="New expense head" class="ui-input flex-1">
             <button class="ui-btn-primary">Add</button>
         </form>
         <div class="ui-table-wrap">

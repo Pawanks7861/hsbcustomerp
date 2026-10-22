@@ -223,7 +223,7 @@ class VendorBalanceService
 
     private function sumInvoices(Vendor $vendor, ?int $projectId, ?string $from, ?string $to): string
     {
-        $query = $vendor->invoices();
+        $query = $vendor->invoices()->where('approval_status', PurchaseInvoice::APPROVAL_APPROVED);
         $this->restrict($query, 'project_id', 'invoice_date', $projectId, $from, $to);
 
         return $this->money((string) $query->sum('total_amount'));

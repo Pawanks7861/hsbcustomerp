@@ -33,11 +33,38 @@ class ExpenseController extends Controller
             $query->where('project_id', $project->id);
         }
 
+        $categoryId = $request->integer('category_id') ?: null;
+        $from = $request->string('from')->toString() ?: null;
+        $to = $request->string('to')->toString() ?: null;
+        $projectId = $project?->id ?: ($request->integer('project_id') ?: null);
+
+        if ($categoryId) {
+            $query->where('category_id', $categoryId);
+        }
+        if ($projectId && ! $project) {
+            $query->where('project_id', $projectId);
+        }
+        if ($from) {
+            $query->whereDate('date', '>=', $from);
+        }
+        if ($to) {
+            $query->whereDate('date', '<=', $to);
+        }
+
         $expenses = $query->latest('date')->limit(200)->get();
 
         return Inertia::render('Expenses/Index', [
             'project' => $project ? $this->projectCard($project) : null,
             'expenses' => $expenses->map(fn (Expense $expense) => $this->listRow($expense)),
+            'categories' => ExpenseCategory::query()->orderBy('name')->get(['id', 'name']),
+            'projects' => $project ? [] : Project::query()->orderBy('project_name')->get(['id', 'project_name']),
+            'filters' => [
+                'category_id' => $categoryId,
+                'project_id' => $project ? null : $projectId,
+                'from' => $from,
+                'to' => $to,
+            ],
+            'canManageHeads' => $access->allows($request->user(), 'expenses.manage_categories'),
         ]);
     }
 
@@ -67,9 +94,11 @@ class ExpenseController extends Controller
         return redirect($route)->with('success', 'Expense recorded.');
     }
 
-    public function show(Request $request, Access $access, Expense $expense, ?Project $project = null): Response
+    public function show(Request $request, Access $access): Response
     {
         abort_unless($access->allows($request->user(), 'expenses.view'), 403);
+        $expense = $this->routeExpense($request);
+        $project = $this->routeProject($request);
         if ($project) {
             $this->ensureExpense($project, $expense);
         }
@@ -93,7 +122,7 @@ class ExpenseController extends Controller
         return Inertia::render('Expenses/Form', [
             'project' => $project ? $this->projectCard($project) : null,
             'expense' => $this->detailPayload($expense),
-            'categories' => $this->categories(),
+            'categories' => $this->categories($expense),
             'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
             'vendors' => $this->vendorOptions(),
             'paymentModes' => VendorPayment::MODES,
@@ -217,7 +246,11 @@ class ExpenseController extends Controller
     {
         $project = $request->route('project');
 
-        return $project instanceof Project ? $project : null;
+        if ($project instanceof Project) {
+            return $project;
+        }
+
+        return $project ? Project::query()->find($project) : null;
     }
 
     private function renderPdf(Request $request, Access $access, DocumentPdf $pdf, Expense $expense, ?Project $project, bool $download): HttpResponse
@@ -284,6 +317,14 @@ class ExpenseController extends Controller
             'attachment' => ['nullable', 'file', 'max:5120'],
         ]);
 
+        $category = ExpenseCategory::query()->find((int) $validated['category_id']);
+        if (! $category) {
+            throw ValidationException::withMessages(['category_id' => 'Select a valid expense head.']);
+        }
+        if (! $category->is_active && (int) $existing?->category_id !== (int) $category->id) {
+            throw ValidationException::withMessages(['category_id' => 'Select an active expense head.']);
+        }
+
         $projectId = $project?->id ?? ($validated['project_id'] ?? null);
         $amount = Money::scale((string) $validated['amount'], 2);
         $tax = Money::scale((string) ($validated['tax_amount'] ?? 0), 2);
@@ -341,10 +382,22 @@ class ExpenseController extends Controller
     /**
      * @return list<array<string, mixed>>
      */
-    private function categories(): array
+    private function categories(?Expense $existing = null): array
     {
-        return ExpenseCategory::query()->where('is_active', true)->orderBy('name')->get(['id', 'name'])
-            ->map(fn (ExpenseCategory $category) => ['id' => $category->id, 'name' => $category->name])
+        return ExpenseCategory::query()
+            ->where(function ($query) use ($existing) {
+                $query->where('is_active', true);
+                if ($existing?->category_id) {
+                    $query->orWhereKey($existing->category_id);
+                }
+            })
+            ->orderBy('name')
+            ->get(['id', 'name', 'is_active'])
+            ->map(fn (ExpenseCategory $category) => [
+                'id' => $category->id,
+                'name' => $category->name,
+                'is_active' => $category->is_active,
+            ])
             ->all();
     }
 

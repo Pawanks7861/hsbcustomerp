@@ -32,7 +32,7 @@ function post(action) {
         </template>
         <section class="ui-card mb-4 grid gap-2 p-5 text-sm md:grid-cols-2">
             <p>Date: {{ expense.date }}</p>
-            <p>Category: {{ expense.category_name }}</p>
+            <p>Expense Head: {{ expense.category_name }}</p>
             <p v-if="expense.project_name">Project: {{ expense.project_name }}</p>
             <p>Payment status: {{ expense.payment_status }}</p>
             <p class="md:col-span-2">{{ expense.description }}</p>

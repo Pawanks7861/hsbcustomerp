@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class DebitNote extends Model
 {
@@ -63,5 +64,10 @@ class DebitNote extends Model
     public function approver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(DebitNoteItem::class)->orderBy('id');
     }
 }

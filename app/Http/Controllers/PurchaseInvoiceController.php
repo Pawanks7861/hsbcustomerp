@@ -48,6 +48,7 @@ class PurchaseInvoiceController extends Controller
                 'paid' => $balances->directInvoicePayments($invoice),
                 'outstanding' => $balances->invoiceOutstanding($invoice),
                 'status' => $invoice->status,
+                'approval_status' => $invoice->approval_status,
             ]),
         ]);
     }
@@ -74,7 +75,7 @@ class PurchaseInvoiceController extends Controller
 
         $invoice = $this->persist($request, $project, null, $lines);
 
-        return redirect()->route('projects.purchase-invoices.show', [$project, $invoice])->with('success', 'Purchase invoice recorded.');
+        return redirect()->route('projects.purchase-invoices.show', [$project, $invoice])->with('success', 'Purchase invoice saved as a draft.');
     }
 
     public function show(Request $request, Project $project, PurchaseInvoice $invoice, VendorBalanceService $balances, Access $access): Response
@@ -82,14 +83,23 @@ class PurchaseInvoiceController extends Controller
         abort_unless($access->allows($request->user(), 'invoices.view'), 403);
 
         $this->ensureInvoice($project, $invoice);
-        $invoice->load(['vendor', 'purchaseOrder', 'items']);
+        $invoice->load(['vendor', 'purchaseOrder', 'items', 'approver', 'rejectedBy']);
         $payload = $this->invoicePayload($invoice, $balances);
 
         return Inertia::render('PurchaseInvoices/Show', [
             'project' => $this->projectCard($project),
             'invoice' => $payload,
             'availableAdvance' => $balances->availableAdvance($invoice->vendor),
-            'canSettle' => bccomp($payload['outstanding'], '0.00', 2) === 1,
+            'canSettle' => $invoice->isApproved() && bccomp($payload['outstanding'], '0.00', 2) === 1,
+            'abilities' => [
+                'edit' => $invoice->isEditable() && $access->allows($request->user(), 'invoices.edit'),
+                'submit' => in_array($invoice->approval_status, [PurchaseInvoice::APPROVAL_DRAFT, PurchaseInvoice::APPROVAL_REJECTED], true)
+                    && $access->allows($request->user(), 'invoices.submit'),
+                'approve' => $invoice->approval_status === PurchaseInvoice::APPROVAL_SUBMITTED
+                    && $access->allows($request->user(), 'invoices.approve'),
+                'reject' => $invoice->approval_status === PurchaseInvoice::APPROVAL_SUBMITTED
+                    && $access->allows($request->user(), 'invoices.reject'),
+            ],
         ]);
     }
 
@@ -113,8 +123,8 @@ class PurchaseInvoiceController extends Controller
 
         $this->ensureInvoice($project, $invoice);
 
-        if ($invoice->hasSettlements()) {
-            return back()->with('error', 'This invoice cannot be changed because a payment or advance adjustment exists.');
+        if (! $invoice->isEditable()) {
+            return back()->with('error', 'Only draft or rejected invoices without payments can be edited.');
         }
 
         $this->persist($request, $project, $invoice, $lines);
@@ -128,8 +138,8 @@ class PurchaseInvoiceController extends Controller
 
         $this->ensureInvoice($project, $invoice);
 
-        if ($invoice->hasSettlements()) {
-            return back()->with('error', 'This invoice cannot be deleted because a payment or advance adjustment exists.');
+        if ($invoice->isApproved() || $invoice->hasSettlements()) {
+            return back()->with('error', 'This invoice cannot be deleted because it is approved or a payment exists.');
         }
 
         if ($invoice->invoice_file_path) {
@@ -149,9 +159,76 @@ class PurchaseInvoiceController extends Controller
         return Storage::disk('local')->response($invoice->invoice_file_path);
     }
 
+    public function submit(Request $request, Project $project, PurchaseInvoice $invoice, Access $access): RedirectResponse
+    {
+        abort_unless($access->allows($request->user(), 'invoices.submit'), 403);
+        $this->ensureInvoice($project, $invoice);
+
+        if (! in_array($invoice->approval_status, [PurchaseInvoice::APPROVAL_DRAFT, PurchaseInvoice::APPROVAL_REJECTED], true)) {
+            throw ValidationException::withMessages(['approval_status' => 'Only draft or rejected invoices can be submitted.']);
+        }
+
+        $invoice->update([
+            'approval_status' => PurchaseInvoice::APPROVAL_SUBMITTED,
+            'submitted_at' => now(),
+            'rejected_at' => null,
+            'rejected_by' => null,
+            'rejection_reason' => null,
+        ]);
+
+        return back()->with('success', 'Invoice submitted for approval.');
+    }
+
+    public function approve(Request $request, Project $project, PurchaseInvoice $invoice, Access $access): RedirectResponse
+    {
+        abort_unless($access->allows($request->user(), 'invoices.approve'), 403);
+        $this->ensureInvoice($project, $invoice);
+
+        if ($invoice->approval_status !== PurchaseInvoice::APPROVAL_SUBMITTED) {
+            throw ValidationException::withMessages(['approval_status' => 'Only submitted invoices can be approved.']);
+        }
+
+        $invoice->update([
+            'approval_status' => PurchaseInvoice::APPROVAL_APPROVED,
+            'approved_at' => now(),
+            'approved_by' => $request->user()->id,
+            'rejected_at' => null,
+            'rejected_by' => null,
+            'rejection_reason' => null,
+        ]);
+
+        return back()->with('success', 'Invoice approved.');
+    }
+
+    public function reject(Request $request, Project $project, PurchaseInvoice $invoice, Access $access): RedirectResponse
+    {
+        abort_unless($access->allows($request->user(), 'invoices.reject'), 403);
+        $this->ensureInvoice($project, $invoice);
+
+        if ($invoice->approval_status !== PurchaseInvoice::APPROVAL_SUBMITTED) {
+            throw ValidationException::withMessages(['approval_status' => 'Only submitted invoices can be rejected.']);
+        }
+
+        $validated = $request->validate([
+            'rejection_reason' => ['required', 'string', 'max:2000'],
+        ]);
+
+        $invoice->update([
+            'approval_status' => PurchaseInvoice::APPROVAL_REJECTED,
+            'rejected_at' => now(),
+            'rejected_by' => $request->user()->id,
+            'rejection_reason' => $validated['rejection_reason'],
+            'approved_at' => null,
+            'approved_by' => null,
+        ]);
+
+        return back()->with('success', 'Invoice rejected.');
+    }
+
     public function applyAdvance(Request $request, Project $project, PurchaseInvoice $invoice, VendorBalanceService $balances): RedirectResponse
     {
         $this->ensureInvoice($project, $invoice);
+        abort_unless($invoice->isApproved(), 403);
         $validated = $request->validate([
             'amount' => ['required', 'numeric', 'gt:0'],
             'remarks' => ['nullable', 'string', 'max:2000'],
@@ -185,6 +262,12 @@ class PurchaseInvoiceController extends Controller
 
     private function persist(Request $request, Project $project, ?PurchaseInvoice $invoice, PurchaseInvoiceLineService $lines): PurchaseInvoice
     {
+        if ($invoice && ! $invoice->isEditable()) {
+            throw ValidationException::withMessages([
+                'invoice' => 'Only draft or rejected invoices without payments can be edited.',
+            ]);
+        }
+
         $lineMode = $request->exists('items');
         $validated = $request->validate([
             'purchase_order_id' => ['required', 'integer'],
@@ -274,6 +357,7 @@ class PurchaseInvoiceController extends Controller
                     $saved = PurchaseInvoice::query()->create([
                         ...$attributes,
                         'status' => PurchaseInvoice::STATUS_RECORDED,
+                        'approval_status' => PurchaseInvoice::APPROVAL_DRAFT,
                         'created_by' => $request->user()->id,
                     ]);
                 }
@@ -449,6 +533,12 @@ class PurchaseInvoiceController extends Controller
             'advance_applied' => $balances->advanceApplied($invoice),
             'outstanding' => $balances->invoiceOutstanding($invoice),
             'status' => $invoice->status,
+            'approval_status' => $invoice->approval_status,
+            'approved_by' => $invoice->approver?->name,
+            'approved_at' => $invoice->approved_at?->toDateTimeString(),
+            'rejected_by' => $invoice->rejectedBy?->name,
+            'rejected_at' => $invoice->rejected_at?->toDateTimeString(),
+            'rejection_reason' => $invoice->rejection_reason,
             'remarks' => $invoice->remarks,
             'has_attachment' => $invoice->invoice_file_path !== null,
             'items' => $invoice->items->map(fn (PurchaseInvoiceItem $item) => [
@@ -481,7 +571,7 @@ class PurchaseInvoiceController extends Controller
             'revision' => null,
             'dateLabel' => 'Invoice date',
             'date' => PdfFormat::date($payload['invoice_date']),
-            'status' => $payload['status'],
+            'status' => $invoice->isApproved() ? $payload['status'] : $payload['approval_status'],
             'party' => filled($payload['vendor']) ? [
                 'label' => 'Vendor',
                 'name' => $payload['vendor'],

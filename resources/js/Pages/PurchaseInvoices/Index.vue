@@ -45,7 +45,7 @@ defineProps({
                         <td class="text-right">{{ formatInr(invoice.total_amount) }}</td>
                         <td class="text-right">{{ formatInr(invoice.paid) }}</td>
                         <td class="text-right">{{ formatInr(invoice.outstanding) }}</td>
-                        <td class="capitalize">{{ invoice.status.replace('_', ' ') }}</td>
+                        <td class="capitalize">{{ (invoice.approval_status && invoice.approval_status !== 'approved' ? invoice.approval_status : invoice.status).replaceAll('_', ' ') }}</td>
                         <td class="text-right"><Link :href="`/projects/${project.id}/purchase-invoices/${invoice.id}`" class="hover:underline">View</Link></td>
                     </tr>
                 </tbody>

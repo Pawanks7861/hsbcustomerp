@@ -27,6 +27,20 @@ class BoqReceiptProgress
     }
 
     /**
+     * Quantity recorded on posted GRNs (quantity_received), keyed by BOQ item id.
+     *
+     * @param  array<int, int>  $boqItemIds
+     * @return array<int, string>
+     */
+    public function recordedFor(array $boqItemIds): array
+    {
+        return $this->sumByBoqItem($boqItemIds, function ($query): void {
+            $query->where('receipts.document_kind', MaterialReceipt::KIND_GRN)
+                ->where('receipts.status', MaterialReceipt::STATUS_POSTED);
+        }, 'lines.quantity_received');
+    }
+
+    /**
      * Approved purchase-order quantity, keyed by BOQ item id.
      *
      * @param  array<int, int>  $boqItemIds
@@ -71,6 +85,8 @@ class BoqReceiptProgress
             ->selectRaw('COALESCE(purchase_order_items.boq_item_id, purchase_orders.boq_item_id) as boq_item_id, SUM(purchase_invoice_items.quantity) as invoiced')
             ->join('purchase_order_items', 'purchase_order_items.id', '=', 'purchase_invoice_items.purchase_order_item_id')
             ->join('purchase_orders', 'purchase_orders.id', '=', 'purchase_order_items.purchase_order_id')
+            ->join('purchase_invoices', 'purchase_invoices.id', '=', 'purchase_invoice_items.purchase_invoice_id')
+            ->where('purchase_invoices.approval_status', '!=', \App\Models\PurchaseInvoice::APPROVAL_REJECTED)
             ->where(function ($query) use ($boqItemIds): void {
                 $query->whereIn('purchase_order_items.boq_item_id', $boqItemIds)
                     ->orWhere(function ($inner) use ($boqItemIds): void {

@@ -4,6 +4,8 @@ namespace App\Services\Reports;
 
 use App\Models\Boq;
 use App\Models\BoqItem;
+use App\Models\ClientInvoice;
+use App\Models\ClientPayment;
 use App\Models\CreditNote;
 use App\Models\DebitNote;
 use App\Models\Expense;
@@ -58,6 +60,9 @@ class ReportQueryService
             'expense-summary' => $this->expenseSummary($user, $filters),
             'vendor-outstanding' => $this->vendorOutstanding($user, $filters),
             'debit-credit-note-register' => $this->debitCreditNoteRegister($user, $filters),
+            'client-invoice-register' => $this->clientInvoiceRegister($user, $filters),
+            'client-outstanding' => $this->clientOutstanding($user, $filters),
+            'client-payment-register' => $this->clientPaymentRegister($user, $filters),
             'stock-balance' => $this->stockBalance($user, (int) ($filters['project_id'] ?? 0)),
             default => throw ValidationException::withMessages(['report' => 'Unknown report.']),
         };
@@ -90,7 +95,9 @@ class ReportQueryService
             $this->applyDateRange($poQuery, 'po_date', $from, $to);
             $poTotal = Money::scale((string) $poQuery->sum('grand_total'), 2) ?? '0.00';
 
-            $invoiceQuery = PurchaseInvoice::query()->where('project_id', $project->id);
+            $invoiceQuery = PurchaseInvoice::query()
+                ->where('project_id', $project->id)
+                ->where('approval_status', PurchaseInvoice::APPROVAL_APPROVED);
             $this->applyDateRange($invoiceQuery, 'invoice_date', $from, $to);
             $invoiceTotal = Money::scale((string) $invoiceQuery->sum('total_amount'), 2) ?? '0.00';
 
@@ -286,7 +293,7 @@ class ReportQueryService
         $totals = ['grand_total' => '0.00', 'invoiced_total' => '0.00', 'remaining_billable' => '0.00'];
 
         foreach ($query->get() as $order) {
-            $invoicedTotal = Money::scale((string) $order->invoices()->sum('total_amount'), 2) ?? '0.00';
+            $invoicedTotal = Money::scale((string) $order->invoices()->where('approval_status', PurchaseInvoice::APPROVAL_APPROVED)->sum('total_amount'), 2) ?? '0.00';
             $grand = Money::scale((string) $order->grand_total, 2) ?? '0.00';
             $remaining = Money::sub($grand, $invoicedTotal);
             if (bccomp($remaining, '0', 2) === -1) {
@@ -320,6 +327,7 @@ class ReportQueryService
     {
         $query = PurchaseInvoice::query()
             ->with(['project:id,project_code', 'vendor:id,name'])
+            ->where('approval_status', PurchaseInvoice::APPROVAL_APPROVED)
             ->orderByDesc('invoice_date')
             ->orderByDesc('id');
 
@@ -540,6 +548,138 @@ class ReportQueryService
         }
 
         return ['rows' => $rows, 'totals' => ['total_amount' => $totalAmount]];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array{rows: list<array<string, mixed>>, totals: array<string, string>}
+     */
+    public function clientInvoiceRegister(User $user, array $filters): array
+    {
+        $query = ClientInvoice::query()
+            ->with(['project:id,project_code', 'client:id,name', 'payments'])
+            ->orderByDesc('invoice_date')
+            ->orderByDesc('id');
+
+        $this->scopeProject($query, $user, isset($filters['project_id']) ? (int) $filters['project_id'] : null);
+        if (! empty($filters['client_id'])) {
+            $query->where('client_id', (int) $filters['client_id']);
+        }
+        if (! empty($filters['status'])) {
+            $query->where('approval_status', (string) $filters['status']);
+        }
+        $this->applyDateRange($query, 'invoice_date', $filters['from'] ?? null, $filters['to'] ?? null);
+
+        $rows = [];
+        $totals = ['grand_total' => '0.00', 'paid_amount' => '0.00', 'outstanding' => '0.00'];
+        foreach ($query->get() as $invoice) {
+            $posted = $invoice->isApproved();
+            $total = Money::scale((string) $invoice->grand_total, 2) ?? '0.00';
+            $paid = $posted ? $invoice->paidTotal() : '0.00';
+            $outstanding = $posted ? $invoice->outstanding() : '0.00';
+            $rows[] = [
+                'invoice_number' => $invoice->invoice_number,
+                'invoice_date' => $invoice->invoice_date?->toDateString(),
+                'project_code' => $invoice->project?->project_code,
+                'client_name' => $invoice->client?->name ?? $invoice->client_name,
+                'approval_status' => $invoice->approval_status,
+                'payment_status' => $invoice->payment_status,
+                'grand_total' => $posted ? $total : '0.00',
+                'paid_amount' => $paid,
+                'outstanding' => $outstanding,
+            ];
+            if ($posted) {
+                $totals['grand_total'] = Money::add($totals['grand_total'], $total);
+                $totals['paid_amount'] = Money::add($totals['paid_amount'], $paid);
+                $totals['outstanding'] = Money::add($totals['outstanding'], $outstanding);
+            }
+        }
+
+        return ['rows' => $rows, 'totals' => $totals];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array{rows: list<array<string, mixed>>, totals: array<string, string>}
+     */
+    public function clientOutstanding(User $user, array $filters): array
+    {
+        $query = ClientInvoice::query()
+            ->with(['project:id,project_code', 'client:id,name', 'payments'])
+            ->where('approval_status', DocumentStatus::APPROVED)
+            ->where('payment_status', '!=', ClientInvoice::PAYMENT_PAID)
+            ->orderBy('due_date')
+            ->orderBy('id');
+
+        $this->scopeProject($query, $user, isset($filters['project_id']) ? (int) $filters['project_id'] : null);
+        if (! empty($filters['client_id'])) {
+            $query->where('client_id', (int) $filters['client_id']);
+        }
+        $this->applyDateRange($query, 'invoice_date', $filters['from'] ?? null, $filters['to'] ?? null);
+
+        $rows = [];
+        $totals = ['grand_total' => '0.00', 'paid_amount' => '0.00', 'outstanding' => '0.00'];
+        foreach ($query->get() as $invoice) {
+            $total = Money::scale((string) $invoice->grand_total, 2) ?? '0.00';
+            $paid = $invoice->paidTotal();
+            $outstanding = $invoice->outstanding();
+            if (bccomp($outstanding, '0.00', 2) !== 1) {
+                continue;
+            }
+            $rows[] = [
+                'invoice_number' => $invoice->invoice_number,
+                'invoice_date' => $invoice->invoice_date?->toDateString(),
+                'due_date' => $invoice->due_date?->toDateString(),
+                'project_code' => $invoice->project?->project_code,
+                'client_name' => $invoice->client?->name ?? $invoice->client_name,
+                'grand_total' => $total,
+                'paid_amount' => $paid,
+                'outstanding' => $outstanding,
+                'overdue' => $invoice->isOverdue() ? 'Yes' : 'No',
+            ];
+            $totals['grand_total'] = Money::add($totals['grand_total'], $total);
+            $totals['paid_amount'] = Money::add($totals['paid_amount'], $paid);
+            $totals['outstanding'] = Money::add($totals['outstanding'], $outstanding);
+        }
+
+        return ['rows' => $rows, 'totals' => $totals];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array{rows: list<array<string, mixed>>, totals: array<string, string>}
+     */
+    public function clientPaymentRegister(User $user, array $filters): array
+    {
+        $query = ClientPayment::query()
+            ->with(['client:id,name', 'project:id,project_code', 'invoice:id,invoice_number,approval_status'])
+            ->whereHas('invoice', fn ($invoice) => $invoice->where('approval_status', DocumentStatus::APPROVED))
+            ->orderByDesc('payment_date')
+            ->orderByDesc('id');
+
+        $this->scopeProject($query, $user, isset($filters['project_id']) ? (int) $filters['project_id'] : null);
+        if (! empty($filters['client_id'])) {
+            $query->where('client_id', (int) $filters['client_id']);
+        }
+        $this->applyDateRange($query, 'payment_date', $filters['from'] ?? null, $filters['to'] ?? null);
+
+        $rows = [];
+        $total = '0.00';
+        foreach ($query->get() as $payment) {
+            $amount = Money::scale((string) $payment->amount, 2) ?? '0.00';
+            $rows[] = [
+                'payment_date' => $payment->payment_date?->toDateString(),
+                'invoice_number' => $payment->invoice?->invoice_number,
+                'project_code' => $payment->project?->project_code,
+                'client_name' => $payment->client?->name,
+                'payment_mode' => $payment->payment_mode,
+                'reference_number' => $payment->reference_number,
+                'amount' => $amount,
+            ];
+            $total = Money::add($total, $amount);
+        }
+
+        return ['rows' => $rows, 'totals' => ['amount' => $total]];
     }
 
     /**

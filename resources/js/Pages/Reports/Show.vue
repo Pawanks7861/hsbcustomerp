@@ -13,6 +13,7 @@ const props = defineProps({
     sections: { type: Array, default: () => [] },
     projects: { type: Array, required: true },
     vendors: { type: Array, required: true },
+    clients: { type: Array, default: () => [] },
     statusOptions: { type: Array, default: () => [] },
     abilities: { type: Object, required: true },
 });
@@ -105,6 +106,10 @@ function formatTotal(key, value) {
             <select v-if="filterSet.has('vendor')" name="vendor_id" class="ui-input" :value="filters.vendor_id || ''">
                 <option value="">All vendors</option>
                 <option v-for="vendor in vendors" :key="vendor.id" :value="vendor.id">{{ vendor.name }}</option>
+            </select>
+            <select v-if="filterSet.has('client')" name="client_id" class="ui-input" :value="filters.client_id || ''">
+                <option value="">All clients</option>
+                <option v-for="client in clients" :key="client.id" :value="client.id">{{ client.name }}</option>
             </select>
             <input v-if="filterSet.has('from')" name="from" type="date" class="ui-input" :value="filters.from || ''">
             <input v-if="filterSet.has('to')" name="to" type="date" class="ui-input" :value="filters.to || ''">

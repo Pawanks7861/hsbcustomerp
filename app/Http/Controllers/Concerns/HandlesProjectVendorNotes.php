@@ -74,7 +74,10 @@ trait HandlesProjectVendorNotes
     {
         $this->authorizeView($request->user(), $access);
         $this->ensureNote($project, $note);
-        $note->load(['vendor', 'purchaseOrder', 'purchaseInvoice', 'creator', 'approver']);
+        $note->load(['vendor', 'purchaseOrder.items', 'purchaseInvoice', 'creator', 'approver']);
+        if ($note instanceof DebitNote) {
+            $note->load('items');
+        }
 
         return Inertia::render($this->inertiaFolder().'/Show', [
             'project' => $this->projectCard($project),
@@ -87,6 +90,10 @@ trait HandlesProjectVendorNotes
     {
         abort_unless($access->allows($request->user(), $this->notePermissionPrefix().'.edit'), 403);
         $this->ensureNote($project, $note);
+        $note->load(['purchaseOrder.items']);
+        if ($note instanceof DebitNote) {
+            $note->load('items');
+        }
 
         return Inertia::render($this->inertiaFolder().'/Form', [
             'project' => $this->projectCard($project),
@@ -162,6 +169,9 @@ trait HandlesProjectVendorNotes
         abort_unless($access->allows($request->user(), $this->notePermissionPrefix().'.print'), 403);
         $this->ensureNote($project, $note);
         $note->load(['vendor', 'purchaseOrder', 'purchaseInvoice', 'project']);
+        if ($note instanceof DebitNote) {
+            $note->load('items');
+        }
 
         $payload = [
             'title' => $this->inertiaFolder() === 'DebitNotes' ? 'Debit Note' : 'Credit Note',
@@ -217,12 +227,18 @@ trait HandlesProjectVendorNotes
      */
     private function orderOptions(Project $project): array
     {
-        return $project->purchaseOrders()->with('vendor')->latest('po_date')->get()
+        return $project->purchaseOrders()->with(['vendor', 'items'])->latest('po_date')->get()
             ->map(fn (PurchaseOrder $order) => [
                 'id' => $order->id,
                 'po_number' => $order->po_number,
                 'vendor_id' => $order->vendor_id,
                 'vendor_name' => $order->vendor?->name,
+                'items' => $order->items->map(fn ($item) => [
+                    'id' => $item->id,
+                    'description' => $item->description,
+                    'unit' => $item->unit,
+                    'rate' => (string) $item->rate,
+                ])->values()->all(),
             ])->all();
     }
 
@@ -284,6 +300,19 @@ trait HandlesProjectVendorNotes
 
         if ($note instanceof CreditNote) {
             $payload['vendor_reference'] = $note->vendor_reference;
+        }
+
+        if ($note instanceof DebitNote) {
+            $payload['items'] = $note->items->map(fn ($item) => [
+                'id' => $item->id,
+                'purchase_order_item_id' => $item->purchase_order_item_id,
+                'description' => $item->description,
+                'unit' => $item->unit,
+                'quantity' => (string) $item->quantity,
+                'rate' => (string) $item->rate,
+                'amount' => (string) $item->amount,
+                'remarks' => $item->remarks,
+            ])->values()->all();
         }
 
         return $payload;

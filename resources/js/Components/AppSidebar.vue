@@ -106,6 +106,14 @@ function itemClass(active) {
                 <Building2 class="h-4 w-4 shrink-0" />
                 Vendors
             </Link>
+            <Link v-if="can('clients.view')" href="/clients" data-tour="clients" :class="itemClass(path.startsWith('/clients'))" @click="emit('close')">
+                <Users class="h-4 w-4 shrink-0" />
+                Clients
+            </Link>
+            <Link v-if="can('client_invoices.view')" href="/client-invoices" data-tour="client-invoices" :class="itemClass(path === '/client-invoices' || path.startsWith('/client-invoices'))" @click="emit('close')">
+                <Receipt class="h-4 w-4 shrink-0" />
+                Client Invoices
+            </Link>
             <Link v-if="can('expenses.view')" href="/expenses" data-tour="expenses" :class="itemClass(path.startsWith('/expenses') || path.startsWith('/expense-categories'))" @click="emit('close')">
                 <FileText class="h-4 w-4 shrink-0" />
                 Expenses
@@ -145,6 +153,10 @@ function itemClass(active) {
                     <Link v-if="can('invoices.view')" :href="`/projects/${project.id}/purchase-invoices`" data-tour="invoices" :class="itemClass(path.startsWith(`/projects/${project.id}/purchase-invoices`))" @click="emit('close')">
                         <Receipt class="h-4 w-4 shrink-0" />
                         Purchase Invoices
+                    </Link>
+                    <Link v-if="can('client_invoices.view')" :href="`/projects/${project.id}/client-invoices`" data-tour="client-invoices-project" :class="itemClass(path.startsWith(`/projects/${project.id}/client-invoices`))" @click="emit('close')">
+                        <Receipt class="h-4 w-4 shrink-0" />
+                        Client Invoices
                     </Link>
                     <Link v-if="can('debit_notes.view')" :href="`/projects/${project.id}/debit-notes`" data-tour="debit-notes" :class="itemClass(path.startsWith(`/projects/${project.id}/debit-notes`))" @click="emit('close')">
                         <FileText class="h-4 w-4 shrink-0" />
