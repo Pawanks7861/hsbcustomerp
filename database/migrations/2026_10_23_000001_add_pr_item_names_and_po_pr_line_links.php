@@ -11,13 +11,13 @@ return new class extends Migration
     {
         Schema::table('purchase_request_items', function (Blueprint $table) {
             if (! Schema::hasColumn('purchase_request_items', 'name')) {
-                $table->string('name')->nullable()->after('boq_item_id');
+                $table->text('name')->nullable()->after('boq_item_id');
             }
         });
 
         Schema::table('purchase_order_items', function (Blueprint $table) {
             if (! Schema::hasColumn('purchase_order_items', 'name')) {
-                $table->string('name')->nullable()->after('boq_item_id');
+                $table->text('name')->nullable()->after('boq_item_id');
             }
 
             if (! Schema::hasColumn('purchase_order_items', 'purchase_request_item_id')) {
