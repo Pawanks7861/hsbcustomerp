@@ -144,7 +144,7 @@ function submit() {
                     <div class="grid gap-4 sm:grid-cols-2">
                         <label class="text-sm sm:col-span-2">
                             <span class="mb-1 block font-medium">Item Name</span>
-                            <input v-model="row.name" type="text" required maxlength="255" class="ui-input w-full">
+                            <input v-model="row.name" type="text" required maxlength="5000" class="ui-input w-full">
                             <p v-if="form.errors[`items.${index}.name`]" class="mt-1 text-red-700">{{ form.errors[`items.${index}.name`] }}</p>
                         </label>
                         <label class="text-sm sm:col-span-2">

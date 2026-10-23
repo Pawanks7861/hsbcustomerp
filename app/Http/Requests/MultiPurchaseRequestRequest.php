@@ -23,7 +23,7 @@ class MultiPurchaseRequestRequest extends FormRequest
             'description' => ['nullable', 'string', 'max:5000'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.id' => ['nullable', 'integer'],
-            'items.*.name' => ['nullable', 'string', 'max:255'],
+            'items.*.name' => ['nullable', 'string', 'max:5000'],
             'items.*.description' => ['nullable', 'string', 'max:2000'],
             'items.*.unit' => ['nullable', 'string', 'max:50'],
             'items.*.quantity' => ['required', 'numeric', 'gt:0'],
