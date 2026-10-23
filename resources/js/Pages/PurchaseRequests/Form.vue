@@ -13,7 +13,7 @@ const props = defineProps({
 });
 
 function blankLine(serviceCode = '') {
-    return { description: '', service_code: serviceCode, unit: '', quantity: '', remarks: '' };
+    return { name: '', description: '', service_code: serviceCode, unit: '', quantity: '', remarks: '' };
 }
 
 const form = useForm({
@@ -23,6 +23,7 @@ const form = useForm({
     requested_boq_quantity: props.purchaseRequest?.requested_boq_quantity ?? '',
     items: props.purchaseRequest?.items?.length
         ? props.purchaseRequest.items.map((line) => ({
+            name: line.name || '',
             description: line.description,
             service_code: line.service_code ?? '',
             unit: line.unit ?? '',
@@ -156,6 +157,7 @@ function submit() {
                     <thead>
                         <tr>
                             <th class="px-3 py-2 font-medium text-slate-500">Service Code</th>
+                            <th class="px-3 py-2 font-medium text-slate-500">Item Name</th>
                             <th class="px-3 py-2 font-medium text-slate-500">Description</th>
                             <th class="px-3 py-2 font-medium text-slate-500">Unit</th>
                             <th class="px-3 py-2 font-medium text-slate-500">Qty</th>
@@ -167,6 +169,9 @@ function submit() {
                         <tr v-for="(line, index) in form.items" :key="index">
                             <td class="border border-slate-200 px-2 py-2">
                                 <input v-model="line.service_code" type="text" class="w-28 rounded border border-slate-300 px-2 py-1">
+                            </td>
+                            <td class="border border-slate-200 px-2 py-2">
+                                <input v-model="line.name" type="text" class="w-full rounded border border-slate-300 px-2 py-1">
                             </td>
                             <td class="border border-slate-200 px-2 py-2">
                                 <input v-model="line.description" type="text" required class="w-full rounded border border-slate-300 px-2 py-1">

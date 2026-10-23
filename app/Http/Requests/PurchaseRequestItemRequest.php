@@ -21,6 +21,7 @@ class PurchaseRequestItemRequest extends FormRequest
             'description' => ['nullable', 'string', 'max:5000'],
             'requested_boq_quantity' => ['required', 'numeric', 'gt:0'],
             'items' => ['required', 'array', 'min:1'],
+            'items.*.name' => ['nullable', 'string', 'max:255'],
             'items.*.description' => ['required', 'string', 'max:1000'],
             'items.*.service_code' => ['nullable', 'string', 'max:100'],
             'items.*.unit' => ['nullable', 'string', 'max:50'],

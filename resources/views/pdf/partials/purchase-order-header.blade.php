@@ -99,9 +99,6 @@
             @if(! empty($projectName))
                 <span class="company-label">Project:</span> {{ $projectName }}
             @endif
-            @if(! empty($boqNumber))
-                <span class="meta-gap"><span class="company-label">BOQ:</span> {{ $boqNumber }}@if($revision !== null && $revision !== '') / REV {{ $revision }}@endif</span>
-            @endif
         </td>
         <td class="header-foot document-column">
             @if($relatedValue !== '')

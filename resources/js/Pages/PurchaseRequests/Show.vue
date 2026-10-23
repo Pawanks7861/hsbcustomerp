@@ -123,8 +123,9 @@ function destroy() {
                     <thead>
                         <tr>
                             <th class="px-3 py-2 font-medium text-slate-500">Sr No</th>
-                            <th class="px-3 py-2 font-medium text-slate-500">Service Code</th>
+                            <th class="px-3 py-2 font-medium text-slate-500">Item Name</th>
                             <th class="px-3 py-2 font-medium text-slate-500">Description</th>
+                            <th class="px-3 py-2 font-medium text-slate-500">Service Code</th>
                             <th class="px-3 py-2 font-medium text-slate-500">Unit</th>
                             <th class="px-3 py-2 font-medium text-slate-500 text-right">Qty</th>
                             <th class="px-3 py-2 font-medium text-slate-500">Remarks</th>
@@ -133,12 +134,13 @@ function destroy() {
                     <tbody>
                         <tr v-for="(line, index) in purchaseRequest.items" :key="index" :class="line.quantity_check?.is_exceeded ? 'bg-orange-50' : ''">
                             <td class="border border-slate-200 px-3 py-2">{{ index + 1 }}</td>
-                            <td class="border border-slate-200 px-3 py-2">{{ line.service_code || '—' }}</td>
+                            <td class="border border-slate-200 px-3 py-2">{{ line.name || line.description }}</td>
                             <td class="border border-slate-200 px-3 py-2">
                                 <p>{{ line.description }}</p>
-                                <p v-if="line.boq_item_id" class="mt-1 text-xs text-slate-500">BOQ: {{ line.boq_label }}</p>
+                                <p v-if="line.boq_item_id" class="mt-1 text-xs text-slate-500">BOQ tag: {{ line.boq_label }}</p>
                                 <p v-if="line.quantity_check?.is_exceeded" class="mt-1 text-xs font-semibold text-orange-800">BOQ QUANTITY EXCEEDED — APPROVAL REQUIRED</p>
                             </td>
+                            <td class="border border-slate-200 px-3 py-2">{{ line.service_code || '—' }}</td>
                             <td class="border border-slate-200 px-3 py-2">{{ line.unit || '—' }}</td>
                             <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ line.quantity }}</td>
                             <td class="border border-slate-200 px-3 py-2">{{ line.remarks || '—' }}</td>

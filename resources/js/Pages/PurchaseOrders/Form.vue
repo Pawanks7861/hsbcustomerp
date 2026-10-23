@@ -7,8 +7,8 @@ import { formatInr } from '../../lib/money';
 const props = defineProps({
     project: { type: Object, required: true },
     purchaseRequest: { type: Object, required: true },
-    boq: { type: Object, required: true },
-    item: { type: Object, required: true },
+    boq: { type: Object, default: null },
+    item: { type: Object, default: null },
     purchaseOrder: { type: Object, required: true },
     vendors: { type: Array, default: () => [] },
 });
@@ -102,7 +102,7 @@ function submit() {
         <template #header>
             <div>
                 <h1 class="text-xl font-semibold">{{ purchaseOrder.id ? 'Edit purchase order' : 'Create purchase order' }}</h1>
-                <p class="text-sm text-slate-500">From {{ purchaseRequest.pr_number }} · {{ item.description }}</p>
+                <p class="text-sm text-slate-500">From {{ purchaseRequest.pr_number }}</p>
             </div>
         </template>
 
@@ -185,7 +185,7 @@ function submit() {
                         <tr>
                             <th class="px-3 py-2 font-medium text-slate-500">Sr. No.</th>
                             <th class="px-3 py-2 font-medium text-slate-500">Service Code</th>
-                            <th class="px-3 py-2 font-medium text-slate-500">Item Description</th>
+                            <th class="px-3 py-2 font-medium text-slate-500">Item</th>
                             <th class="px-3 py-2 font-medium text-slate-500">HSN/SAC</th>
                             <th class="px-3 py-2 font-medium text-slate-500">Unit</th>
                             <th class="px-3 py-2 font-medium text-slate-500 text-right">Qty</th>
@@ -199,7 +199,10 @@ function submit() {
                         <tr v-for="(line, index) in lines" :key="index">
                             <td class="border border-slate-200 px-3 py-2">{{ index + 1 }}</td>
                             <td class="border border-slate-200 px-3 py-2">{{ line.service_code || '—' }}</td>
-                            <td class="border border-slate-200 px-3 py-2 whitespace-pre-line">{{ line.description }}</td>
+                            <td class="border border-slate-200 px-3 py-2 whitespace-pre-line">
+                                <div>{{ line.name || line.description }}</div>
+                                <div v-if="line.name && line.description && line.name !== line.description" class="text-xs text-slate-500">{{ line.description }}</div>
+                            </td>
                             <td class="border border-slate-200 px-3 py-2">
                                 <input v-if="form.items[index]" v-model="form.items[index].hsn_sac" type="text" maxlength="20" class="ui-input w-24">
                             </td>

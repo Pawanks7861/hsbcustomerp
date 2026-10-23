@@ -9,7 +9,9 @@ class PurchaseOrderItem extends Model
 {
     protected $fillable = [
         'purchase_order_id',
+        'purchase_request_item_id',
         'boq_item_id',
+        'name',
         'description',
         'hsn_sac',
         'service_code',
@@ -46,5 +48,10 @@ class PurchaseOrderItem extends Model
     public function purchaseOrder(): BelongsTo
     {
         return $this->belongsTo(PurchaseOrder::class);
+    }
+
+    public function purchaseRequestItem(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseRequestItem::class);
     }
 }

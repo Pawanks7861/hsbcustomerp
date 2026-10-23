@@ -139,6 +139,7 @@ class PurchaseRequestsImport extends AbstractImportDefinition
             PurchaseRequestItem::query()->create([
                 'purchase_request_id' => $pr->id,
                 'boq_item_id' => $row->data['boq_item_id'],
+                'name' => $row->data['description'],
                 'description' => $row->data['description'],
                 'service_code' => $row->data['service_code'],
                 'unit' => $row->data['unit'],

@@ -15,6 +15,7 @@ use App\Services\BoqProcurementQuantityService;
 use App\Services\DocumentNumber;
 use App\Services\DocumentPdf;
 use App\Services\ProjectBoqCatalog;
+use App\Services\PurchaseRequestLineComposer;
 use App\Support\PdfFormat;
 use App\Support\DocumentStatus;
 use App\Support\Money;
@@ -32,6 +33,7 @@ class PurchaseRequestController extends Controller
     public function __construct(
         private BoqProcurementQuantityService $quantities,
         private ProjectBoqCatalog $catalog,
+        private PurchaseRequestLineComposer $lines,
     ) {}
 
     public function index(Request $request, Project $project): Response
@@ -46,6 +48,10 @@ class PurchaseRequestController extends Controller
                 $like = '%'.$search.'%';
                 $query->where(function ($inner) use ($like) {
                     $inner->where('pr_number', 'like', $like)
+                        ->orWhereHas('items', function ($items) use ($like) {
+                            $items->where('name', 'like', $like)
+                                ->orWhere('description', 'like', $like);
+                        })
                         ->orWhereHas('boqItem', function ($item) use ($like) {
                             $item->where('description', 'like', $like)
                                 ->orWhere('item_number', 'like', $like);
@@ -123,20 +129,10 @@ class PurchaseRequestController extends Controller
         $this->authorize('update', $purchaseRequest);
         $purchaseRequest->load(['boq', 'boqItem', 'items.boqItem']);
 
-        if ($purchaseRequest->items->contains(fn (PurchaseRequestItem $item) => $item->boq_item_id !== null)) {
-            return Inertia::render('PurchaseRequests/MultiForm', [
-                'project' => $this->projectCard($project),
-                'boqItems' => $this->catalog->selectable($project),
-                'purchaseRequest' => $this->formPayload($purchaseRequest),
-            ]);
-        }
-
-        return Inertia::render('PurchaseRequests/Form', [
+        return Inertia::render('PurchaseRequests/MultiForm', [
             'project' => $this->projectCard($project),
-            'boq' => $this->boqCard($purchaseRequest->boq),
-            'item' => $this->itemCard($purchaseRequest->boqItem),
+            'boqItems' => $this->catalog->selectable($project),
             'purchaseRequest' => $this->formPayload($purchaseRequest),
-            'quantityControl' => $this->quantities->getSummary($purchaseRequest->boqItem, $purchaseRequest),
         ]);
     }
 
@@ -145,16 +141,12 @@ class PurchaseRequestController extends Controller
         $this->ensureRequest($project, $purchaseRequest);
         $this->authorize('update', $purchaseRequest);
 
-        DB::transaction(function () use ($request, $purchaseRequest): void {
-            $purchaseRequest->update([
-                'request_date' => $request->validated('request_date'),
-                'required_date' => $request->validated('required_date'),
-                'description' => $request->validated('description'),
-                'requested_boq_quantity' => $request->requestedBoqQuantity(),
-            ]);
-            $purchaseRequest->items()->delete();
-            $purchaseRequest->items()->createMany(PurchaseLines::requestItems($request->validated('items')));
-        });
+        $this->lines->save($purchaseRequest, [
+            'request_date' => $request->validated('request_date'),
+            'required_date' => $request->validated('required_date'),
+            'description' => $request->validated('description'),
+            'requested_boq_quantity' => $request->requestedBoqQuantity(),
+        ], PurchaseLines::requestItems($request->validated('items')));
 
         return redirect()
             ->route('projects.purchase-requests.show', [$project, $purchaseRequest])
@@ -238,23 +230,28 @@ class PurchaseRequestController extends Controller
     private function renderPdf(Project $project, PurchaseRequest $purchaseRequest, DocumentPdf $pdf, bool $download): HttpResponse
     {
         $this->ensureRequest($project, $purchaseRequest);
-        $purchaseRequest->load(['boq', 'boqItem.revision', 'items', 'requestedBy', 'approvedBy', 'rejectedBy', 'overQuantityApprovedBy']);
+        $purchaseRequest->load(['items', 'requestedBy', 'approvedBy', 'rejectedBy', 'overQuantityApprovedBy']);
         $document = $this->detailPayload($purchaseRequest);
-        $revision = $purchaseRequest->boqItem?->revision?->revision_number;
+        unset($document['boq_title'], $document['boq_item'], $document['quantity_control']);
+        $document['items'] = collect($document['items'] ?? [])->map(fn (array $line) => [
+            'name' => $line['name'] ?? '',
+            'description' => $line['description'] ?? '',
+            'unit' => $line['unit'] ?? '',
+            'quantity' => $line['quantity'] ?? '',
+            'service_code' => $line['service_code'] ?? '',
+            'remarks' => $line['remarks'] ?? '',
+        ])->all();
+        $document['over_quantity_approval_note'] = $purchaseRequest->over_quantity_approval_note;
 
         $data = [
             'title' => 'PURCHASE REQUEST',
             'number' => $document['pr_number'],
-            'revision' => $revision,
             'dateLabel' => 'Request date',
             'date' => PdfFormat::date($document['request_date'] ?? null),
             'status' => $document['status'],
-            'relatedLabel' => 'BOQ',
-            'relatedValue' => trim(($purchaseRequest->boq?->boq_number ?? '').($revision !== null && $revision !== '' ? ' / REV '.$revision : '')),
             'footerNote' => 'Purchase request',
             'projectName' => $project->project_name,
             'projectCode' => $project->project_code,
-            'boqNumber' => $purchaseRequest->boq?->boq_number,
             'document' => $document,
         ];
 
@@ -276,16 +273,22 @@ class PurchaseRequestController extends Controller
 
     public function storeMany(MultiPurchaseRequestRequest $request, Project $project): RedirectResponse
     {
-        $built = $this->catalog->lines($project, $request->validated('items'));
+        $built = $this->lines->compose($project, $request->validated('items'));
         $exception = null;
 
         for ($attempt = 0; $attempt < 3; $attempt++) {
             try {
                 $record = DB::transaction(function () use ($request, $project, $built) {
+                    $payload = array_map(function (array $line): array {
+                        unset($line['id']);
+
+                        return $line;
+                    }, $built['lines']);
+
                     $record = PurchaseRequest::query()->create([
                         'project_id' => $project->id,
-                        'boq_id' => $built['item']->boq_id,
-                        'boq_item_id' => $built['item']->id,
+                        'boq_id' => $built['item']?->boq_id,
+                        'boq_item_id' => $built['item']?->id,
                         'pr_number' => DocumentNumber::next(PurchaseRequest::class, 'pr_number', 'PR'),
                         'request_date' => $request->validated('request_date'),
                         'required_date' => $request->validated('required_date'),
@@ -294,7 +297,7 @@ class PurchaseRequestController extends Controller
                         'requested_boq_quantity' => $built['lines'][0]['quantity'],
                         'status' => DocumentStatus::DRAFT,
                     ]);
-                    $record->items()->createMany($built['lines']);
+                    $record->items()->createMany($payload);
 
                     return $record;
                 });
@@ -314,21 +317,16 @@ class PurchaseRequestController extends Controller
     {
         $this->ensureRequest($project, $purchaseRequest);
         $this->authorize('update', $purchaseRequest);
-        abort_unless($purchaseRequest->items()->whereNotNull('boq_item_id')->exists(), 404);
-        $built = $this->catalog->lines($project, $request->validated('items'));
+        $built = $this->lines->compose($project, $request->validated('items'));
 
-        DB::transaction(function () use ($request, $purchaseRequest, $built): void {
-            $purchaseRequest->update([
-                'boq_id' => $built['item']->boq_id,
-                'boq_item_id' => $built['item']->id,
-                'request_date' => $request->validated('request_date'),
-                'required_date' => $request->validated('required_date'),
-                'description' => $request->validated('description'),
-                'requested_boq_quantity' => $built['lines'][0]['quantity'],
-            ]);
-            $purchaseRequest->items()->delete();
-            $purchaseRequest->items()->createMany($built['lines']);
-        });
+        $this->lines->save($purchaseRequest, [
+            'boq_id' => $built['item']?->boq_id,
+            'boq_item_id' => $built['item']?->id,
+            'request_date' => $request->validated('request_date'),
+            'required_date' => $request->validated('required_date'),
+            'description' => $request->validated('description'),
+            'requested_boq_quantity' => $built['lines'][0]['quantity'],
+        ], $built['lines']);
 
         return redirect()
             ->route('projects.purchase-requests.show', [$project, $purchaseRequest])
@@ -377,8 +375,14 @@ class PurchaseRequestController extends Controller
     private function ensureRequest(Project $project, PurchaseRequest $purchaseRequest): void
     {
         abort_unless($purchaseRequest->project_id === $project->id, 404);
-        abort_unless($purchaseRequest->boq()->where('project_id', $project->id)->exists(), 404);
-        abort_unless($purchaseRequest->boqItem()->where('boq_id', $purchaseRequest->boq_id)->exists(), 404);
+
+        if ($purchaseRequest->boq_id) {
+            abort_unless($purchaseRequest->boq()->where('project_id', $project->id)->exists(), 404);
+        }
+
+        if ($purchaseRequest->boq_item_id) {
+            abort_unless($purchaseRequest->boqItem()->where('boq_id', $purchaseRequest->boq_id)->exists(), 404);
+        }
     }
 
     /**
@@ -408,7 +412,7 @@ class PurchaseRequestController extends Controller
         return [
             'id' => $record->id,
             'pr_number' => $record->pr_number,
-            'boq_item' => trim(($record->boqItem?->item_number ?? '').' '.($record->boqItem?->description ?? '')),
+            'boq_item' => $this->itemSummary($record),
             'request_date' => $record->request_date?->toDateString(),
             'required_date' => $record->required_date?->toDateString(),
             'requested_by' => $record->requestedBy?->name,
@@ -427,7 +431,7 @@ class PurchaseRequestController extends Controller
             ...$this->formPayload($record),
             'pr_number' => $record->pr_number,
             'boq_title' => $record->boq?->title,
-            'boq_item' => trim(($record->boqItem?->item_number ?? '').' '.($record->boqItem?->description ?? '')),
+            'boq_item' => $this->itemSummary($record),
             'status' => $record->status,
             'requested_by' => $record->requestedBy?->name,
             'estimated_total' => $record->estimatedTotal(),
@@ -470,8 +474,10 @@ class PurchaseRequestController extends Controller
     private function itemPayload(PurchaseRequest $record, PurchaseRequestItem $item): array
     {
         $payload = [
+            'id' => $item->id,
             'boq_item_id' => $item->boq_item_id,
-            'boq_label' => trim(($item->boqItem?->item_number ?? '').' '.($item->boqItem?->description ?? $item->description)),
+            'boq_label' => trim(($item->boqItem?->item_number ?? '').' '.($item->boqItem?->description ?? '')),
+            'name' => $item->name ?: $item->description,
             'description' => $item->description,
             'service_code' => $item->service_code ?? '',
             'unit' => $item->unit ?? '',
@@ -554,9 +560,38 @@ class PurchaseRequestController extends Controller
     /**
      * @return array<string, mixed>
      */
+    private function itemSummary(PurchaseRequest $record): string
+    {
+        $names = $record->items
+            ->map(fn (PurchaseRequestItem $item) => trim((string) ($item->name ?: $item->description)))
+            ->filter()
+            ->values();
+
+        if ($names->isNotEmpty()) {
+            return $names->implode(', ');
+        }
+
+        return trim(($record->boqItem?->item_number ?? '').' '.($record->boqItem?->description ?? ''));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     private function quantityControlPayload(PurchaseRequest $record): array
     {
         $item = $record->boqItem;
+
+        if (! $item) {
+            return [
+                'has_quantity' => false,
+                'historical' => false,
+                'released' => false,
+                'unit' => null,
+                'over_quantity_approval_note' => $record->over_quantity_approval_note,
+                'over_quantity_approved_by' => $record->overQuantityApprovedBy?->name,
+                'over_quantity_approved_at' => $record->over_quantity_approved_at?->toDateTimeString(),
+            ];
+        }
         $useSnapshot = in_array($record->status, [DocumentStatus::SUBMITTED, DocumentStatus::APPROVED, DocumentStatus::REJECTED], true)
             && $record->boq_quantity_at_submission !== null;
 

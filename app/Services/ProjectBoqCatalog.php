@@ -96,13 +96,17 @@ class ProjectBoqCatalog
                 ]);
             }
 
+            $name = trim((string) ($row['name'] ?? ''));
+            $description = trim((string) ($row['description'] ?? ''));
+            $unit = trim((string) ($row['unit'] ?? ''));
             $rate = Money::scale($item->rate, 2);
             $remarks = trim((string) ($row['remarks'] ?? ''));
             $lines[] = [
                 'boq_item_id' => $item->id,
-                'description' => $item->description,
+                'name' => $name !== '' ? $name : $item->description,
+                'description' => $description !== '' ? $description : $item->description,
                 'service_code' => $item->service_code,
-                'unit' => $item->unit,
+                'unit' => $unit !== '' ? $unit : $item->unit,
                 'quantity' => $quantity,
                 'estimated_rate' => $rate,
                 'estimated_amount' => Money::itemAmount($quantity, $rate),

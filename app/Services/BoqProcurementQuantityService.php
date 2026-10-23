@@ -161,6 +161,10 @@ class BoqProcurementQuantityService
             $linked = $purchaseRequest->items->filter(fn (PurchaseRequestItem $line) => $line->boq_item_id !== null)->values();
 
             if ($linked->isEmpty()) {
+                if (! $purchaseRequest->boq_item_id) {
+                    return $this->submitUntagged($purchaseRequest);
+                }
+
                 return $this->submitHeader($purchaseRequest);
             }
 
@@ -221,6 +225,25 @@ class BoqProcurementQuantityService
 
             return $purchaseRequest;
         });
+    }
+
+    private function submitUntagged(PurchaseRequest $purchaseRequest): PurchaseRequest
+    {
+        abort_unless($purchaseRequest->status === DocumentStatus::DRAFT, 403);
+
+        $purchaseRequest->update([
+            'status' => DocumentStatus::SUBMITTED,
+            'submitted_at' => now(),
+            'rejection_reason' => null,
+            'rejected_at' => null,
+            'rejected_by' => null,
+            'is_boq_quantity_exceeded' => false,
+            'boq_quantity_at_submission' => null,
+            'previous_requested_quantity_at_submission' => null,
+            'excess_quantity_at_submission' => null,
+        ]);
+
+        return $purchaseRequest;
     }
 
     private function submitHeader(PurchaseRequest $purchaseRequest): PurchaseRequest

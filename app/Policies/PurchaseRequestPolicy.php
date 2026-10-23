@@ -11,7 +11,18 @@ class PurchaseRequestPolicy
 {
     public function update(User $user, PurchaseRequest $purchaseRequest): bool
     {
-        return $user->isActive() && $purchaseRequest->status === DocumentStatus::DRAFT;
+        if (! $user->isActive()) {
+            return false;
+        }
+
+        if ($purchaseRequest->status === DocumentStatus::DRAFT) {
+            return true;
+        }
+
+        return $purchaseRequest->status === DocumentStatus::APPROVED
+            && $purchaseRequest->purchaseOrders()
+                ->where('status', '!=', DocumentStatus::REJECTED)
+                ->exists();
     }
 
     public function delete(User $user, PurchaseRequest $purchaseRequest): bool

@@ -13,8 +13,12 @@ class PurchaseLines
         return array_map(function (array $row): array {
             $quantity = Money::scale($row['quantity'], 3);
 
+            $description = trim((string) $row['description']);
+            $name = trim((string) ($row['name'] ?? ''));
+
             return [
-                'description' => trim((string) $row['description']),
+                'name' => $name !== '' ? $name : $description,
+                'description' => $description,
                 'service_code' => self::nullable($row['service_code'] ?? null),
                 'unit' => self::nullable($row['unit'] ?? null),
                 'quantity' => $quantity,
@@ -35,8 +39,12 @@ class PurchaseLines
             $quantity = Money::scale($row['quantity'], 3);
             $rate = Money::scale($row['rate'], 2);
 
+            $description = trim((string) $row['description']);
+            $name = trim((string) ($row['name'] ?? ''));
+
             return [
-                'description' => trim((string) $row['description']),
+                'name' => $name !== '' ? $name : $description,
+                'description' => $description,
                 'unit' => self::nullable($row['unit'] ?? null),
                 'quantity' => $quantity,
                 'rate' => $rate,

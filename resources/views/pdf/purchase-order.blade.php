@@ -24,7 +24,10 @@
                 <tr>
                     <td class="center">{{ $index + 1 }}</td>
                     <td class="wrap">
-                        {{ $line['description'] }}
+                        {{ $line['name'] ?: $line['description'] }}
+                        @if(! empty($line['description']) && ($line['name'] ?? '') !== '' && $line['description'] !== $line['name'])
+                            <div>{{ $line['description'] }}</div>
+                        @endif
                         @if(! empty($line['service_code']))
                             <div class="muted">{{ $line['service_code'] }}</div>
                         @endif

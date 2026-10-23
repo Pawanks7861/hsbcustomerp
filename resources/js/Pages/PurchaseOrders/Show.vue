@@ -180,7 +180,10 @@ function destroy() {
                         <tr v-for="(line, index) in purchaseOrder.items" :key="index">
                             <td class="border border-slate-200 px-3 py-2">{{ index + 1 }}</td>
                             <td class="border border-slate-200 px-3 py-2">{{ line.service_code || '—' }}</td>
-                            <td class="border border-slate-200 px-3 py-2 whitespace-pre-line">{{ line.description }}</td>
+                            <td class="border border-slate-200 px-3 py-2 whitespace-pre-line">
+                                <div>{{ line.name || line.description }}</div>
+                                <div v-if="line.name && line.description && line.name !== line.description" class="text-xs text-slate-500">{{ line.description }}</div>
+                            </td>
                             <td class="border border-slate-200 px-3 py-2">{{ line.hsn_sac || '—' }}</td>
                             <td class="border border-slate-200 px-3 py-2">{{ line.unit || '—' }}</td>
                             <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ line.quantity }}</td>

@@ -10,7 +10,7 @@ const props = defineProps({
 });
 
 function blank() {
-    return { boq_item_id: '', quantity: '', remarks: '' };
+    return { id: null, name: '', description: '', unit: '', quantity: '', boq_item_id: '', remarks: '' };
 }
 
 const form = useForm({
@@ -19,8 +19,12 @@ const form = useForm({
     description: props.purchaseRequest?.description || '',
     items: props.purchaseRequest?.items?.length
         ? props.purchaseRequest.items.map((item) => ({
-            boq_item_id: item.boq_item_id || '',
+            id: item.id || null,
+            name: item.name || '',
+            description: item.description || '',
+            unit: item.unit || '',
             quantity: item.quantity || '',
+            boq_item_id: item.boq_item_id || '',
             remarks: item.remarks || '',
         }))
         : [blank()],
@@ -56,8 +60,15 @@ function rowState(row) {
         remaining: boq - previous,
         excess: Math.max(0, cumulative - boq),
         exceeded: cumulative - boq > 0.0000001,
-        amount: item.rate === null || row.quantity === '' ? null : Number(item.rate) * requested,
     };
+}
+
+function onBoqTag(row) {
+    const item = option(row.boq_item_id);
+
+    if (item && !String(row.unit || '').trim()) {
+        row.unit = item.unit || '';
+    }
 }
 
 function addItem() {
@@ -113,57 +124,63 @@ function submit() {
                 </div>
             </section>
 
-            <section class="ui-card space-y-4 p-5">
+            <section class="space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <h2 class="font-semibold">Purchase Request Items</h2>
                     <button type="button" class="ui-btn-secondary" @click="addItem">Add Item</button>
                 </div>
-                <p v-if="boqItems.length === 0" class="text-sm text-amber-800">No BOQ items are available on the current revision.</p>
-                <div class="overflow-x-auto">
-                    <table class="min-w-[920px] w-full text-sm">
-                        <thead>
-                            <tr class="text-left text-slate-500">
-                                <th class="px-2 py-2">Sr.</th>
-                                <th class="px-2 py-2">BOQ Item</th>
-                                <th class="px-2 py-2">Unit</th>
-                                <th class="px-2 py-2 text-right">BOQ Qty</th>
-                                <th class="px-2 py-2 text-right">Previously Requested</th>
-                                <th class="px-2 py-2 text-right">Requested Qty</th>
-                                <th class="px-2 py-2"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <template v-for="(row, index) in form.items" :key="index">
-                                <tr :class="rowState(row)?.exceeded ? 'bg-orange-50' : ''">
-                                    <td class="px-2 py-2">{{ index + 1 }}</td>
-                                    <td class="px-2 py-2">
-                                        <select v-model="row.boq_item_id" required class="ui-input w-full min-w-56">
-                                            <option value="">Select BOQ item</option>
-                                            <option v-for="item in boqItems" :key="item.id" :value="item.id">{{ shortLabel(item) }}</option>
-                                        </select>
-                                        <p v-if="rowState(row)" class="mt-1 text-xs text-slate-500">
-                                            <span v-if="rowState(row).item.service_code">{{ rowState(row).item.service_code }} · </span>{{ shortLabel(rowState(row).item) }}
-                                        </p>
-                                        <p v-if="form.errors[`items.${index}.boq_item_id`]" class="mt-1 text-red-700">{{ form.errors[`items.${index}.boq_item_id`] }}</p>
-                                    </td>
-                                    <td class="px-2 py-2">{{ rowState(row)?.item.unit || '—' }}</td>
-                                    <td class="px-2 py-2 text-right tabular-nums">{{ rowState(row)?.item.quantity || '—' }}</td>
-                                    <td class="px-2 py-2 text-right tabular-nums">{{ rowState(row)?.previous?.toFixed(3) || '—' }}</td>
-                                    <td class="px-2 py-2">
-                                        <input v-model="row.quantity" type="number" min="0.001" step="0.001" required class="ui-input w-28 text-right">
-                                        <p v-if="form.errors[`items.${index}.quantity`]" class="mt-1 text-red-700">{{ form.errors[`items.${index}.quantity`] }}</p>
-                                    </td>
-                                    <td class="px-2 py-2">
-                                        <button v-if="form.items.length > 1" type="button" class="text-red-700" @click="removeItem(index)">Remove</button>
-                                    </td>
-                                </tr>
-                                <tr v-if="rowState(row)?.exceeded">
-                                    <td colspan="7" class="px-2 pb-3 text-sm font-semibold text-orange-800">BOQ QUANTITY EXCEEDED — APPROVAL REQUIRED</td>
-                                </tr>
-                            </template>
-                        </tbody>
-                    </table>
-                </div>
+
+                <article
+                    v-for="(row, index) in form.items"
+                    :key="row.id || index"
+                    class="ui-card space-y-4 p-5"
+                    :class="rowState(row)?.exceeded ? 'ring-1 ring-orange-200' : ''"
+                >
+                    <div class="flex items-center justify-between gap-3">
+                        <h3 class="text-sm font-semibold text-slate-700">Item {{ index + 1 }}</h3>
+                        <button v-if="form.items.length > 1" type="button" class="text-sm text-red-700" @click="removeItem(index)">Remove</button>
+                    </div>
+
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <label class="text-sm sm:col-span-2">
+                            <span class="mb-1 block font-medium">Item Name</span>
+                            <input v-model="row.name" type="text" required maxlength="255" class="ui-input w-full">
+                            <p v-if="form.errors[`items.${index}.name`]" class="mt-1 text-red-700">{{ form.errors[`items.${index}.name`] }}</p>
+                        </label>
+                        <label class="text-sm sm:col-span-2">
+                            <span class="mb-1 block font-medium">Item Description</span>
+                            <textarea v-model="row.description" rows="2" maxlength="2000" class="ui-input w-full"></textarea>
+                            <p v-if="form.errors[`items.${index}.description`]" class="mt-1 text-red-700">{{ form.errors[`items.${index}.description`] }}</p>
+                        </label>
+                        <label class="text-sm">
+                            <span class="mb-1 block font-medium">Unit</span>
+                            <input v-model="row.unit" type="text" maxlength="50" class="ui-input w-full">
+                            <p v-if="form.errors[`items.${index}.unit`]" class="mt-1 text-red-700">{{ form.errors[`items.${index}.unit`] }}</p>
+                        </label>
+                        <label class="text-sm">
+                            <span class="mb-1 block font-medium">Requested Quantity</span>
+                            <input v-model="row.quantity" type="number" min="0.001" step="0.001" required class="ui-input w-full text-right">
+                            <p v-if="form.errors[`items.${index}.quantity`]" class="mt-1 text-red-700">{{ form.errors[`items.${index}.quantity`] }}</p>
+                        </label>
+                        <label class="text-sm sm:col-span-2">
+                            <span class="mb-1 block font-medium">BOQ Item Tag (Optional)</span>
+                            <select v-model="row.boq_item_id" class="ui-input w-full" @change="onBoqTag(row)">
+                                <option value="">No BOQ tag</option>
+                                <option v-for="item in boqItems" :key="item.id" :value="item.id">{{ shortLabel(item) }}</option>
+                            </select>
+                            <p class="mt-1 text-xs text-slate-500">Optional internal tag. Selecting a BOQ item does not change the item name or description.</p>
+                            <p v-if="form.errors[`items.${index}.boq_item_id`]" class="mt-1 text-red-700">{{ form.errors[`items.${index}.boq_item_id`] }}</p>
+                        </label>
+                    </div>
+
+                    <p v-if="rowState(row)" class="text-xs text-slate-500">
+                        Tagged BOQ remaining: {{ rowState(row).remaining.toFixed(3) }} {{ rowState(row).item.unit }}
+                    </p>
+                    <p v-if="rowState(row)?.exceeded" class="text-sm font-semibold text-orange-800">
+                        BOQ QUANTITY EXCEEDED — APPROVAL REQUIRED
+                    </p>
+                </article>
+
                 <p v-if="form.errors.items" class="text-sm text-red-700">{{ form.errors.items }}</p>
             </section>
 

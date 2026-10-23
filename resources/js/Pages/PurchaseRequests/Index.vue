@@ -59,7 +59,7 @@ function applyFilters() {
                 <thead>
                     <tr>
                         <th class="px-4 py-3">PR No</th>
-                        <th class="px-4 py-3">BOQ Item</th>
+                        <th class="px-4 py-3">Item</th>
                         <th class="px-4 py-3">Request Date</th>
                         <th class="px-4 py-3">Required Date</th>
                         <th class="px-4 py-3">Requested By</th>

@@ -45,7 +45,7 @@ class PurchaseOrderController extends Controller
         $search = trim($request->string('search')->toString());
 
         $records = $project->purchaseOrders()
-            ->with(['boqItem', 'purchaseRequest'])
+            ->with(['boqItem', 'purchaseRequest', 'items'])
             ->when(in_array($status, DocumentStatus::all(), true), fn ($query) => $query->where('status', $status))
             ->when($search !== '', function ($query) use ($search) {
                 $like = '%'.$search.'%';
@@ -53,6 +53,10 @@ class PurchaseOrderController extends Controller
                     $inner->where('po_number', 'like', $like)
                         ->orWhere('supplier_name', 'like', $like)
                         ->orWhereHas('purchaseRequest', fn ($pr) => $pr->where('pr_number', 'like', $like))
+                        ->orWhereHas('items', function ($items) use ($like) {
+                            $items->where('name', 'like', $like)
+                                ->orWhere('description', 'like', $like);
+                        })
                         ->orWhereHas('boqItem', function ($item) use ($like) {
                             $item->where('description', 'like', $like)
                                 ->orWhere('item_number', 'like', $like);
@@ -69,7 +73,8 @@ class PurchaseOrderController extends Controller
                 'id' => $record->id,
                 'po_number' => $record->po_number,
                 'pr_number' => $record->purchaseRequest?->pr_number,
-                'boq_item' => $record->boqItem?->description ?? '',
+                'boq_item' => $record->items->map(fn ($item) => trim((string) ($item->name ?: $item->description)))->filter()->implode(', ')
+                    ?: ($record->boqItem?->description ?? ''),
                 'printable' => $record->printable(),
                 'supplier_name' => $record->supplier_name,
                 'po_date' => $record->po_date?->toDateString(),
@@ -95,15 +100,15 @@ class PurchaseOrderController extends Controller
                 'id' => $purchaseRequest->id,
                 'pr_number' => $purchaseRequest->pr_number,
             ],
-            'boq' => [
+            'boq' => $purchaseRequest->boq ? [
                 'id' => $purchaseRequest->boq->id,
                 'title' => $purchaseRequest->boq->title,
-            ],
-            'item' => [
+            ] : null,
+            'item' => $purchaseRequest->boqItem ? [
                 'id' => $purchaseRequest->boqItem->id,
                 'item_number' => $purchaseRequest->boqItem->item_number,
                 'description' => $purchaseRequest->boqItem->description,
-            ],
+            ] : null,
             'vendors' => $this->vendorOptions(),
             'purchaseOrder' => [
                 'id' => null,
@@ -184,15 +189,15 @@ class PurchaseOrderController extends Controller
                 'id' => $purchaseOrder->purchase_request_id,
                 'pr_number' => $purchaseOrder->purchaseRequest?->pr_number,
             ],
-            'boq' => [
+            'boq' => $purchaseOrder->boq ? [
                 'id' => $purchaseOrder->boq->id,
                 'title' => $purchaseOrder->boq->title,
-            ],
-            'item' => [
+            ] : null,
+            'item' => $purchaseOrder->boqItem ? [
                 'id' => $purchaseOrder->boqItem->id,
                 'item_number' => $purchaseOrder->boqItem->item_number,
                 'description' => $purchaseOrder->boqItem->description,
-            ],
+            ] : null,
             'vendors' => $this->vendorOptions($purchaseOrder->vendor_id),
             'purchaseOrder' => [
                 ...$this->formPayload($purchaseOrder),
@@ -470,14 +475,29 @@ class PurchaseOrderController extends Controller
         $this->ensureOrder($project, $purchaseOrder);
         abort_unless($purchaseOrder->printable(), 403);
         $this->authorize('print', $purchaseOrder);
-        $purchaseOrder->load(['boq', 'boqItem.revision', 'purchaseRequest', 'items', 'createdBy', 'approvedBy', 'rejectedBy']);
+        $purchaseOrder->load(['purchaseRequest', 'items', 'createdBy', 'approvedBy', 'rejectedBy']);
         $document = $this->detailPayload($purchaseOrder);
-        $revision = $purchaseOrder->boqItem?->revision?->revision_number;
+        unset($document['boq_title'], $document['boq_item'], $document['boq_unit'], $document['requested_boq_quantity']);
+        $document['items'] = collect($document['items'] ?? [])->map(fn (array $line) => [
+            'name' => $line['name'] ?? '',
+            'description' => $line['description'] ?? '',
+            'unit' => $line['unit'] ?? '',
+            'quantity' => $line['quantity'] ?? '',
+            'service_code' => $line['service_code'] ?? '',
+            'hsn_sac' => $line['hsn_sac'] ?? '',
+            'rate' => $line['rate'] ?? '',
+            'discount_percentage' => $line['discount_percentage'] ?? '',
+            'taxable_amount' => $line['taxable_amount'] ?? '',
+            'cgst_amount' => $line['cgst_amount'] ?? '',
+            'sgst_amount' => $line['sgst_amount'] ?? '',
+            'line_total' => $line['line_total'] ?? '',
+            'amount' => $line['amount'] ?? '',
+            'remarks' => $line['remarks'] ?? '',
+        ])->all();
 
         $data = [
             'title' => 'PURCHASE ORDER',
             'number' => $document['po_number'],
-            'revision' => $revision,
             'subject' => $document['subject'] ?? '',
             'headerPartial' => 'pdf.partials.purchase-order-header',
             'dateLabel' => 'Order date',
@@ -494,7 +514,6 @@ class PurchaseOrderController extends Controller
             'footerNote' => 'Amounts as stored on the purchase order.',
             'projectName' => $project->project_name,
             'projectCode' => $project->project_code,
-            'boqNumber' => $purchaseOrder->boq?->boq_number,
             'document' => $document,
             'vendor' => $this->vendorSnapshot($purchaseOrder),
         ];
@@ -671,21 +690,29 @@ class PurchaseOrderController extends Controller
     private function ensureApprovedRequest(Project $project, PurchaseRequest $purchaseRequest): void
     {
         abort_unless($purchaseRequest->project_id === $project->id, 404);
-        abort_unless($purchaseRequest->boq()->where('project_id', $project->id)->exists(), 404);
-        abort_unless($purchaseRequest->boqItem()->where('boq_id', $purchaseRequest->boq_id)->exists(), 404);
+
+        if ($purchaseRequest->boq_id) {
+            abort_unless($purchaseRequest->boq()->where('project_id', $project->id)->exists(), 404);
+        }
+
+        if ($purchaseRequest->boq_item_id) {
+            abort_unless($purchaseRequest->boqItem()->where('boq_id', $purchaseRequest->boq_id)->exists(), 404);
+        }
+
         abort_unless($purchaseRequest->status === DocumentStatus::APPROVED, 403);
     }
 
     private function ensureOrder(Project $project, PurchaseOrder $purchaseOrder): void
     {
         abort_unless($purchaseOrder->project_id === $project->id, 404);
-        abort_unless($purchaseOrder->boq()->where('project_id', $project->id)->exists(), 404);
-        abort_unless($purchaseOrder->boqItem()->where('boq_id', $purchaseOrder->boq_id)->exists(), 404);
+
+        if ($purchaseOrder->boq_id) {
+            abort_unless($purchaseOrder->boq()->where('project_id', $project->id)->exists(), 404);
+        }
+
         abort_unless(
             $purchaseOrder->purchaseRequest()
                 ->where('project_id', $project->id)
-                ->where('boq_id', $purchaseOrder->boq_id)
-                ->where('boq_item_id', $purchaseOrder->boq_item_id)
                 ->exists(),
             404
         );
@@ -826,6 +853,7 @@ class PurchaseOrderController extends Controller
             'items' => $record->items->map(fn (PurchaseOrderItem $item) => [
                 'id' => $item->id,
                 'service_code' => $item->service_code ?? '',
+                'name' => $item->name ?: $item->description,
                 'description' => $item->description,
                 'hsn_sac' => $item->hsn_sac ?? '',
                 'unit' => $item->unit ?? '',
@@ -863,6 +891,7 @@ class PurchaseOrderController extends Controller
 
         return collect($lines)->map(fn (array $line) => [
             'service_code' => $line['service_code'] ?? '',
+            'name' => $line['name'] ?? $line['description'],
             'description' => $line['description'],
             'hsn_sac' => '',
             'unit' => $line['unit'] ?? '',
@@ -890,14 +919,17 @@ class PurchaseOrderController extends Controller
                 $rate = Money::scale($boqItem?->rate, 2) ?? '0.00';
             }
 
+            $name = trim((string) ($line->name ?: $line->description));
             $description = trim((string) $line->description);
             if ($description === '') {
-                $description = trim((string) ($line->boqItem?->description ?? $purchaseRequest->boqItem?->description ?? ''));
+                $description = $name;
             }
 
             return [
+                'purchase_request_item_id' => $line->id,
                 'boq_item_id' => $line->boq_item_id ?: $purchaseRequest->boq_item_id,
                 'service_code' => $line->service_code,
+                'name' => $name !== '' ? $name : $description,
                 'description' => $description,
                 'unit' => $line->unit,
                 'quantity' => $quantity,

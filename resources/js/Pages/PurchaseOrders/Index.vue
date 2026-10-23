@@ -59,7 +59,7 @@ function applyFilters() {
                     <tr>
                         <th class="px-4 py-3">PO No</th>
                         <th class="px-4 py-3">PR No</th>
-                        <th class="px-4 py-3">Item description</th>
+                        <th class="px-4 py-3">Item</th>
                         <th class="px-4 py-3">Supplier</th>
                         <th class="px-4 py-3">PO Date</th>
                         <th class="px-4 py-3 text-right font-medium text-slate-500">Grand Total</th>
