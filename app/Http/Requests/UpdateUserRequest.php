@@ -25,12 +25,26 @@ class UpdateUserRequest extends FormRequest
             'designation' => ['nullable', 'string', 'max:255'],
             'status' => ['required', Rule::in([User::STATUS_ACTIVE, User::STATUS_INACTIVE])],
             'is_admin' => ['required', 'boolean'],
-            'role_ids' => ['nullable', 'array'],
+            'role_ids' => [$this->boolean('is_admin') ? 'nullable' : 'required', 'array'],
             'role_ids.*' => ['integer', 'exists:roles,id'],
             'project_access' => ['nullable', Rule::in(['all', 'selected'])],
             'project_ids' => ['nullable', 'array'],
             'project_ids.*' => ['integer', 'exists:projects,id'],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator): void {
+            if ($this->boolean('is_admin')) {
+                return;
+            }
+
+            $roleIds = collect($this->input('role_ids', []))->filter()->all();
+            if ($roleIds === []) {
+                $validator->errors()->add('role_ids', 'Assign at least one staff role.');
+            }
+        });
     }
 }

@@ -14,6 +14,7 @@ use App\Services\InternalDeliveryService;
 use App\Services\InventoryStock;
 use App\Support\Money;
 use App\Support\PdfFormat;
+use App\Support\StoredUpload;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -179,7 +180,7 @@ class InternalDeliveryController extends Controller
             'items.*.quantity_short' => ['nullable', 'numeric', 'min:0'],
             'items.*.remarks' => ['nullable', 'string', 'max:1000'],
             'images' => ['nullable', 'array'],
-            'images.*' => ['image', 'max:5120'],
+            'images.*' => StoredUpload::rules(StoredUpload::IMAGES, 5120),
         ]);
         $receipt = $this->deliveries->receive($transfer, $data['items'], $request->user(), $data['remarks'] ?? null);
         $this->storeFiles($request, $transfer, $receipt->id);
@@ -210,8 +211,14 @@ class InternalDeliveryController extends Controller
     {
         $this->authorizeNote($request->user(), $transfer);
         abort_unless($attachment->internal_delivery_note_id === $transfer->id, 404);
+        abort_unless(filled($attachment->path) && Storage::disk('local')->exists($attachment->path), 404);
 
-        return Storage::disk('local')->response($attachment->path, $attachment->original_name);
+        return StoredUpload::serve(
+            $attachment->path,
+            $attachment->original_name,
+            inlineIfSafe: true,
+            expectedPrefix: 'idn/'.$transfer->id,
+        );
     }
 
     private function renderPdf(InternalDeliveryNote $transfer, DocumentPdf $pdf, bool $download): HttpResponse
@@ -264,7 +271,7 @@ class InternalDeliveryController extends Controller
             'items.*.quantity' => ['required', 'numeric', 'gt:0'],
             'items.*.remarks' => ['nullable', 'string', 'max:1000'],
             'attachments' => ['nullable', 'array'],
-            'attachments.*' => ['file', 'max:5120'],
+            'attachments.*' => StoredUpload::rules(StoredUpload::DOCUMENTS, 5120),
         ]);
     }
 
@@ -273,16 +280,16 @@ class InternalDeliveryController extends Controller
         foreach ($request->file('attachments', []) as $file) {
             $note->attachments()->create([
                 'internal_delivery_receipt_id' => $receiptId,
-                'path' => $file->store('idn/'.$note->id, 'local'),
-                'original_name' => $file->getClientOriginalName(),
+                'path' => StoredUpload::store($file, 'idn/'.$note->id),
+                'original_name' => StoredUpload::downloadName($file->getClientOriginalName(), 'attachment'),
             ]);
         }
 
         foreach ($request->file('images', []) as $file) {
             $note->attachments()->create([
                 'internal_delivery_receipt_id' => $receiptId,
-                'path' => $file->store('idn/'.$note->id, 'local'),
-                'original_name' => $file->getClientOriginalName(),
+                'path' => StoredUpload::store($file, 'idn/'.$note->id),
+                'original_name' => StoredUpload::downloadName($file->getClientOriginalName(), 'image'),
             ]);
         }
     }
@@ -320,9 +327,9 @@ class InternalDeliveryController extends Controller
 
             if ($location->project_id) {
                 $project = Project::query()->findOrFail($location->project_id);
-                abort_unless($this->access->canAccessProject($user, $project), 403);
+                abort_unless($this->access->canAccessProject($user, $project), 404);
             } elseif (! $this->access->seesAllProjects($user)) {
-                abort(403);
+                abort(404);
             }
         }
     }

@@ -2,6 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import { GripHorizontal, MessageCircle, Minimize2, Send, Trash2, X } from '@lucide/vue';
+import DOMPurify from 'dompurify';
+import { formatAssistantText, safeInternalHref } from '@/chatbot/formatAssistantText';
 
 const STORAGE_KEY = 'buildify360.assistant.position';
 const FAB_SIZE = 56;
@@ -303,9 +305,22 @@ function onKeydown(event) {
 }
 
 function formatText(text) {
-    return String(text || '')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\n/g, '<br>');
+    return formatAssistantText(text, DOMPurify);
+}
+
+function assistantItems(items) {
+    return (items || []).map((item) => ({
+        ...item,
+        url: safeInternalHref(item.url),
+    }));
+}
+
+function assistantLinks(links) {
+    return (links || []).flatMap((link) => {
+        const url = safeInternalHref(link.url);
+
+        return url ? [{ label: link.label, url }] : [];
+    });
 }
 
 onMounted(() => {
@@ -408,10 +423,10 @@ onBeforeUnmount(() => {
                         <div v-if="msg.role === 'assistant'" class="leading-relaxed" v-html="formatText(msg.text)" />
                         <div v-else class="whitespace-pre-wrap leading-relaxed">{{ msg.text }}</div>
 
-                        <div v-if="msg.items?.length" class="mt-2 space-y-2">
+                        <div v-if="assistantItems(msg.items).length" class="mt-2 space-y-2">
                             <component
                                 :is="item.url ? Link : 'div'"
-                                v-for="(item, itemIndex) in msg.items"
+                                v-for="(item, itemIndex) in assistantItems(msg.items)"
                                 :key="`${item.title}-${itemIndex}`"
                                 v-bind="item.url ? { href: item.url } : {}"
                                 class="block rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 transition"
@@ -433,9 +448,9 @@ onBeforeUnmount(() => {
                             </component>
                         </div>
 
-                        <div v-if="msg.links?.length" class="mt-2 flex flex-wrap gap-2 border-t border-slate-100 pt-2">
+                        <div v-if="assistantLinks(msg.links).length" class="mt-2 flex flex-wrap gap-2 border-t border-slate-100 pt-2">
                             <Link
-                                v-for="link in msg.links"
+                                v-for="link in assistantLinks(msg.links)"
                                 :key="link.url"
                                 :href="link.url"
                                 class="rounded-lg bg-slate-100 px-2 py-1 text-xs font-medium text-slate-800 hover:bg-slate-200"

@@ -70,7 +70,7 @@ class InventoryLocationController extends Controller
 
         if (! empty($data['project_id'])) {
             $project = Project::query()->findOrFail($data['project_id']);
-            abort_unless($this->access->canAccessProject($request->user(), $project), 403);
+            abort_unless($this->access->canAccessProject($request->user(), $project), 404);
         }
 
         $location = InventoryLocation::query()->create([
@@ -88,7 +88,9 @@ class InventoryLocationController extends Controller
     {
         abort_unless($this->access->allows($request->user(), 'inventory.edit'), 403);
         abort_if($location->is_system, 403);
+        $this->access->abortUnlessCanAccessLocation($request->user(), $location);
         $data = $this->validated($request);
+        $this->access->abortUnlessVisibleProjectId($request->user(), isset($data['project_id']) ? (int) $data['project_id'] : null);
         $location->update($data);
         $this->activity->log($request->user()->id, 'location.updated', $location);
 
@@ -98,10 +100,7 @@ class InventoryLocationController extends Controller
     public function stock(Request $request, InventoryLocation $location): \Illuminate\Http\JsonResponse
     {
         abort_unless($this->access->allows($request->user(), 'idn.view') || $this->access->allows($request->user(), 'inventory.view'), 403);
-
-        if ($location->project_id) {
-            abort_unless($this->access->canAccessProject($request->user(), $location->project), 404);
-        }
+        $this->access->abortUnlessCanAccessLocation($request->user(), $location);
 
         $materials = Material::query()->where('is_active', true)->orderBy('name')->get();
         $rows = [];

@@ -7,6 +7,7 @@ use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\Vendor;
 use App\Models\VendorPayment;
+use App\Services\Access;
 use App\Services\VendorBalanceService;
 use App\Support\Money;
 use Illuminate\Http\RedirectResponse;
@@ -19,15 +20,24 @@ use Inertia\Response;
 
 class VendorPaymentController extends Controller
 {
-    public function create(Request $request, Vendor $vendor, VendorBalanceService $balances): Response
+    public function create(Request $request, Vendor $vendor, VendorBalanceService $balances, Access $access): Response
     {
-        $invoice = $this->invoiceFromRequest($request, $vendor);
+        $invoice = $this->invoiceFromRequest($request, $vendor, $access);
+        $projectIds = $access->visibleProjectIds($request->user());
 
         return Inertia::render('Vendors/PaymentForm', [
             'vendor' => ['id' => $vendor->id, 'name' => $vendor->name, 'vendor_code' => $vendor->vendor_code],
-            'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_name']),
-            'purchaseOrders' => $vendor->purchaseOrders()->orderByDesc('po_date')->get(['id', 'po_number', 'project_id', 'grand_total']),
-            'invoices' => $vendor->invoices()->where('approval_status', PurchaseInvoice::APPROVAL_APPROVED)->with('purchaseOrder:id,po_number')->orderByDesc('invoice_date')->get(),
+            'projects' => Project::query()->visibleTo($request->user())->orderBy('project_name')->get(['id', 'project_name']),
+            'purchaseOrders' => $vendor->purchaseOrders()
+                ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds ?: [0]))
+                ->orderByDesc('po_date')
+                ->get(['id', 'po_number', 'project_id', 'grand_total']),
+            'invoices' => $vendor->invoices()
+                ->where('approval_status', PurchaseInvoice::APPROVAL_APPROVED)
+                ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds ?: [0]))
+                ->with('purchaseOrder:id,po_number')
+                ->orderByDesc('invoice_date')
+                ->get(),
             'invoice' => $invoice ? $this->invoiceCard($invoice, $balances) : null,
             'preset' => [
                 'payment_type' => $request->string('payment_type')->toString() ?: ($invoice ? VendorPayment::TYPE_INVOICE : VendorPayment::TYPE_ADVANCE),
@@ -38,7 +48,7 @@ class VendorPaymentController extends Controller
         ]);
     }
 
-    public function store(Request $request, Vendor $vendor, VendorBalanceService $balances): RedirectResponse
+    public function store(Request $request, Vendor $vendor, VendorBalanceService $balances, Access $access): RedirectResponse
     {
         $validated = $request->validate([
             'project_id' => ['nullable', 'integer', 'exists:projects,id'],
@@ -53,6 +63,7 @@ class VendorPaymentController extends Controller
         ]);
 
         $amount = Money::scale($validated['amount'], 2);
+        $access->abortUnlessVisibleProjectId($request->user(), isset($validated['project_id']) ? (int) $validated['project_id'] : null);
         $invoice = null;
 
         if ($validated['payment_type'] === VendorPayment::TYPE_INVOICE) {
@@ -78,11 +89,13 @@ class VendorPaymentController extends Controller
 
             $validated['project_id'] = $invoice->project_id;
             $validated['purchase_order_id'] = $invoice->purchase_order_id;
+            $access->abortUnlessCanAccessProject($request->user(), $invoice->project);
         }
 
         if (! empty($validated['purchase_order_id'])) {
             $order = PurchaseOrder::query()->findOrFail($validated['purchase_order_id']);
             abort_unless((int) $order->vendor_id === (int) $vendor->id, 422);
+            $access->abortUnlessCanAccessProject($request->user(), $order->project);
             if (! empty($validated['project_id'])) {
                 abort_unless((int) $order->project_id === (int) $validated['project_id'], 422);
             }
@@ -104,9 +117,10 @@ class VendorPaymentController extends Controller
         return redirect()->route('vendors.show', [$vendor, 'tab' => 'payments'])->with('success', 'Payment recorded.');
     }
 
-    public function destroy(Vendor $vendor, VendorPayment $payment): RedirectResponse
+    public function destroy(Request $request, Vendor $vendor, VendorPayment $payment, Access $access): RedirectResponse
     {
         abort_unless($payment->vendor_id === $vendor->id, 404);
+        $access->abortUnlessCanAccessProject($request->user(), $payment->project);
 
         if ($payment->adjustments()->exists() || $payment->recoveries()->exists()) {
             return back()->with('error', 'This payment cannot be deleted because it is used in an adjustment or recovery.');
@@ -122,7 +136,7 @@ class VendorPaymentController extends Controller
         return back()->with('success', 'Payment deleted.');
     }
 
-    private function invoiceFromRequest(Request $request, Vendor $vendor): ?PurchaseInvoice
+    private function invoiceFromRequest(Request $request, Vendor $vendor, Access $access): ?PurchaseInvoice
     {
         $id = $request->integer('purchase_invoice_id');
 
@@ -132,6 +146,7 @@ class VendorPaymentController extends Controller
 
         $invoice = PurchaseInvoice::query()->findOrFail($id);
         abort_unless((int) $invoice->vendor_id === (int) $vendor->id, 404);
+        $access->abortUnlessCanAccessProject($request->user(), $invoice->project);
 
         return $invoice;
     }

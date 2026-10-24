@@ -9,7 +9,16 @@ class MultiPurchaseRequestRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->isActive() === true;
+        $user = $this->user();
+        if ($user?->isActive() !== true) {
+            return false;
+        }
+
+        $permission = $this->isMethod('put') || $this->isMethod('patch')
+            ? 'purchase_requests.edit'
+            : 'purchase_requests.create';
+
+        return app(\App\Services\Access::class)->allows($user, $permission);
     }
 
     /**

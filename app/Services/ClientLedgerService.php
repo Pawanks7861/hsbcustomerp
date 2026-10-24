@@ -12,14 +12,16 @@ use Illuminate\Support\Collection;
 class ClientLedgerService
 {
     /**
+     * @param  list<int>|null  $projectIds
      * @return array{entries: list<array<string, mixed>>, totals: array<string, string>}
      */
-    public function statement(Client $client, ?int $projectId = null): array
+    public function statement(Client $client, ?int $projectId = null, ?array $projectIds = null): array
     {
         $invoices = $client->invoices()
             ->with('project:id,project_code,project_name')
             ->where('approval_status', DocumentStatus::APPROVED)
             ->when($projectId, fn ($query) => $query->where('project_id', $projectId))
+            ->when($projectId === null && $projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds ?: [0]))
             ->orderBy('invoice_date')
             ->orderBy('id')
             ->get();
@@ -28,6 +30,7 @@ class ClientLedgerService
             ->with(['invoice:id,invoice_number', 'project:id,project_code'])
             ->whereHas('invoice', fn ($query) => $query->where('approval_status', DocumentStatus::APPROVED))
             ->when($projectId, fn ($query) => $query->where('project_id', $projectId))
+            ->when($projectId === null && $projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds ?: [0]))
             ->orderBy('payment_date')
             ->orderBy('id')
             ->get();
@@ -82,11 +85,12 @@ class ClientLedgerService
     }
 
     /**
+     * @param  list<int>|null  $projectIds
      * @return array<string, string>
      */
-    public function summary(Client $client): array
+    public function summary(Client $client, ?array $projectIds = null): array
     {
-        $statement = $this->statement($client);
+        $statement = $this->statement($client, null, $projectIds);
 
         return $statement['totals'];
     }

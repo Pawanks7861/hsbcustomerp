@@ -12,6 +12,7 @@ use App\Imports\Definitions\MaterialsImport;
 use App\Imports\Definitions\ProjectsImport;
 use App\Imports\Definitions\PurchaseOrdersImport;
 use App\Imports\Definitions\PurchaseRequestsImport;
+use App\Imports\Definitions\StockAdjustmentsImport;
 use App\Imports\Definitions\UsersImport;
 use App\Imports\Definitions\VendorsImport;
 use App\Imports\Definitions\WorkOrdersImport;
@@ -24,6 +25,7 @@ class ImportRegistry
         'vendors' => VendorsImport::class,
         'projects' => ProjectsImport::class,
         'materials' => MaterialsImport::class,
+        'stock_adjustments' => StockAdjustmentsImport::class,
         'expense_categories' => ExpenseCategoriesImport::class,
         'inventory_locations' => InventoryLocationsImport::class,
         'expenses' => ExpensesImport::class,

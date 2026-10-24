@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\InternalDeliveryNote;
+use App\Models\InventoryLocation;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\UserPermissionOverride;
@@ -70,11 +72,9 @@ class Access
             ];
         }
 
-        $legacy = in_array($permission, Permissions::legacy(), true);
-
         return [
-            'effective' => $legacy,
-            'source' => $legacy ? 'Granted by Role' : 'Not Granted',
+            'effective' => false,
+            'source' => 'No role assigned',
             'mode' => 'inherit',
         ];
     }
@@ -106,5 +106,85 @@ class Access
         }
 
         return $user->projects()->whereKey($project->id)->exists();
+    }
+
+    public function abortUnlessCanAccessProject(User $user, ?Project $project): void
+    {
+        if ($project === null) {
+            return;
+        }
+
+        abort_unless($this->canAccessProject($user, $project), 404);
+    }
+
+    public function abortUnlessVisibleProjectId(User $user, ?int $projectId): void
+    {
+        if ($projectId === null) {
+            return;
+        }
+
+        $project = Project::query()->find($projectId);
+        abort_unless($project instanceof Project && $this->canAccessProject($user, $project), 404);
+    }
+
+    /**
+     * @return list<int>|null Null means every project is visible.
+     */
+    public function visibleProjectIds(User $user): ?array
+    {
+        if ($this->seesAllProjects($user)) {
+            return null;
+        }
+
+        return $user->projects()->pluck('projects.id')->map(fn ($id) => (int) $id)->values()->all();
+    }
+
+    /**
+     * @return array{project_id: int|null, project_ids: list<int>|null}
+     */
+    public function projectScope(User $user, ?int $projectId): array
+    {
+        $this->abortUnlessVisibleProjectId($user, $projectId);
+
+        if ($projectId !== null || $this->seesAllProjects($user)) {
+            return ['project_id' => $projectId, 'project_ids' => null];
+        }
+
+        return ['project_id' => null, 'project_ids' => $this->visibleProjectIds($user) ?? []];
+    }
+
+    public function abortUnlessCanAccessLocation(User $user, InventoryLocation $location): void
+    {
+        if ($location->project_id) {
+            $project = $location->project ?? Project::query()->find($location->project_id);
+            abort_unless($project instanceof Project && $this->canAccessProject($user, $project), 404);
+
+            return;
+        }
+
+        abort_unless($this->seesAllProjects($user), 404);
+    }
+
+    public function abortUnlessCanResolveTransfer(User $user, InternalDeliveryNote $note): void
+    {
+        $projectIds = array_values(array_unique(array_filter([
+            $note->source_project_id ? (int) $note->source_project_id : null,
+            $note->destination_project_id ? (int) $note->destination_project_id : null,
+        ])));
+
+        if ($projectIds === []) {
+            abort_unless($this->seesAllProjects($user), 404);
+
+            return;
+        }
+
+        foreach ($projectIds as $projectId) {
+            $project = Project::query()->find($projectId);
+            if ($project instanceof Project && $this->canAccessProject($user, $project)) {
+                return;
+            }
+        }
+
+        abort(404);
     }
 }

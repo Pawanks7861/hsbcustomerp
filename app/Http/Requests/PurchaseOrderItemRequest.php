@@ -8,7 +8,16 @@ class PurchaseOrderItemRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->isActive() === true;
+        $user = $this->user();
+        if ($user?->isActive() !== true) {
+            return false;
+        }
+
+        $permission = $this->isMethod('put') || $this->isMethod('patch')
+            ? 'purchase_orders.edit'
+            : 'purchase_orders.create';
+
+        return app(\App\Services\Access::class)->allows($user, $permission);
     }
 
     public function rules(): array

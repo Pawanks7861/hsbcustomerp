@@ -17,7 +17,9 @@ class VendorLedgerController extends Controller
         abort_unless($access->allows($request->user(), 'vendors.ledger'), 403);
 
         $vendorId = $request->integer('vendor_id') ?: null;
-        $projectId = $request->integer('project_id') ?: null;
+        $scope = $access->projectScope($request->user(), $request->integer('project_id') ?: null);
+        $projectId = $scope['project_id'];
+        $projectIds = $scope['project_ids'];
         $from = $request->string('from')->toString() ?: null;
         $to = $request->string('to')->toString() ?: null;
 
@@ -35,13 +37,13 @@ class VendorLedgerController extends Controller
                 'to' => $to,
             ],
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name', 'vendor_code']),
-            'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
+            'projects' => Project::query()->visibleTo($request->user())->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
             'reconciliation' => null,
             'rows' => $vendors->map(fn (Vendor $vendor) => [
                 'id' => $vendor->id,
                 'name' => $vendor->name,
                 'vendor_code' => $vendor->vendor_code,
-                ...$ledger->reconcile($vendor, $projectId, $from, $to),
+                ...$ledger->reconcile($vendor, $projectId, $from, $to, $projectIds),
             ])->values(),
         ]);
     }
@@ -50,7 +52,9 @@ class VendorLedgerController extends Controller
     {
         abort_unless($access->allows($request->user(), 'vendors.ledger'), 403);
 
-        $projectId = $request->integer('project_id') ?: null;
+        $scope = $access->projectScope($request->user(), $request->integer('project_id') ?: null);
+        $projectId = $scope['project_id'];
+        $projectIds = $scope['project_ids'];
         $from = $request->string('from')->toString() ?: null;
         $to = $request->string('to')->toString() ?: null;
 
@@ -67,8 +71,8 @@ class VendorLedgerController extends Controller
                 'to' => $to,
             ],
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name', 'vendor_code']),
-            'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
-            'reconciliation' => $ledger->reconcile($vendor, $projectId, $from, $to),
+            'projects' => Project::query()->visibleTo($request->user())->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
+            'reconciliation' => $ledger->reconcile($vendor, $projectId, $from, $to, $projectIds),
             'rows' => [],
         ]);
     }
@@ -77,11 +81,13 @@ class VendorLedgerController extends Controller
     {
         abort_unless($access->allows($request->user(), 'vendors.ledger'), 403);
 
-        $projectId = $request->integer('project_id') ?: null;
+        $scope = $access->projectScope($request->user(), $request->integer('project_id') ?: null);
+        $projectId = $scope['project_id'];
+        $projectIds = $scope['project_ids'];
         $from = $request->string('from')->toString() ?: null;
         $to = $request->string('to')->toString() ?: null;
 
-        $statement = $ledger->statement($vendor, $projectId, $from, $to);
+        $statement = $ledger->statement($vendor, $projectId, $from, $to, $projectIds);
 
         return Inertia::render('Vendors/Ledger', [
             'vendor' => [
@@ -94,7 +100,7 @@ class VendorLedgerController extends Controller
                 'from' => $from,
                 'to' => $to,
             ],
-            'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
+            'projects' => Project::query()->visibleTo($request->user())->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
             'opening' => $statement['opening'],
             'closing' => $statement['closing'],
             'total_debit' => $statement['total_debit'],

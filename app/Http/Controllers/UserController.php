@@ -62,7 +62,8 @@ class UserController extends Controller
     public function store(StoreUserRequest $request): RedirectResponse
     {
         $this->guardPrivilege($request, null);
-        $user = User::query()->create($request->safe()->except(['password_confirmation', 'project_ids', 'role_ids']));
+        $user = User::query()->create($request->safe()->only(['name', 'email', 'phone', 'designation', 'password']));
+        $this->applyPrivileges($user, $request);
         $this->syncRoles($request, $user);
         $this->syncProjects($request, $user);
         $this->activity->log($request->user()->id, 'user.created', $user, [
@@ -121,13 +122,14 @@ class UserController extends Controller
             'status' => $user->status,
             'project_access' => $user->project_access,
         ];
-        $data = collect($request->validated())->except(['password', 'password_confirmation', 'project_ids', 'role_ids'])->all();
+        $profile = collect($request->validated())->only(['name', 'email', 'phone', 'designation'])->all();
 
         if ($request->filled('password')) {
-            $data['password'] = $request->validated('password');
+            $profile['password'] = $request->validated('password');
         }
 
-        $user->update($data);
+        $user->fill($profile);
+        $this->applyPrivileges($user, $request);
         $this->syncRoles($request, $user);
         $this->syncProjects($request, $user);
         $user->load('roles');
@@ -161,7 +163,7 @@ class UserController extends Controller
             return back()->with('error', 'The last active Super Admin cannot be deactivated.');
         }
 
-        $user->update(['status' => $status]);
+        $user->forceFill(['status' => $status])->save();
         $this->activity->log($request->user()->id, 'user.status', $user, ['status' => $status]);
 
         return back()->with('success', $status === User::STATUS_ACTIVE ? 'User activated.' : 'User deactivated.');
@@ -305,6 +307,19 @@ class UserController extends Controller
         if ($user && $user->is_admin && ! $request->boolean('is_admin') && $this->isLastSuperAdmin($user)) {
             abort(403, 'The last active Super Admin cannot be removed.');
         }
+
+        if (! $request->boolean('is_admin') && $roleIds === []) {
+            abort(422, 'Assign at least one staff role.');
+        }
+    }
+
+    private function applyPrivileges(User $user, Request $request): void
+    {
+        $user->forceFill([
+            'status' => $request->validated('status'),
+            'is_admin' => $request->boolean('is_admin'),
+            'project_access' => $request->input('project_access') ?: 'all',
+        ])->save();
     }
 
     private function syncRoles(Request $request, User $user): void
@@ -313,6 +328,7 @@ class UserController extends Controller
             collect($request->input('role_ids', []))->map(fn ($id) => (int) $id)->filter()->unique()->values()->all()
         );
         $user->unsetRelation('roles');
+        $user->unsetRelation('permissionOverrides');
     }
 
     private function syncProjects(Request $request, User $user): void

@@ -74,8 +74,14 @@ class ClientController extends Controller
     {
         abort_unless($access->allows($request->user(), 'clients.view'), 403);
 
-        $summary = $ledger->summary($client);
-        $invoices = $client->invoices()->with('project:id,project_name,project_code')->latest('invoice_date')->limit(50)->get();
+        $projectIds = $access->visibleProjectIds($request->user());
+        $summary = $ledger->summary($client, $projectIds);
+        $invoices = $client->invoices()
+            ->with('project:id,project_name,project_code')
+            ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds ?: [0]))
+            ->latest('invoice_date')
+            ->limit(50)
+            ->get();
 
         return Inertia::render('Clients/Show', [
             'client' => $this->payload($client),
@@ -117,14 +123,14 @@ class ClientController extends Controller
     {
         abort_unless($access->allows($request->user(), 'clients.ledger'), 403);
 
-        $projectId = $request->integer('project_id') ?: null;
-        $statement = $ledger->statement($client, $projectId);
+        $scope = $access->projectScope($request->user(), $request->integer('project_id') ?: null);
+        $statement = $ledger->statement($client, $scope['project_id'], $scope['project_ids']);
 
         return Inertia::render('Clients/Ledger', [
             'client' => $this->payload($client),
             'entries' => $statement['entries'],
             'totals' => $statement['totals'],
-            'filters' => ['project_id' => $projectId],
+            'filters' => ['project_id' => $scope['project_id']],
         ]);
     }
 

@@ -31,7 +31,36 @@ const modeLabels = {
     skip_duplicates: 'Skip existing duplicates',
     update_matched: 'Update matched records only',
     upsert: 'Create new and update matched',
+    opening_stock: 'Add Opening Stock (do not add again if already recorded)',
+    stock_adjustment: 'Stock Adjustment (controlled increase or decrease)',
+    item_details_only: 'Update Item Details Only (no stock change)',
 };
+
+const templateQuery = computed(() => {
+    const params = new URLSearchParams();
+    if (props.project?.id) params.set('project_id', String(props.project.id));
+    const query = params.toString();
+    return query ? `?${query}` : '';
+});
+
+const csvTemplateQuery = computed(() => {
+    const params = new URLSearchParams();
+    params.set('format', 'csv');
+    if (props.project?.id) params.set('project_id', String(props.project.id));
+    return `?${params.toString()}`;
+});
+
+function rowDetails(row) {
+    if (row.errors?.length) return row.errors.join(' ');
+    const data = row.data || {};
+    const parts = [];
+    if (data.material_code || data.name) parts.push(data.material_code ? `${data.material_code} ${data.name || ''}`.trim() : data.name);
+    if (data.location || data._location_name) parts.push(data._location_name || data.location);
+    if (data.opening_quantity !== undefined && data.opening_quantity !== null && data.opening_quantity !== '') {
+        parts.push(`qty ${data.opening_quantity}${data.unit ? ' ' + data.unit : ''}`);
+    }
+    return parts.length ? parts.join(' · ') : JSON.stringify(data);
+}
 
 const previewRows = computed(() => props.preview?.rows ?? []);
 const counts = computed(() => props.preview?.counts ?? null);
@@ -70,8 +99,8 @@ function confirmImport() {
             <PageHeader :title="`Import ${label}`" eyebrow="Data Import">
                 <Link v-if="returnUrl" :href="returnUrl" class="ui-btn-secondary">Back</Link>
                 <Link href="/imports/history" class="ui-btn-secondary">Import History</Link>
-                <a :href="`/imports/${module}/template`" class="ui-btn-secondary">Download Excel</a>
-                <a :href="`/imports/${module}/template?format=csv`" class="ui-btn-secondary">Download CSV</a>
+                <a :href="`/imports/${module}/template${templateQuery}`" class="ui-btn-secondary">Download Excel Template</a>
+                <a :href="`/imports/${module}/template${csvTemplateQuery}`" class="ui-btn-secondary">Download CSV Template</a>
             </PageHeader>
         </template>
 
@@ -196,7 +225,7 @@ function confirmImport() {
                                 <td>{{ row.action || '—' }}</td>
                                 <td>
                                     <span v-if="row.errors?.length" class="text-rose-600">{{ row.errors.join(' ') }}</span>
-                                    <span v-else class="text-slate-500">{{ JSON.stringify(row.data) }}</span>
+                                    <span v-else class="text-slate-500">{{ rowDetails(row) }}</span>
                                 </td>
                             </tr>
                         </tbody>

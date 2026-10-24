@@ -25,10 +25,6 @@ class User extends Authenticatable
         'password',
         'phone',
         'designation',
-        'status',
-        'is_admin',
-        'project_access',
-        'last_login_at',
     ];
 
     protected $hidden = [
@@ -43,6 +39,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'last_login_at' => 'datetime',
+            'menu_tutorial_completed_at' => 'datetime',
         ];
     }
 

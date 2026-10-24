@@ -12,12 +12,12 @@ use App\Services\DocumentNumber;
 use App\Services\DocumentPdf;
 use App\Support\PdfFormat;
 use App\Support\Money;
+use App\Support\StoredUpload;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -151,7 +151,11 @@ class MaterialReceiptController extends Controller
         abort_unless($image->material_receipt_id === $receipt->id, 404);
         abort_unless(Storage::disk('local')->exists($image->image_path), 404);
 
-        return Storage::disk('local')->response($image->image_path);
+        return StoredUpload::serve(
+            $image->image_path,
+            inlineIfSafe: true,
+            expectedPrefix: 'projects/'.$project->id.'/receipts',
+        );
     }
 
     private function persist(Request $request, Project $project, ?MaterialReceipt $receipt): MaterialReceipt
@@ -169,7 +173,7 @@ class MaterialReceiptController extends Controller
             'items.*.quantity_received' => ['nullable', 'numeric', 'gte:0'],
             'items.*.remarks' => ['nullable', 'string', 'max:1000'],
             'images' => ['nullable', 'array'],
-            'images.*' => ['file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'images.*' => StoredUpload::rules(StoredUpload::IMAGES, 5120),
         ]);
 
         $order = $this->orderForProject($project, $validated['purchase_order_id'] ?? null);
@@ -297,8 +301,7 @@ class MaterialReceiptController extends Controller
     private function storeImages(Request $request, Project $project, MaterialReceipt $receipt): void
     {
         foreach ($request->file('images', []) as $image) {
-            $name = Str::uuid()->toString().'.'.strtolower($image->getClientOriginalExtension());
-            $path = $image->storeAs('projects/'.$project->id.'/receipts', $name, 'local');
+            $path = StoredUpload::store($image, 'projects/'.$project->id.'/receipts');
             $receipt->images()->create(['image_path' => $path]);
         }
     }

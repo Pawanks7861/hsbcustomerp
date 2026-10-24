@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use App\Models\Project;
+use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorPayment;
 use App\Services\Access;
@@ -12,6 +13,7 @@ use App\Services\DocumentNumber;
 use App\Services\DocumentPdf;
 use App\Support\DocumentStatus;
 use App\Support\Money;
+use App\Support\StoredUpload;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -31,12 +33,20 @@ class ExpenseController extends Controller
         $query = Expense::query()->with(['category', 'project', 'vendor']);
         if ($project) {
             $query->where('project_id', $project->id);
+        } else {
+            $visibleIds = $access->visibleProjectIds($request->user());
+            if ($visibleIds !== null) {
+                $query->where(function ($inner) use ($visibleIds): void {
+                    $inner->whereNull('project_id')->orWhereIn('project_id', $visibleIds ?: [0]);
+                });
+            }
         }
 
         $categoryId = $request->integer('category_id') ?: null;
         $from = $request->string('from')->toString() ?: null;
         $to = $request->string('to')->toString() ?: null;
         $projectId = $project?->id ?: ($request->integer('project_id') ?: null);
+        $access->abortUnlessVisibleProjectId($request->user(), $projectId && ! $project ? $projectId : null);
 
         if ($categoryId) {
             $query->where('category_id', $categoryId);
@@ -57,7 +67,7 @@ class ExpenseController extends Controller
             'project' => $project ? $this->projectCard($project) : null,
             'expenses' => $expenses->map(fn (Expense $expense) => $this->listRow($expense)),
             'categories' => ExpenseCategory::query()->orderBy('name')->get(['id', 'name']),
-            'projects' => $project ? [] : Project::query()->orderBy('project_name')->get(['id', 'project_name']),
+            'projects' => $project ? [] : Project::query()->visibleTo($request->user())->orderBy('project_name')->get(['id', 'project_name']),
             'filters' => [
                 'category_id' => $categoryId,
                 'project_id' => $project ? null : $projectId,
@@ -76,7 +86,7 @@ class ExpenseController extends Controller
             'project' => $project ? $this->projectCard($project) : null,
             'expense' => null,
             'categories' => $this->categories(),
-            'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
+            'projects' => Project::query()->visibleTo($request->user())->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
             'vendors' => $this->vendorOptions(),
             'paymentModes' => VendorPayment::MODES,
         ]);
@@ -99,9 +109,7 @@ class ExpenseController extends Controller
         abort_unless($access->allows($request->user(), 'expenses.view'), 403);
         $expense = $this->routeExpense($request);
         $project = $this->routeProject($request);
-        if ($project) {
-            $this->ensureExpense($project, $expense);
-        }
+        $this->guardExpenseAccess($request->user(), $expense, $project, $access);
 
         $expense->load(['category', 'project', 'vendor', 'creator', 'approver']);
 
@@ -115,15 +123,13 @@ class ExpenseController extends Controller
     public function edit(Request $request, Access $access, Expense $expense, ?Project $project = null): Response
     {
         abort_unless($access->allows($request->user(), 'expenses.edit'), 403);
-        if ($project) {
-            $this->ensureExpense($project, $expense);
-        }
+        $this->guardExpenseAccess($request->user(), $expense, $project, $access);
 
         return Inertia::render('Expenses/Form', [
             'project' => $project ? $this->projectCard($project) : null,
             'expense' => $this->detailPayload($expense),
             'categories' => $this->categories($expense),
-            'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
+            'projects' => Project::query()->visibleTo($request->user())->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
             'vendors' => $this->vendorOptions(),
             'paymentModes' => VendorPayment::MODES,
         ]);
@@ -132,9 +138,7 @@ class ExpenseController extends Controller
     public function update(Request $request, Access $access, Expense $expense, ?Project $project = null): RedirectResponse
     {
         abort_unless($access->allows($request->user(), 'expenses.edit'), 403);
-        if ($project) {
-            $this->ensureExpense($project, $expense);
-        }
+        $this->guardExpenseAccess($request->user(), $expense, $project, $access);
 
         $this->persist($request, $project, $expense);
 
@@ -148,9 +152,7 @@ class ExpenseController extends Controller
     public function destroy(Request $request, Access $access, Expense $expense, ?Project $project = null): RedirectResponse
     {
         abort_unless($access->allows($request->user(), 'expenses.edit'), 403);
-        if ($project) {
-            $this->ensureExpense($project, $expense);
-        }
+        $this->guardExpenseAccess($request->user(), $expense, $project, $access);
 
         if ($expense->status === DocumentStatus::APPROVED) {
             return back()->with('error', 'Approved expenses cannot be deleted.');
@@ -169,9 +171,7 @@ class ExpenseController extends Controller
     public function submit(Request $request, Access $access, Expense $expense, ?Project $project = null): RedirectResponse
     {
         abort_unless($access->allows($request->user(), 'expenses.submit'), 403);
-        if ($project) {
-            $this->ensureExpense($project, $expense);
-        }
+        $this->guardExpenseAccess($request->user(), $expense, $project, $access);
 
         if (! in_array($expense->status, [DocumentStatus::DRAFT, DocumentStatus::REJECTED], true)) {
             throw ValidationException::withMessages(['status' => 'Only draft or rejected expenses can be submitted.']);
@@ -189,9 +189,7 @@ class ExpenseController extends Controller
     public function approve(Request $request, Access $access, Expense $expense, ?Project $project = null): RedirectResponse
     {
         abort_unless($access->allows($request->user(), 'expenses.approve'), 403);
-        if ($project) {
-            $this->ensureExpense($project, $expense);
-        }
+        $this->guardExpenseAccess($request->user(), $expense, $project, $access);
 
         if ($expense->status !== DocumentStatus::SUBMITTED) {
             throw ValidationException::withMessages(['status' => 'Only submitted expenses can be approved.']);
@@ -256,9 +254,7 @@ class ExpenseController extends Controller
     private function renderPdf(Request $request, Access $access, DocumentPdf $pdf, Expense $expense, ?Project $project, bool $download): HttpResponse
     {
         abort_unless($access->allows($request->user(), 'expenses.print'), 403);
-        if ($project) {
-            $this->ensureExpense($project, $expense);
-        }
+        $this->guardExpenseAccess($request->user(), $expense, $project, $access);
         $expense->load(['category', 'project', 'vendor', 'creator', 'approver']);
 
         $payload = [
@@ -276,9 +272,7 @@ class ExpenseController extends Controller
     public function reject(Request $request, Access $access, Expense $expense, ?Project $project = null): RedirectResponse
     {
         abort_unless($access->allows($request->user(), 'expenses.reject'), 403);
-        if ($project) {
-            $this->ensureExpense($project, $expense);
-        }
+        $this->guardExpenseAccess($request->user(), $expense, $project, $access);
 
         if ($expense->status !== DocumentStatus::SUBMITTED) {
             throw ValidationException::withMessages(['status' => 'Only submitted expenses can be rejected.']);
@@ -314,7 +308,7 @@ class ExpenseController extends Controller
             'round_off' => ['nullable', 'numeric'],
             'payment_status' => ['required', Rule::in([Expense::PAYMENT_UNPAID, Expense::PAYMENT_PAID, Expense::PAYMENT_PARTIAL])],
             'notes' => ['nullable', 'string'],
-            'attachment' => ['nullable', 'file', 'max:5120'],
+            'attachment' => array_merge(['nullable'], StoredUpload::rules(StoredUpload::DOCUMENTS, 5120)),
         ]);
 
         $category = ExpenseCategory::query()->find((int) $validated['category_id']);
@@ -326,6 +320,9 @@ class ExpenseController extends Controller
         }
 
         $projectId = $project?->id ?? ($validated['project_id'] ?? null);
+        if ($projectId) {
+            app(Access::class)->abortUnlessVisibleProjectId($request->user(), (int) $projectId);
+        }
         $amount = Money::scale((string) $validated['amount'], 2);
         $tax = Money::scale((string) ($validated['tax_amount'] ?? 0), 2);
         $round = Money::scale((string) ($validated['round_off'] ?? 0), 2);
@@ -338,7 +335,7 @@ class ExpenseController extends Controller
                 if ($path) {
                     Storage::disk('local')->delete($path);
                 }
-                $path = $request->file('attachment')->store('expenses', 'local');
+                $path = StoredUpload::store($request->file('attachment'), 'expenses');
             }
 
             $payload = [
@@ -377,6 +374,21 @@ class ExpenseController extends Controller
     private function ensureExpense(Project $project, Expense $expense): void
     {
         abort_unless((int) $expense->project_id === (int) $project->id, 404);
+    }
+
+    private function guardExpenseAccess(?User $user, Expense $expense, ?Project $project, Access $access): void
+    {
+        abort_unless($user instanceof User, 403);
+
+        if ($project) {
+            $this->ensureExpense($project, $expense);
+        }
+
+        if ($expense->project_id) {
+            $owned = $expense->project ?? Project::query()->find($expense->project_id);
+            abort_unless($owned instanceof Project, 404);
+            $access->abortUnlessCanAccessProject($user, $owned);
+        }
     }
 
     /**

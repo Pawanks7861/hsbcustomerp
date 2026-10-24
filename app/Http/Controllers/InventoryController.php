@@ -2,12 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\InventoryLocation;
 use App\Models\Material;
 use App\Models\MaterialIssue;
 use App\Models\MaterialReceipt;
 use App\Models\Project;
 use App\Models\StockLedgerEntry;
+use App\Services\Access;
+use App\Services\InventoryLocationService;
 use App\Services\InventoryStock;
+use App\Services\StockAdjustmentService;
 use App\Support\Money;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -15,19 +19,31 @@ use Inertia\Response;
 
 class InventoryController extends Controller
 {
-    public function __construct(private InventoryStock $stock) {}
+    public function __construct(
+        private InventoryStock $stock,
+        private StockAdjustmentService $adjustments,
+        private InventoryLocationService $locations,
+        private Access $access,
+    ) {}
 
     public function dashboard(Request $request, Project $project): Response
     {
         $from = $request->string('from')->toString();
         $to = $request->string('to')->toString();
-        $balances = $this->balances($project);
+        $balances = $this->locationBalances($request, $project);
         $withStock = 0;
         $low = 0;
         $out = 0;
+        $seen = [];
 
         foreach ($balances as $row) {
-            if (bccomp($row['available'], '0', 3) === 1) {
+            $id = (int) $row['material_id'];
+            if (isset($seen[$id])) {
+                continue;
+            }
+            $seen[$id] = true;
+
+            if (bccomp($row['total_available'], '0', 3) === 1) {
                 $withStock++;
             }
 
@@ -84,34 +100,55 @@ class InventoryController extends Controller
         ]);
     }
 
-    public function stock(Project $project): Response
+    public function stock(Request $request, Project $project): Response
     {
+        $user = $request->user();
+
         return Inertia::render('Inventory/Stock', [
             'project' => $this->projectCard($project),
-            'rows' => array_values($this->balances($project)),
+            'locations' => $this->adjustments->locationCards($user, $project),
+            'filters' => [
+                'location_id' => $request->integer('location_id') ?: null,
+            ],
+            'rows' => $this->locationBalances($request, $project),
+            'canAdjust' => $this->access->allows($user, 'inventory.adjust') || $user->is_admin,
+            'canImport' => $this->access->allows($user, 'inventory.import') || $user->is_admin,
         ]);
     }
 
     public function ledger(Request $request, Project $project): Response
     {
         $materialId = $request->integer('material_id') ?: null;
+        $locationId = $request->integer('location_id') ?: null;
 
         $entries = StockLedgerEntry::query()
             ->where('project_id', $project->id)
             ->when($materialId, fn ($query) => $query->where('material_id', $materialId))
-            ->with(['material', 'postedBy'])
+            ->when($locationId, function ($query) use ($locationId, $project) {
+                $location = InventoryLocation::query()->find($locationId);
+                if ($location && $location->is_default && (int) $location->project_id === (int) $project->id) {
+                    $query->where(function ($inner) use ($locationId) {
+                        $inner->where('location_id', $locationId)->orWhereNull('location_id');
+                    });
+                } else {
+                    $query->where('location_id', $locationId);
+                }
+            })
+            ->with(['material', 'location', 'postedBy'])
             ->orderBy('id')
             ->get();
 
         return Inertia::render('Inventory/Ledger', [
             'project' => $this->projectCard($project),
             'materials' => Material::query()->orderBy('name')->get(['id', 'material_code', 'name']),
-            'filters' => ['material_id' => $materialId],
+            'locations' => $this->adjustments->locationCards($request->user(), $project),
+            'filters' => ['material_id' => $materialId, 'location_id' => $locationId],
             'entries' => $entries->map(fn (StockLedgerEntry $entry) => [
                 'id' => $entry->id,
                 'transaction_number' => $entry->transaction_number,
                 'transaction_date' => $entry->transaction_date?->toDateString(),
                 'material' => trim($entry->material?->material_code.' '.$entry->material?->name),
+                'location' => $entry->location?->name,
                 'transaction_type' => $entry->transaction_type,
                 'source_type' => $entry->source_type,
                 'source_number' => $entry->source_number,
@@ -125,10 +162,18 @@ class InventoryController extends Controller
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * @return list<array<string, mixed>>
      */
-    private function balances(Project $project): array
+    private function locationBalances(Request $request, Project $project): array
     {
+        $filterLocationId = $request->integer('location_id') ?: null;
+        $default = $this->locations->ensureProjectStore($project);
+        $locations = $this->adjustments->selectableLocations($request->user(), $project);
+
+        if ($filterLocationId) {
+            $locations = $locations->where('id', $filterLocationId)->values();
+        }
+
         $materialIds = StockLedgerEntry::query()
             ->where('project_id', $project->id)
             ->distinct()
@@ -148,19 +193,33 @@ class InventoryController extends Controller
             $received = Money::scale((string) StockLedgerEntry::query()->where('project_id', $project->id)->where('material_id', $materialId)->where('transaction_type', StockLedgerEntry::RECEIPT)->sum('stock_in'), 3) ?? '0.000';
             $issued = Money::scale((string) StockLedgerEntry::query()->where('project_id', $project->id)->where('material_id', $materialId)->where('transaction_type', StockLedgerEntry::ISSUE)->sum('stock_out'), 3) ?? '0.000';
             $minimum = Money::scale($material->minimum_stock, 3) ?? '0.000';
+            $status = $this->status($available, $minimum);
 
-            $rows[(int) $materialId] = [
-                'material_id' => $material->id,
-                'material_code' => $material->material_code,
-                'material_name' => $material->name,
-                'unit' => $material->unit,
-                'total_received' => $received,
-                'total_issued' => $issued,
-                'adjustments' => Money::sub(Money::add($available, $issued, 3), $received, 3),
-                'available' => $available,
-                'minimum_stock' => $minimum,
-                'status' => $this->status($available, $minimum),
-            ];
+            foreach ($locations as $location) {
+                $atLocation = $this->stock->locationBalance($project->id, (int) $materialId, (int) $location->id);
+
+                if (bccomp($atLocation, '0', 3) === 0) {
+                    continue;
+                }
+
+                $rows[] = [
+                    'material_id' => $material->id,
+                    'material_code' => $material->material_code,
+                    'material_name' => $material->name,
+                    'unit' => $material->unit,
+                    'location_id' => $location->id,
+                    'location' => $location->name,
+                    'location_code' => $location->location_code,
+                    'is_default_location' => (int) $location->id === (int) $default->id,
+                    'total_received' => $received,
+                    'total_issued' => $issued,
+                    'adjustments' => Money::sub(Money::add($available, $issued, 3), $received, 3),
+                    'available' => $atLocation,
+                    'total_available' => $available,
+                    'minimum_stock' => $minimum,
+                    'status' => $status,
+                ];
+            }
         }
 
         return $rows;

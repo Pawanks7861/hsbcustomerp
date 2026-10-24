@@ -766,7 +766,7 @@ class ReportQueryService
     {
         $project = Project::query()->find($projectId);
         if ($project && ! $this->access->canAccessProject($user, $project)) {
-            abort(403);
+            abort(404);
         }
     }
 

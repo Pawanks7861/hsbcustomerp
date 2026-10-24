@@ -26,7 +26,7 @@ class ImportController extends Controller
 
     public function show(Request $request, string $module): Response
     {
-        if (in_array($module, ['store', 'grn', 'invoices', 'idn', 'material_issues', 'stock_adjustments', 'boq'], true)) {
+        if (in_array($module, ['store', 'grn', 'invoices', 'idn', 'material_issues', 'boq'], true)) {
             return $this->restricted($request, $module);
         }
 
@@ -78,15 +78,7 @@ class ImportController extends Controller
                 'message' => 'Material issues post stock out of stores. Create draft issues in Inventory and post them through the existing approval workflow.',
                 'alternatives' => [
                     ['label' => 'Import Materials', 'href' => '/imports/materials'],
-                ],
-            ],
-            'stock_adjustments' => [
-                'permission' => 'inventory.import',
-                'title' => 'Import Stock Adjustments',
-                'message' => 'Stock adjustments require the authorized adjustment workflow and must never be posted twice from an import file.',
-                'alternatives' => [
-                    ['label' => 'Import Materials', 'href' => '/imports/materials'],
-                    ['label' => 'Import Inventory Locations', 'href' => '/imports/inventory_locations'],
+                    ['label' => 'Import Location Stock', 'href' => '/imports/stock_adjustments'],
                 ],
             ],
             'boq' => [
@@ -116,8 +108,9 @@ class ImportController extends Controller
         $this->authorizeImport($request, $definition->permission());
 
         $format = $request->string('format')->toString() === 'csv' ? 'csv' : 'xlsx';
+        $project = $this->resolveProject($request);
 
-        return $this->spreadsheet->download($definition, $format);
+        return $this->spreadsheet->download($definition, $format, $request->user(), $project);
     }
 
     public function preview(Request $request, string $module): Response
@@ -126,15 +119,13 @@ class ImportController extends Controller
         $this->authorizeImport($request, $definition->permission());
 
         $data = $request->validate([
-            'file' => ['required', 'file', 'max:10240', 'mimes:xlsx,xls,csv,txt'],
+            'file' => ['required', 'file', 'max:10240', 'mimes:xlsx,xls,csv,txt', 'extensions:xlsx,xls,csv,txt'],
             'duplicate_mode' => ['required', Rule::in($definition->supportedModes())],
             'project_id' => ['nullable', 'integer', 'exists:projects,id'],
             'return' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $project = isset($data['project_id'])
-            ? Project::query()->find($data['project_id'])
-            : $this->resolveProject($request);
+        $project = $this->resolveProject($request);
 
         $preview = $this->engine->preview(
             $module,
@@ -152,7 +143,13 @@ class ImportController extends Controller
         $definition = $this->engine->definition($batch->module);
         $this->authorizeImport($request, $definition->permission());
 
-        $project = $batch->project_id ? Project::query()->find($batch->project_id) : null;
+        $project = null;
+        if ($batch->project_id) {
+            $project = Project::query()->find($batch->project_id);
+            abort_unless($project instanceof Project, 404);
+            $this->access->abortUnlessCanAccessProject($request->user(), $project);
+        }
+
         $result = $this->engine->confirm($batch, $request->user(), $project);
 
         return $this->wizard($request, $batch->module, null, $result, $project);
@@ -243,12 +240,7 @@ class ImportController extends Controller
         }
 
         $project = Project::query()->findOrFail($id);
-        abort_unless(
-            $this->access->seesAllProjects($request->user())
-            || $request->user()->projects()->where('projects.id', $project->id)->exists()
-            || $request->user()->is_admin,
-            403
-        );
+        $this->access->abortUnlessCanAccessProject($request->user(), $project);
 
         return $project;
     }

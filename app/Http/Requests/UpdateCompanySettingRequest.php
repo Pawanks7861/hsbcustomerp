@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Rules\SafeFavicon;
+use App\Support\StoredUpload;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateCompanySettingRequest extends FormRequest
@@ -26,7 +27,7 @@ class UpdateCompanySettingRequest extends FormRequest
             'gst_number' => ['nullable', 'string', 'max:20'],
             'pan_number' => ['nullable', 'string', 'max:20'],
             'website' => ['nullable', 'string', 'max:255'],
-            'logo' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'logo' => array_merge(['nullable'], StoredUpload::rules(StoredUpload::IMAGES, 2048)),
             'favicon' => ['nullable', 'file', 'max:512', new SafeFavicon],
         ];
     }

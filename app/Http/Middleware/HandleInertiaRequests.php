@@ -65,7 +65,7 @@ class HandleInertiaRequests extends Middleware
                 'can_configure' => app(\App\Services\Access::class)->canConfigureApprovals($user),
             ] : null,
             'menu_tutorial' => function () use ($user) {
-                if (! $user) {
+                if (! $user || $user->menu_tutorial_completed_at) {
                     return null;
                 }
 

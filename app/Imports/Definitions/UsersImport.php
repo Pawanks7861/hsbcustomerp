@@ -124,11 +124,13 @@ class UsersImport extends AbstractImportDefinition
             'email' => $row->data['email'],
             'phone' => $row->data['phone'],
             'designation' => $row->data['designation'],
+            'password' => Hash::make($password),
+        ]);
+        $user->forceFill([
             'status' => $row->data['status'] ?? User::STATUS_INACTIVE,
             'is_admin' => false,
             'project_access' => 'all',
-            'password' => Hash::make($password),
-        ]);
+        ])->save();
 
         $user->roles()->sync([$row->data['role_id']]);
 

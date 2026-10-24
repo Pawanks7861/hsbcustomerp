@@ -27,12 +27,12 @@ class ReportSpreadsheet
         $sheet->setTitle(substr(preg_replace('/[^A-Za-z0-9 ]/', '', $title) ?: 'Report', 0, 31));
 
         $rowIndex = 1;
-        $sheet->setCellValue("A{$rowIndex}", $title);
+        $sheet->setCellValue("A{$rowIndex}", \App\Support\SafeInput::spreadsheetCell($title));
         $rowIndex += 2;
 
         if ($sections !== null && $sections !== []) {
             foreach ($sections as $section) {
-                $sheet->setCellValue("A{$rowIndex}", (string) ($section['title'] ?? 'Section'));
+                $sheet->setCellValue("A{$rowIndex}", \App\Support\SafeInput::spreadsheetCell((string) ($section['title'] ?? 'Section')));
                 $rowIndex++;
                 $sectionColumns = $section['columns'] ?? [];
                 $rowIndex = $this->writeTable($sheet, $rowIndex, $sectionColumns, $section['rows'] ?? []);
@@ -46,8 +46,8 @@ class ReportSpreadsheet
                 $sheet->setCellValue("A{$rowIndex}", 'Totals');
                 $rowIndex++;
                 foreach ($totals as $key => $value) {
-                    $sheet->setCellValue("A{$rowIndex}", (string) $key);
-                    $sheet->setCellValue("B{$rowIndex}", (string) $value);
+                    $sheet->setCellValue("A{$rowIndex}", \App\Support\SafeInput::spreadsheetCell((string) $key));
+                    $sheet->setCellValue("B{$rowIndex}", \App\Support\SafeInput::spreadsheetCell((string) $value));
                     $rowIndex++;
                 }
             }
@@ -73,7 +73,7 @@ class ReportSpreadsheet
 
         $colIndex = 1;
         foreach ($columns as $column) {
-            $sheet->setCellValueByColumnAndRow($colIndex, $rowIndex, (string) ($column['label'] ?? $column['key'] ?? ''));
+            $sheet->setCellValueByColumnAndRow($colIndex, $rowIndex, \App\Support\SafeInput::spreadsheetCell((string) ($column['label'] ?? $column['key'] ?? '')));
             $colIndex++;
         }
         $rowIndex++;
@@ -82,7 +82,7 @@ class ReportSpreadsheet
             $colIndex = 1;
             foreach ($columns as $column) {
                 $key = (string) ($column['key'] ?? '');
-                $sheet->setCellValueByColumnAndRow($colIndex, $rowIndex, (string) ($row[$key] ?? ''));
+                $sheet->setCellValueByColumnAndRow($colIndex, $rowIndex, \App\Support\SafeInput::spreadsheetCell((string) ($row[$key] ?? '')));
                 $colIndex++;
             }
             $rowIndex++;

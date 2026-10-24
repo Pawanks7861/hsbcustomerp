@@ -47,7 +47,7 @@ class ImportEngine
 
         $stored = $file->storeAs(
             'imports/'.$user->id,
-            Str::uuid()->toString().'.'.$file->getClientOriginalExtension(),
+            Str::uuid()->toString().'.'.$this->storedExtension($file),
             'local'
         );
 
@@ -82,7 +82,7 @@ class ImportEngine
             ];
         }
 
-        $context = new ImportContext($user, $mode, $project, $boqId);
+        $context = new ImportContext($user, $mode, $project, $boqId, $batch->id);
         $outcomes = [];
         $errors = [];
 
@@ -145,7 +145,7 @@ class ImportEngine
             return ['ok' => false, 'message' => $parsed['message'], 'batch' => $this->batchPayload($batch->fresh())];
         }
 
-        $context = new ImportContext($user, $batch->duplicate_mode, $project ?? $batch->project, $boqId);
+        $context = new ImportContext($user, $batch->duplicate_mode, $project ?? $batch->project, $boqId, $batch->id);
         $outcomes = [];
 
         foreach ($parsed['rows'] as $entry) {
@@ -245,9 +245,28 @@ class ImportEngine
 
     private function assertFile(UploadedFile $file): void
     {
-        abort_unless($file->getSize() <= SpreadsheetIO::MAX_BYTES, 422, 'File exceeds the 10 MB limit.');
-        $ext = strtolower($file->getClientOriginalExtension());
-        abort_unless(in_array($ext, ['xlsx', 'xls', 'csv'], true), 422, 'Only .xlsx, .xls, and .csv files are supported.');
+        abort_unless((int) $file->getSize() <= SpreadsheetIO::MAX_BYTES, 422, 'File exceeds the 10 MB limit.');
+        $client = strtolower($file->getClientOriginalExtension());
+        abort_unless(in_array($client, ['xlsx', 'xls', 'csv'], true), 422, 'Only .xlsx, .xls, and .csv files are supported.');
+
+        $guessed = strtolower((string) ($file->guessExtension() ?: ''));
+        abort_if(
+            in_array($guessed, ['html', 'htm', 'php', 'phtml', 'js', 'svg', 'exe'], true),
+            422,
+            'The file contents are not a spreadsheet.'
+        );
+    }
+
+    private function storedExtension(UploadedFile $file): string
+    {
+        $client = strtolower($file->getClientOriginalExtension());
+        $guessed = strtolower((string) ($file->guessExtension() ?: ''));
+
+        if (in_array($guessed, ['xlsx', 'xls', 'csv', 'txt'], true)) {
+            return $guessed === 'txt' ? $client : $guessed;
+        }
+
+        return $client;
     }
 
     private function assertMode(ImportDefinition $definition, string $mode): void

@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\BoqItemBudget;
+use App\Services\Access;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -10,7 +11,7 @@ class UpdateBoqItemBudgetRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return $this->user() && app(Access::class)->allows($this->user(), 'boq.edit');
     }
 
     public function rules(): array

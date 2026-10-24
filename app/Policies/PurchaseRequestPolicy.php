@@ -11,7 +11,7 @@ class PurchaseRequestPolicy
 {
     public function update(User $user, PurchaseRequest $purchaseRequest): bool
     {
-        if (! $user->isActive()) {
+        if (! $user->isActive() || ! app(Access::class)->allows($user, 'purchase_requests.edit')) {
             return false;
         }
 
@@ -28,6 +28,7 @@ class PurchaseRequestPolicy
     public function delete(User $user, PurchaseRequest $purchaseRequest): bool
     {
         return $user->isActive()
+            && app(Access::class)->allows($user, 'purchase_requests.delete')
             && $purchaseRequest->status === DocumentStatus::DRAFT
             && ! $purchaseRequest->purchaseOrders()->exists();
     }
@@ -35,6 +36,7 @@ class PurchaseRequestPolicy
     public function submit(User $user, PurchaseRequest $purchaseRequest): bool
     {
         return $user->isActive()
+            && app(Access::class)->allows($user, 'purchase_requests.submit')
             && $purchaseRequest->status === DocumentStatus::DRAFT
             && $purchaseRequest->items()->exists();
     }
@@ -53,11 +55,15 @@ class PurchaseRequestPolicy
 
     public function reopen(User $user, PurchaseRequest $purchaseRequest): bool
     {
-        return $user->isActive() && $purchaseRequest->status === DocumentStatus::REJECTED;
+        return $user->isActive()
+            && app(Access::class)->allows($user, 'purchase_requests.edit')
+            && $purchaseRequest->status === DocumentStatus::REJECTED;
     }
 
     public function createPurchaseOrder(User $user, PurchaseRequest $purchaseRequest): bool
     {
-        return $user->isActive() && $purchaseRequest->status === DocumentStatus::APPROVED;
+        return $user->isActive()
+            && app(Access::class)->allows($user, 'purchase_orders.create')
+            && $purchaseRequest->status === DocumentStatus::APPROVED;
     }
 }

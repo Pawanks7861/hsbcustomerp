@@ -15,12 +15,12 @@ use App\Services\VendorBalanceService;
 use App\Support\DocumentStatus;
 use App\Support\Money;
 use App\Support\PdfFormat;
+use App\Support\StoredUpload;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -156,7 +156,11 @@ class PurchaseInvoiceController extends Controller
         $this->ensureInvoice($project, $invoice);
         abort_unless($invoice->invoice_file_path && Storage::disk('local')->exists($invoice->invoice_file_path), 404);
 
-        return Storage::disk('local')->response($invoice->invoice_file_path);
+        return StoredUpload::serve(
+            $invoice->invoice_file_path,
+            inlineIfSafe: true,
+            expectedPrefix: 'projects/'.$project->id.'/invoices',
+        );
     }
 
     public function submit(Request $request, Project $project, PurchaseInvoice $invoice, Access $access): RedirectResponse
@@ -280,7 +284,7 @@ class PurchaseInvoiceController extends Controller
             'round_off_mode' => ['nullable', Rule::in(['auto', 'manual'])],
             'due_date' => ['nullable', 'date'],
             'remarks' => ['nullable', 'string', 'max:2000'],
-            'invoice_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            'invoice_file' => array_merge(['nullable'], StoredUpload::rules(StoredUpload::DOCUMENTS, 10240)),
             'items' => [$lineMode ? 'present' : 'nullable', 'array'],
             'items.*.purchase_order_item_id' => ['required', 'integer'],
             'items.*.quantity' => ['nullable'],
@@ -339,9 +343,10 @@ class PurchaseInvoiceController extends Controller
         ];
 
         if ($request->file('invoice_file')) {
-            $file = $request->file('invoice_file');
-            $name = Str::uuid()->toString().'.'.strtolower($file->getClientOriginalExtension());
-            $attributes['invoice_file_path'] = $file->storeAs('projects/'.$project->id.'/invoices', $name, 'local');
+            $attributes['invoice_file_path'] = StoredUpload::store(
+                $request->file('invoice_file'),
+                'projects/'.$project->id.'/invoices',
+            );
 
             if ($invoice?->invoice_file_path) {
                 Storage::disk('local')->delete($invoice->invoice_file_path);

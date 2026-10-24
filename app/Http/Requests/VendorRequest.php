@@ -9,7 +9,14 @@ class VendorRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->isActive() === true;
+        $user = $this->user();
+        if ($user?->isActive() !== true) {
+            return false;
+        }
+
+        $permission = $this->isMethod('post') ? 'vendors.create' : 'vendors.edit';
+
+        return app(\App\Services\Access::class)->allows($user, $permission);
     }
 
     protected function prepareForValidation(): void

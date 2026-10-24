@@ -3,7 +3,8 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "vite build"
+        "build": "vite build",
+        "test:js": "node --test tests/js/formatAssistantText.test.mjs"
     },
     "devDependencies": {
         "@inertiajs/vue3": "^2.0.0",
@@ -20,6 +21,7 @@
     "dependencies": {
         "@inertiajs/vue3": "^3.8.0",
         "@lucide/vue": "^1.52.0",
+        "dompurify": "^3.4.17",
         "vue": "^3.5.43"
     }
 }

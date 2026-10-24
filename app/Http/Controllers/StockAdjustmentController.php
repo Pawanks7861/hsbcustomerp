@@ -5,14 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Material;
 use App\Models\Project;
 use App\Models\StockAdjustment;
-use App\Models\StockLedgerEntry;
-use App\Services\DocumentNumber;
-use App\Services\InventoryStock;
-use App\Support\Money;
-use Illuminate\Database\UniqueConstraintViolationException;
+use App\Services\StockAdjustmentService;
+use App\Support\StoredUpload;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -21,11 +17,11 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StockAdjustmentController extends Controller
 {
-    public function __construct(private InventoryStock $stock) {}
+    public function __construct(private StockAdjustmentService $adjustments) {}
 
     public function index(Project $project): Response
     {
-        $adjustments = $project->stockAdjustments()->with('material')->latest('adjustment_date')->get();
+        $adjustments = $project->stockAdjustments()->with(['material', 'location'])->latest('adjustment_date')->get();
 
         return Inertia::render('Inventory/Adjustments/Index', [
             'project' => $this->projectCard($project),
@@ -34,6 +30,7 @@ class StockAdjustmentController extends Controller
                 'adjustment_number' => $adjustment->adjustment_number,
                 'adjustment_date' => $adjustment->adjustment_date?->toDateString(),
                 'material' => trim($adjustment->material?->material_code.' '.$adjustment->material?->name),
+                'location' => $adjustment->location?->name,
                 'adjustment_type' => $adjustment->adjustment_type,
                 'quantity' => (string) $adjustment->quantity,
                 'status' => $adjustment->status,
@@ -41,17 +38,49 @@ class StockAdjustmentController extends Controller
         ]);
     }
 
-    public function create(Project $project): Response
+    public function create(Request $request, Project $project): Response
     {
+        $locations = $this->adjustments->locationCards($request->user(), $project);
+        $defaultLocationId = collect($locations)->firstWhere('is_default', true)['id']
+            ?? ($locations[0]['id'] ?? null);
+
         return Inertia::render('Inventory/Adjustments/Form', [
             'project' => $this->projectCard($project),
             'materials' => Material::query()->where('is_active', true)->orderBy('name')->get(['id', 'material_code', 'name', 'unit']),
+            'locations' => $locations,
+            'defaults' => [
+                'location_id' => $request->integer('location_id') ?: $defaultLocationId,
+                'adjustment_type' => $request->string('type')->toString() ?: StockAdjustment::OPENING,
+                'material_id' => $request->integer('material_id') ?: null,
+            ],
         ]);
     }
 
     public function store(Request $request, Project $project): RedirectResponse
     {
-        $adjustment = $this->persist($request, $project);
+        $validated = $request->validate([
+            'material_id' => ['required', 'integer', 'exists:materials,id'],
+            'location_id' => ['nullable', 'integer', 'exists:inventory_locations,id'],
+            'adjustment_date' => ['required', 'date'],
+            'adjustment_type' => ['required', Rule::in([StockAdjustment::OPENING, StockAdjustment::INCREASE, StockAdjustment::DECREASE])],
+            'quantity' => ['required', 'numeric', 'gt:0'],
+            'reference_number' => ['nullable', 'string', 'max:80'],
+            'reason' => ['nullable', 'string', 'max:5000'],
+            'attachment' => array_merge(['nullable'], StoredUpload::rules(StoredUpload::DOCUMENTS, 5120)),
+        ]);
+
+        if ($validated['adjustment_type'] !== StockAdjustment::OPENING && blank($validated['reason'] ?? null)) {
+            return back()->withErrors(['reason' => 'Remarks are required for stock increases and decreases.'])->withInput();
+        }
+
+        $path = $request->hasFile('attachment')
+            ? StoredUpload::store($request->file('attachment'), 'projects/'.$project->id.'/adjustments')
+            : null;
+
+        $adjustment = $this->adjustments->createDraft($request->user(), $project, [
+            ...$validated,
+            'attachment_path' => $path,
+        ]);
 
         return redirect()->route('projects.inventory.adjustments.show', [$project, $adjustment])->with('success', 'Stock adjustment saved.');
     }
@@ -59,7 +88,7 @@ class StockAdjustmentController extends Controller
     public function show(Project $project, StockAdjustment $stockAdjustment): Response
     {
         $this->ensure($project, $stockAdjustment);
-        $stockAdjustment->load(['material', 'creator', 'postedBy']);
+        $stockAdjustment->load(['material', 'location', 'creator', 'postedBy']);
 
         return Inertia::render('Inventory/Adjustments/Show', [
             'project' => $this->projectCard($project),
@@ -69,8 +98,11 @@ class StockAdjustmentController extends Controller
                 'adjustment_date' => $stockAdjustment->adjustment_date?->toDateString(),
                 'material' => trim($stockAdjustment->material?->material_code.' '.$stockAdjustment->material?->name),
                 'unit' => $stockAdjustment->material?->unit,
+                'location' => $stockAdjustment->location?->name,
+                'location_code' => $stockAdjustment->location?->location_code,
                 'adjustment_type' => $stockAdjustment->adjustment_type,
                 'quantity' => (string) $stockAdjustment->quantity,
+                'reference_number' => $stockAdjustment->reference_number,
                 'reason' => $stockAdjustment->reason,
                 'status' => $stockAdjustment->status,
                 'created_by' => $stockAdjustment->creator?->name,
@@ -87,85 +119,19 @@ class StockAdjustmentController extends Controller
         abort_unless(filled($stockAdjustment->attachment_path), 404);
         abort_unless(Storage::disk('local')->exists($stockAdjustment->attachment_path), 404);
 
-        return Storage::disk('local')->response($stockAdjustment->attachment_path);
+        return StoredUpload::serve(
+            $stockAdjustment->attachment_path,
+            inlineIfSafe: true,
+            expectedPrefix: 'projects/'.$project->id.'/adjustments',
+        );
     }
 
     public function post(Request $request, Project $project, StockAdjustment $stockAdjustment): RedirectResponse
     {
         $this->ensure($project, $stockAdjustment);
-
-        DB::transaction(function () use ($request, $project, $stockAdjustment): void {
-            $locked = StockAdjustment::query()->whereKey($stockAdjustment->id)->lockForUpdate()->firstOrFail();
-            abort_unless($locked->status === StockAdjustment::DRAFT, 403);
-            $quantity = Money::scale($locked->quantity, 3) ?? '0.000';
-            $in = $locked->increasesStock();
-
-            $this->stock->move(
-                $project->id,
-                (int) $locked->material_id,
-                $locked->adjustment_date->toDateString(),
-                $in ? StockLedgerEntry::ADJUSTMENT_IN : StockLedgerEntry::ADJUSTMENT_OUT,
-                'stock_adjustment',
-                (int) $locked->id,
-                (int) $locked->id,
-                $locked->adjustment_number,
-                $in ? $quantity : '0',
-                $in ? '0' : $quantity,
-                $request->user()->id,
-                $locked->reason,
-            );
-
-            $locked->update([
-                'status' => StockAdjustment::POSTED,
-                'posted_at' => now(),
-                'posted_by' => $request->user()->id,
-            ]);
-        });
+        $this->adjustments->post($request->user(), $project, $stockAdjustment);
 
         return back()->with('success', 'Stock adjustment posted.');
-    }
-
-    private function persist(Request $request, Project $project): StockAdjustment
-    {
-        $validated = $request->validate([
-            'material_id' => ['required', 'integer', 'exists:materials,id'],
-            'adjustment_date' => ['required', 'date'],
-            'adjustment_type' => ['required', Rule::in([StockAdjustment::OPENING, StockAdjustment::INCREASE, StockAdjustment::DECREASE])],
-            'quantity' => ['required', 'numeric', 'gt:0'],
-            'reason' => ['required', 'string', 'max:5000'],
-            'attachment' => ['nullable', 'file', 'max:5120'],
-        ]);
-
-        $material = Material::query()->findOrFail($validated['material_id']);
-        abort_unless($material->is_active, 422);
-        $path = $request->file('attachment')?->store('projects/'.$project->id.'/adjustments', 'local');
-
-        $save = function () use ($request, $project, $validated, $path) {
-            return StockAdjustment::query()->create([
-                'project_id' => $project->id,
-                'material_id' => $validated['material_id'],
-                'adjustment_number' => DocumentNumber::next(StockAdjustment::class, 'adjustment_number', 'ADJ'),
-                'adjustment_date' => $validated['adjustment_date'],
-                'adjustment_type' => $validated['adjustment_type'],
-                'quantity' => Money::scale($validated['quantity'], 3),
-                'reason' => $validated['reason'],
-                'attachment_path' => $path,
-                'status' => StockAdjustment::DRAFT,
-                'created_by' => $request->user()->id,
-            ]);
-        };
-
-        $exception = null;
-
-        for ($attempt = 0; $attempt < 3; $attempt++) {
-            try {
-                return DB::transaction($save);
-            } catch (UniqueConstraintViolationException $caught) {
-                $exception = $caught;
-            }
-        }
-
-        throw $exception;
     }
 
     private function ensure(Project $project, StockAdjustment $adjustment): void

@@ -35,17 +35,20 @@ class VendorBalanceService
      *     notes_debits: string
      * }
      */
-    public function payableComponents(Vendor $vendor, ?int $projectId = null, ?string $from = null, ?string $to = null): array
+    /**
+     * @param  list<int>|null  $projectIds
+     */
+    public function payableComponents(Vendor $vendor, ?int $projectId = null, ?string $from = null, ?string $to = null, ?array $projectIds = null): array
     {
-        $invoiceCredits = $this->sumInvoices($vendor, $projectId, $from, $to);
+        $invoiceCredits = $this->sumInvoices($vendor, $projectId, $from, $to, $projectIds);
         $paymentDebits = Money::add(
-            $this->sumPayments($vendor, VendorPayment::TYPE_INVOICE, $projectId, $from, $to),
-            $this->sumPayments($vendor, VendorPayment::TYPE_OTHER, $projectId, $from, $to),
+            $this->sumPayments($vendor, VendorPayment::TYPE_INVOICE, $projectId, $from, $to, $projectIds),
+            $this->sumPayments($vendor, VendorPayment::TYPE_OTHER, $projectId, $from, $to, $projectIds),
         );
-        $adjustmentDebits = $this->sumAdjustments($vendor, $projectId, $from, $to);
+        $adjustmentDebits = $this->sumAdjustments($vendor, $projectId, $from, $to, $projectIds);
         $notesDebits = Money::add(
-            $this->sumApprovedNotes($vendor, DebitNote::class, $projectId, $from, $to),
-            $this->sumApprovedNotes($vendor, CreditNote::class, $projectId, $from, $to),
+            $this->sumApprovedNotes($vendor, DebitNote::class, $projectId, $from, $to, $projectIds),
+            $this->sumApprovedNotes($vendor, CreditNote::class, $projectId, $from, $to, $projectIds),
         );
 
         return [
@@ -59,25 +62,28 @@ class VendorBalanceService
     /**
      * @return array<string, string>
      */
-    public function summary(Vendor $vendor, ?int $projectId = null, ?string $from = null, ?string $to = null): array
+    /**
+     * @param  list<int>|null  $projectIds
+     */
+    public function summary(Vendor $vendor, ?int $projectId = null, ?string $from = null, ?string $to = null, ?array $projectIds = null): array
     {
-        $filtered = $projectId !== null || $from !== null || $to !== null;
-        $advancePaid = $this->sumPayments($vendor, VendorPayment::TYPE_ADVANCE, $projectId, $from, $to);
-        $invoicePayments = $this->sumPayments($vendor, VendorPayment::TYPE_INVOICE, $projectId, $from, $to);
-        $otherPayments = $this->sumPayments($vendor, VendorPayment::TYPE_OTHER, $projectId, $from, $to);
+        $filtered = $projectId !== null || $from !== null || $to !== null || $projectIds !== null;
+        $advancePaid = $this->sumPayments($vendor, VendorPayment::TYPE_ADVANCE, $projectId, $from, $to, $projectIds);
+        $invoicePayments = $this->sumPayments($vendor, VendorPayment::TYPE_INVOICE, $projectId, $from, $to, $projectIds);
+        $otherPayments = $this->sumPayments($vendor, VendorPayment::TYPE_OTHER, $projectId, $from, $to, $projectIds);
 
         if (! $filtered) {
             $advancePaid = Money::add($advancePaid, (string) $vendor->opening_advance);
         }
 
-        $invoiceTotal = $this->sumInvoices($vendor, $projectId, $from, $to);
-        $adjusted = $this->sumAdjustments($vendor, $projectId, $from, $to);
-        $marked = $this->sumMarkedRefunds($vendor, $projectId, $from, $to);
-        $refundReceived = $this->sumRefundsReceived($vendor, $projectId, $from, $to);
-        $poTotal = $this->sumApprovedPos($vendor, $projectId, $from, $to);
+        $invoiceTotal = $this->sumInvoices($vendor, $projectId, $from, $to, $projectIds);
+        $adjusted = $this->sumAdjustments($vendor, $projectId, $from, $to, $projectIds);
+        $marked = $this->sumMarkedRefunds($vendor, $projectId, $from, $to, $projectIds);
+        $refundReceived = $this->sumRefundsReceived($vendor, $projectId, $from, $to, $projectIds);
+        $poTotal = $this->sumApprovedPos($vendor, $projectId, $from, $to, $projectIds);
 
-        $debitNotesTotal = $this->sumApprovedNotes($vendor, DebitNote::class, $projectId, $from, $to);
-        $creditNotesTotal = $this->sumApprovedNotes($vendor, CreditNote::class, $projectId, $from, $to);
+        $debitNotesTotal = $this->sumApprovedNotes($vendor, DebitNote::class, $projectId, $from, $to, $projectIds);
+        $creditNotesTotal = $this->sumApprovedNotes($vendor, CreditNote::class, $projectId, $from, $to, $projectIds);
         $notesTotal = Money::add($debitNotesTotal, $creditNotesTotal);
 
         $available = Money::sub(Money::sub($advancePaid, $adjusted), $marked);
@@ -131,13 +137,17 @@ class VendorBalanceService
     }
 
     /**
+     * @param  list<int>|null  $projectIds
      * @return array<int, array<string, mixed>>
      */
-    public function transactions(Vendor $vendor): array
+    public function transactions(Vendor $vendor, ?array $projectIds = null): array
     {
         $rows = [];
+        $inProjects = fn ($query) => $projectIds === null
+            ? $query
+            : $query->whereIn('project_id', $projectIds ?: [0]);
 
-        foreach ($vendor->payments()->with(['project', 'invoice'])->orderBy('payment_date')->orderBy('id')->get() as $payment) {
+        foreach ($inProjects($vendor->payments())->with(['project', 'invoice'])->orderBy('payment_date')->orderBy('id')->get() as $payment) {
             $rows[] = [
                 'date' => $payment->payment_date?->toDateString(),
                 'type' => $payment->typeLabel(),
@@ -150,7 +160,11 @@ class VendorBalanceService
             ];
         }
 
-        foreach ($vendor->adjustments()->with(['invoice.project'])->orderBy('adjustment_date')->orderBy('id')->get() as $adjustment) {
+        $adjustmentQuery = $vendor->adjustments()->with(['invoice.project']);
+        if ($projectIds !== null) {
+            $adjustmentQuery->whereHas('invoice', fn ($query) => $query->whereIn('project_id', $projectIds ?: [0]));
+        }
+        foreach ($adjustmentQuery->orderBy('adjustment_date')->orderBy('id')->get() as $adjustment) {
             $rows[] = [
                 'date' => $adjustment->adjustment_date?->toDateString(),
                 'type' => 'Advance Adjustment',
@@ -163,7 +177,7 @@ class VendorBalanceService
             ];
         }
 
-        foreach ($vendor->recoveries()->with('project')->orderBy('created_at')->orderBy('id')->get() as $recovery) {
+        foreach ($inProjects($vendor->recoveries())->with('project')->orderBy('created_at')->orderBy('id')->get() as $recovery) {
             $rows[] = [
                 'date' => $recovery->recovery_date?->toDateString() ?? $recovery->created_at?->toDateString(),
                 'type' => 'Refund Due',
@@ -176,7 +190,7 @@ class VendorBalanceService
             ];
         }
 
-        foreach ($vendor->refunds()->with('project')->orderBy('refund_date')->orderBy('id')->get() as $refund) {
+        foreach ($inProjects($vendor->refunds())->with('project')->orderBy('refund_date')->orderBy('id')->get() as $refund) {
             $rows[] = [
                 'date' => $refund->refund_date?->toDateString(),
                 'type' => 'Refund Received',
@@ -213,28 +227,39 @@ class VendorBalanceService
         $invoice->forceFill(['status' => $status])->save();
     }
 
-    private function sumPayments(Vendor $vendor, string $type, ?int $projectId, ?string $from, ?string $to): string
+    /**
+     * @param  list<int>|null  $projectIds
+     */
+    private function sumPayments(Vendor $vendor, string $type, ?int $projectId, ?string $from, ?string $to, ?array $projectIds = null): string
     {
         $query = $vendor->payments()->where('payment_type', $type);
-        $this->restrict($query, 'project_id', 'payment_date', $projectId, $from, $to);
+        $this->restrict($query, 'project_id', 'payment_date', $projectId, $from, $to, $projectIds);
 
         return $this->money((string) $query->sum('amount'));
     }
 
-    private function sumInvoices(Vendor $vendor, ?int $projectId, ?string $from, ?string $to): string
+    /**
+     * @param  list<int>|null  $projectIds
+     */
+    private function sumInvoices(Vendor $vendor, ?int $projectId, ?string $from, ?string $to, ?array $projectIds = null): string
     {
         $query = $vendor->invoices()->where('approval_status', PurchaseInvoice::APPROVAL_APPROVED);
-        $this->restrict($query, 'project_id', 'invoice_date', $projectId, $from, $to);
+        $this->restrict($query, 'project_id', 'invoice_date', $projectId, $from, $to, $projectIds);
 
         return $this->money((string) $query->sum('total_amount'));
     }
 
-    private function sumAdjustments(Vendor $vendor, ?int $projectId, ?string $from, ?string $to): string
+    /**
+     * @param  list<int>|null  $projectIds
+     */
+    private function sumAdjustments(Vendor $vendor, ?int $projectId, ?string $from, ?string $to, ?array $projectIds = null): string
     {
         $query = VendorAdvanceAdjustment::query()->where('vendor_id', $vendor->id);
 
         if ($projectId !== null) {
             $query->whereHas('invoice', fn (Builder $invoice) => $invoice->where('project_id', $projectId));
+        } elseif ($projectIds !== null) {
+            $query->whereHas('invoice', fn (Builder $invoice) => $invoice->whereIn('project_id', $projectIds ?: [0]));
         }
 
         if ($from) {
@@ -248,18 +273,24 @@ class VendorBalanceService
         return $this->money((string) $query->sum('amount'));
     }
 
-    private function sumMarkedRefunds(Vendor $vendor, ?int $projectId, ?string $from, ?string $to): string
+    /**
+     * @param  list<int>|null  $projectIds
+     */
+    private function sumMarkedRefunds(Vendor $vendor, ?int $projectId, ?string $from, ?string $to, ?array $projectIds = null): string
     {
         $query = VendorRecovery::query()->where('vendor_id', $vendor->id);
-        $this->restrict($query, 'project_id', 'created_at', $projectId, $from, $to);
+        $this->restrict($query, 'project_id', 'created_at', $projectId, $from, $to, $projectIds);
 
         return $this->money((string) $query->sum('amount_due'));
     }
 
-    private function sumRefundsReceived(Vendor $vendor, ?int $projectId, ?string $from, ?string $to): string
+    /**
+     * @param  list<int>|null  $projectIds
+     */
+    private function sumRefundsReceived(Vendor $vendor, ?int $projectId, ?string $from, ?string $to, ?array $projectIds = null): string
     {
         $query = $vendor->refunds();
-        $this->restrict($query, 'project_id', 'refund_date', $projectId, $from, $to);
+        $this->restrict($query, 'project_id', 'refund_date', $projectId, $from, $to, $projectIds);
 
         return $this->money((string) $query->sum('amount'));
     }
@@ -267,29 +298,41 @@ class VendorBalanceService
     /**
      * @param  class-string<DebitNote|CreditNote>  $modelClass
      */
-    private function sumApprovedNotes(Vendor $vendor, string $modelClass, ?int $projectId, ?string $from, ?string $to): string
+    /**
+     * @param  class-string<DebitNote|CreditNote>  $modelClass
+     * @param  list<int>|null  $projectIds
+     */
+    private function sumApprovedNotes(Vendor $vendor, string $modelClass, ?int $projectId, ?string $from, ?string $to, ?array $projectIds = null): string
     {
         $query = $modelClass::query()
             ->where('vendor_id', $vendor->id)
             ->where('status', DocumentStatus::APPROVED);
 
-        $this->restrict($query, 'project_id', 'date', $projectId, $from, $to);
+        $this->restrict($query, 'project_id', 'date', $projectId, $from, $to, $projectIds);
 
         return $this->money((string) $query->sum('total_amount'));
     }
 
-    private function sumApprovedPos(Vendor $vendor, ?int $projectId, ?string $from, ?string $to): string
+    /**
+     * @param  list<int>|null  $projectIds
+     */
+    private function sumApprovedPos(Vendor $vendor, ?int $projectId, ?string $from, ?string $to, ?array $projectIds = null): string
     {
         $query = $vendor->purchaseOrders()->where('status', DocumentStatus::APPROVED);
-        $this->restrict($query, 'project_id', 'po_date', $projectId, $from, $to);
+        $this->restrict($query, 'project_id', 'po_date', $projectId, $from, $to, $projectIds);
 
         return $this->money((string) $query->sum('grand_total'));
     }
 
-    private function restrict(Builder|Relation $query, string $projectColumn, string $dateColumn, ?int $projectId, ?string $from, ?string $to): void
+    /**
+     * @param  list<int>|null  $projectIds
+     */
+    private function restrict(Builder|Relation $query, string $projectColumn, string $dateColumn, ?int $projectId, ?string $from, ?string $to, ?array $projectIds = null): void
     {
         if ($projectId !== null) {
             $query->where($projectColumn, $projectId);
+        } elseif ($projectIds !== null) {
+            $query->whereIn($projectColumn, $projectIds ?: [0]);
         }
 
         if ($from) {

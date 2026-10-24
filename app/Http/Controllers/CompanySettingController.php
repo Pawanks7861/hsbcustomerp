@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\UpdateCompanySettingRequest;
 use App\Models\CompanySetting;
+use App\Support\StoredUpload;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -59,12 +60,12 @@ class CompanySettingController extends Controller
 
         if ($request->hasFile('logo')) {
             $this->deletePublicFile($company->logo_path);
-            $data['logo_path'] = $request->file('logo')->store('company', 'public');
+            $data['logo_path'] = StoredUpload::store($request->file('logo'), 'company', 'public');
         }
 
         if ($request->hasFile('favicon')) {
             $this->deletePublicFile($company->favicon_path);
-            $data['favicon_path'] = $request->file('favicon')->store('company', 'public');
+            $data['favicon_path'] = StoredUpload::store($request->file('favicon'), 'company', 'public');
         }
 
         $company->fill($data);

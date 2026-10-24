@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { Head, usePage } from '@inertiajs/vue3';
+import SecurityNotice from '@/Components/SecurityNotice.vue';
 
 const company = computed(() => usePage().props.company ?? null);
 const logoBroken = ref(false);
@@ -26,6 +27,7 @@ watch(() => company.value?.logo_url, () => {
             <p class="text-base font-semibold text-slate-900">{{ company?.company_name || 'HSB Projects' }}</p>
         </div>
         <div class="w-full max-w-md rounded-[24px] border border-slate-200/80 bg-white px-6 py-6">
+            <SecurityNotice />
             <slot />
         </div>
     </div>

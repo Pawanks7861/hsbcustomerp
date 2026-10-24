@@ -25,6 +25,12 @@ class ActivityLog extends Model
 
     public const EVENT_PASSWORD_RESET = 'password_reset';
 
+    public const EVENT_PASSWORD_RESET_REQUEST = 'password_reset_request';
+
+    public const EVENT_LOGIN_LOCKOUT = 'login_lockout';
+
+    public const EVENT_RATE_LIMITED = 'rate_limited';
+
     public const EVENTS = [
         self::EVENT_ACTION => 'Action',
         self::EVENT_CREATED => 'Created',
@@ -34,6 +40,9 @@ class ActivityLog extends Model
         self::EVENT_LOGOUT => 'Logout',
         self::EVENT_LOGIN_FAILED => 'Failed login',
         self::EVENT_PASSWORD_RESET => 'Password reset',
+        self::EVENT_PASSWORD_RESET_REQUEST => 'Password reset request',
+        self::EVENT_LOGIN_LOCKOUT => 'Login lockout',
+        self::EVENT_RATE_LIMITED => 'Rate limited',
     ];
 
     protected $fillable = [

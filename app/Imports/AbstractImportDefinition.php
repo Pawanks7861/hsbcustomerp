@@ -27,6 +27,26 @@ abstract class AbstractImportDefinition implements ImportDefinition
         return [];
     }
 
+    public function exampleRowsFor(?\App\Models\User $user = null, ?\App\Models\Project $project = null): array
+    {
+        return $this->exampleRows();
+    }
+
+    public function templateSheetTitle(): string
+    {
+        return substr($this->key(), 0, 31);
+    }
+
+    public function extraSheets(?\App\Models\User $user = null, ?\App\Models\Project $project = null): array
+    {
+        return [];
+    }
+
+    public function dropdowns(): array
+    {
+        return [];
+    }
+
     public function instructions(): string
     {
         return 'Required columns are marked with *. Dates use YYYY-MM-DD. Do not change header names. Upload .xlsx or .csv.';

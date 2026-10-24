@@ -21,7 +21,7 @@ class ClientRequest extends FormRequest
             if (! array_key_exists($field, $input) || ! is_string($input[$field])) {
                 continue;
             }
-            $value = trim($input[$field]);
+            $value = trim(\App\Support\SafeInput::plainText($input[$field]));
             if (in_array($field, ['gst_number', 'pan_number'], true)) {
                 $value = strtoupper($value);
             }

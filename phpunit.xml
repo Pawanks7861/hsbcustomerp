@@ -18,6 +18,7 @@
         </include>
     </source>
     <php>
+        <ini name="memory_limit" value="512M"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
@@ -29,5 +30,16 @@
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="SECURITY_THROTTLE_AUTHENTICATED" value="1000"/>
+        <env name="SECURITY_THROTTLE_WRITES" value="300"/>
+        <env name="SECURITY_THROTTLE_SENSITIVE" value="100"/>
+        <env name="SECURITY_THROTTLE_IMPORTS" value="40"/>
+        <env name="SECURITY_THROTTLE_EXPORTS" value="60"/>
+        <env name="SECURITY_THROTTLE_PDFS" value="60"/>
+        <env name="SECURITY_THROTTLE_ASSISTANT" value="60"/>
+        <env name="SECURITY_THROTTLE_LOGIN_IP" value="60"/>
+        <env name="SECURITY_PASSWORD_RESET_MAX_ATTEMPTS" value="20"/>
+        <env name="SECURITY_PASSWORD_RESET_IP_MAX_ATTEMPTS" value="40"/>
+        <env name="SECURITY_PASSWORD_RESET_SUBMIT_MAX_ATTEMPTS" value="20"/>
     </php>
 </phpunit>

@@ -5,6 +5,7 @@ import AppHeader from '../Components/AppHeader.vue';
 import AppSidebar from '../Components/AppSidebar.vue';
 import ErpAssistant from '../Components/ErpAssistant.vue';
 import MenuTutorial from '../Components/MenuTutorial.vue';
+import SecurityNotice from '../Components/SecurityNotice.vue';
 
 defineProps({
     project: {
@@ -42,6 +43,7 @@ provide('sidebarOpen', sidebarOpen);
                     <slot name="header" />
                 </AppHeader>
                 <main class="flex-1 px-4 py-5 sm:px-6 lg:px-8">
+                    <SecurityNotice />
                     <div v-if="success" class="mb-4 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 print:hidden">
                         {{ success }}
                     </div>

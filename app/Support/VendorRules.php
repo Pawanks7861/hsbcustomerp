@@ -114,7 +114,7 @@ class VendorRules
                 continue;
             }
 
-            $value = trim($input[$field]);
+            $value = trim(\App\Support\SafeInput::plainText($input[$field]));
             if (in_array($field, ['gst_number', 'pan_number', 'ifsc'], true)) {
                 $value = strtoupper($value);
             }

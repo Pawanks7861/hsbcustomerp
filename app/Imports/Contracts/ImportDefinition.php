@@ -31,6 +31,27 @@ interface ImportDefinition
      */
     public function exampleRows(): array;
 
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function exampleRowsFor(?\App\Models\User $user = null, ?\App\Models\Project $project = null): array;
+
+    public function templateSheetTitle(): string;
+
+    /**
+     * Extra workbook sheets used by Excel templates (ignored for CSV).
+     *
+     * @return list<array{title: string, headings: list<string>, rows: list<list<mixed>>, widths?: list<int>}>
+     */
+    public function extraSheets(?\App\Models\User $user = null, ?\App\Models\Project $project = null): array;
+
+    /**
+     * Dropdowns for Excel templates. `column_key` matches a ColumnDefinition key.
+     *
+     * @return list<array{column_key: string, sheet: string, range_column: string}>
+     */
+    public function dropdowns(): array;
+
     public function instructions(): string;
 
     /**

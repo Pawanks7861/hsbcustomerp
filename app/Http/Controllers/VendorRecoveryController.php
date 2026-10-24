@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Vendor;
 use App\Models\VendorRecovery;
 use App\Models\VendorRefund;
+use App\Services\Access;
 use App\Services\VendorBalanceService;
 use App\Support\Money;
 use Illuminate\Http\RedirectResponse;
@@ -15,13 +16,15 @@ use Illuminate\Validation\ValidationException;
 
 class VendorRecoveryController extends Controller
 {
-    public function store(Request $request, Vendor $vendor, VendorBalanceService $balances): RedirectResponse
+    public function store(Request $request, Vendor $vendor, VendorBalanceService $balances, Access $access): RedirectResponse
     {
         $validated = $request->validate([
             'project_id' => ['nullable', 'integer', 'exists:projects,id'],
             'amount_due' => ['required', 'numeric', 'gt:0'],
             'remarks' => ['nullable', 'string', 'max:2000'],
         ]);
+
+        $access->abortUnlessVisibleProjectId($request->user(), isset($validated['project_id']) ? (int) $validated['project_id'] : null);
 
         $amount = Money::scale($validated['amount_due'], 2);
         $available = $balances->availableAdvance($vendor);
@@ -45,9 +48,10 @@ class VendorRecoveryController extends Controller
         return back()->with('success', 'Advance marked for refund.');
     }
 
-    public function receive(Request $request, Vendor $vendor, VendorRecovery $recovery): RedirectResponse
+    public function receive(Request $request, Vendor $vendor, VendorRecovery $recovery, Access $access): RedirectResponse
     {
         abort_unless($recovery->vendor_id === $vendor->id, 404);
+        $access->abortUnlessCanAccessProject($request->user(), $recovery->project);
 
         $validated = $request->validate([
             'refund_date' => ['required', 'date'],

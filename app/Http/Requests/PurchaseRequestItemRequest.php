@@ -10,7 +10,10 @@ class PurchaseRequestItemRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->isActive() === true;
+        $user = $this->user();
+
+        return $user?->isActive() === true
+            && app(\App\Services\Access::class)->allows($user, 'purchase_requests.create');
     }
 
     public function rules(): array

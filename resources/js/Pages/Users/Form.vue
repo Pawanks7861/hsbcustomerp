@@ -159,7 +159,7 @@ function submit() {
                 </label>
                 <div class="block text-sm">
                     <span class="font-medium">Roles</span>
-                    <p class="mt-1 text-xs text-slate-500">Assign staff roles. The sidebar on the right shows the menus that role can use. Super Admin and Administrator are not assigned here.</p>
+                    <p class="mt-1 text-xs text-slate-500">Assign at least one staff role unless Super Admin is checked. The sidebar on the right shows the menus that role can use. Super Admin and Administrator are not assigned here.</p>
                     <div class="mt-2 grid gap-2 sm:grid-cols-2">
                         <label v-for="role in staffRoles" :key="role.id" class="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2">
                             <input v-model="form.role_ids" type="checkbox" :value="role.id" class="rounded border-slate-300">

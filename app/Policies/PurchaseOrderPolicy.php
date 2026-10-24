@@ -11,17 +11,22 @@ class PurchaseOrderPolicy
 {
     public function update(User $user, PurchaseOrder $purchaseOrder): bool
     {
-        return $user->isActive() && $purchaseOrder->status === DocumentStatus::DRAFT;
+        return $user->isActive()
+            && app(Access::class)->allows($user, 'purchase_orders.edit')
+            && $purchaseOrder->status === DocumentStatus::DRAFT;
     }
 
     public function delete(User $user, PurchaseOrder $purchaseOrder): bool
     {
-        return $user->isActive() && $purchaseOrder->status === DocumentStatus::DRAFT;
+        return $user->isActive()
+            && app(Access::class)->allows($user, 'purchase_orders.delete')
+            && $purchaseOrder->status === DocumentStatus::DRAFT;
     }
 
     public function submit(User $user, PurchaseOrder $purchaseOrder): bool
     {
         return $user->isActive()
+            && app(Access::class)->allows($user, 'purchase_orders.submit')
             && $purchaseOrder->status === DocumentStatus::DRAFT
             && $purchaseOrder->items()->exists();
     }
@@ -56,6 +61,8 @@ class PurchaseOrderPolicy
 
     public function reopen(User $user, PurchaseOrder $purchaseOrder): bool
     {
-        return $user->isActive() && $purchaseOrder->status === DocumentStatus::REJECTED;
+        return $user->isActive()
+            && app(Access::class)->allows($user, 'purchase_orders.edit')
+            && $purchaseOrder->status === DocumentStatus::REJECTED;
     }
 }

@@ -4,7 +4,10 @@ namespace App\Imports\Spreadsheet;
 
 use App\Imports\Contracts\ImportDefinition;
 use App\Imports\Support\ColumnDefinition;
+use App\Models\Project;
+use App\Models\User;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
@@ -64,7 +67,7 @@ class SpreadsheetIO
                 if ($raw instanceof \PhpOffice\PhpSpreadsheet\RichText\RichText) {
                     $raw = $raw->getPlainText();
                 }
-                $value = is_string($raw) ? trim($raw) : $raw;
+                $value = is_string($raw) ? trim(\App\Support\SafeInput::plainText($raw)) : $raw;
                 if ($value !== null && $value !== '') {
                     $empty = false;
                 }
@@ -89,11 +92,11 @@ class SpreadsheetIO
         return ['ok' => true, 'message' => null, 'headers' => array_keys($map), 'rows' => $rows];
     }
 
-    public function template(ImportDefinition $definition): Spreadsheet
+    public function template(ImportDefinition $definition, ?User $user = null, ?Project $project = null): Spreadsheet
     {
         $spreadsheet = new Spreadsheet;
         $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle(substr($definition->key(), 0, 31));
+        $sheet->setTitle(substr($definition->templateSheetTitle(), 0, 31));
 
         $columns = $definition->columns();
         foreach ($columns as $index => $column) {
@@ -107,26 +110,84 @@ class SpreadsheetIO
             ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()->setRGB('F1F5F9');
 
-        foreach ($definition->exampleRows() as $offset => $example) {
+        $examples = $definition->exampleRowsFor($user, $project);
+        foreach ($examples as $offset => $example) {
             foreach ($columns as $index => $column) {
                 $sheet->setCellValue([$index + 1, $offset + 2], $example[$column->key] ?? '');
             }
         }
 
-        $notesRow = count($definition->exampleRows()) + 4;
+        $notesRow = count($examples) + 4;
         $sheet->setCellValue([1, $notesRow], 'Instructions');
         $sheet->getStyle([1, $notesRow])->getFont()->setBold(true);
         $sheet->setCellValue([1, $notesRow + 1], $definition->instructions());
-        $sheet->mergeCells([1, $notesRow + 1, min(6, count($columns)), $notesRow + 3]);
+        $sheet->mergeCells([1, $notesRow + 1, min(6, max(1, count($columns))), $notesRow + 3]);
         $sheet->getStyle([1, $notesRow + 1])->getAlignment()->setWrapText(true);
         $sheet->freezePane('A2');
+
+        $sheetNames = [];
+        foreach ($definition->extraSheets($user, $project) as $extra) {
+            $title = substr((string) $extra['title'], 0, 31);
+            $ref = $spreadsheet->createSheet();
+            $ref->setTitle($title);
+            $headings = $extra['headings'] ?? [];
+            foreach ($headings as $index => $heading) {
+                $ref->setCellValue([$index + 1, 1], $heading);
+                $width = $extra['widths'][$index] ?? max(16, strlen((string) $heading) + 2);
+                $ref->getColumnDimension(Coordinate::stringFromColumnIndex($index + 1))->setWidth($width);
+            }
+            if ($headings !== []) {
+                $ref->getStyle('A1:'.Coordinate::stringFromColumnIndex(count($headings)).'1')->getFont()->setBold(true);
+            }
+            foreach ($extra['rows'] ?? [] as $offset => $row) {
+                foreach ($row as $index => $value) {
+                    $ref->setCellValue([$index + 1, $offset + 2], $value);
+                }
+            }
+            $ref->freezePane('A2');
+            $sheetNames[$title] = $ref->getHighestDataRow();
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        foreach ($definition->dropdowns() as $dropdown) {
+            $columnIndex = null;
+            foreach ($columns as $index => $column) {
+                if ($column->key === $dropdown['column_key']) {
+                    $columnIndex = $index + 1;
+                    break;
+                }
+            }
+            if ($columnIndex === null) {
+                continue;
+            }
+
+            $sheetTitle = $dropdown['sheet'];
+            $rangeColumn = $dropdown['range_column'] ?? 'A';
+            $lastRow = max(2, (int) ($sheetNames[$sheetTitle] ?? 2));
+            $letter = Coordinate::stringFromColumnIndex($columnIndex);
+            $validation = $sheet->getCell($letter.'2')->getDataValidation();
+            $validation->setType(DataValidation::TYPE_LIST);
+            $validation->setErrorStyle(DataValidation::STYLE_STOP);
+            $validation->setAllowBlank(true);
+            $validation->setShowInputMessage(true);
+            $validation->setShowErrorMessage(true);
+            $validation->setShowDropDown(true);
+            $validation->setErrorTitle('Invalid location');
+            $validation->setError('Choose a location from the Available Locations sheet. Create missing locations in the ERP first.');
+            $validation->setPromptTitle('Existing locations');
+            $validation->setPrompt('Locations must already exist in the ERP. CSV files do not support dropdowns.');
+            $quoted = str_replace("'", "''", $sheetTitle);
+            $validation->setFormula1("'{$quoted}'!\${$rangeColumn}\$2:\${$rangeColumn}\${$lastRow}");
+            $sheet->setDataValidation($letter.'2:'.$letter.'1001', $validation);
+        }
 
         return $spreadsheet;
     }
 
-    public function download(ImportDefinition $definition, string $format = 'xlsx')
+    public function download(ImportDefinition $definition, string $format = 'xlsx', ?User $user = null, ?Project $project = null)
     {
-        $spreadsheet = $this->template($definition);
+        $spreadsheet = $this->template($definition, $user, $project);
         $filename = $definition->key().'-import-template.'.$format;
 
         if ($format === 'csv') {
@@ -161,7 +222,7 @@ class SpreadsheetIO
             $sheet->fromArray([
                 $error['row'] ?? '',
                 $error['column'] ?? '',
-                $this->safeCell((string) ($error['value'] ?? '')),
+                \App\Support\SafeInput::spreadsheetCell((string) ($error['value'] ?? '')),
                 $error['message'] ?? '',
             ], null, 'A'.$r);
             $r++;
@@ -176,15 +237,6 @@ class SpreadsheetIO
                 ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                 : 'text/csv; charset=UTF-8',
         ]);
-    }
-
-    private function safeCell(string $value): string
-    {
-        if ($value !== '' && in_array($value[0], ['=', '+', '-', '@'], true)) {
-            return "'".$value;
-        }
-
-        return $value;
     }
 
     private function normalizeHeader(string $value): string

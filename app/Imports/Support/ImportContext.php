@@ -16,6 +16,7 @@ final class ImportContext
         public readonly string $mode,
         public readonly ?Project $project = null,
         public readonly ?int $boqId = null,
+        public readonly ?int $importBatchId = null,
     ) {}
 
     public function remember(string $key, callable $resolver): mixed
@@ -25,6 +26,17 @@ final class ImportContext
         }
 
         return $this->cache[$key];
+    }
+
+    public function seen(string $bucket, string $key): bool
+    {
+        if (isset($this->cache['seen'][$bucket][$key])) {
+            return true;
+        }
+
+        $this->cache['seen'][$bucket][$key] = true;
+
+        return false;
     }
 
     public function once(string $key, callable $resolver): mixed

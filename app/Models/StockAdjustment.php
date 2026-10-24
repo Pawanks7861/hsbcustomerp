@@ -22,11 +22,15 @@ class StockAdjustment extends Model
     protected $fillable = [
         'project_id',
         'material_id',
+        'location_id',
         'adjustment_number',
         'adjustment_date',
         'adjustment_type',
         'quantity',
+        'reference_number',
         'reason',
+        'import_fingerprint',
+        'import_batch_id',
         'attachment_path',
         'status',
         'created_by',
@@ -51,6 +55,11 @@ class StockAdjustment extends Model
     public function material(): BelongsTo
     {
         return $this->belongsTo(Material::class);
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(InventoryLocation::class, 'location_id');
     }
 
     public function creator(): BelongsTo

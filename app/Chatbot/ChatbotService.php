@@ -44,7 +44,8 @@ class ChatbotService
         }
 
         $rateKey = 'erp-assistant:'.$user->id;
-        if (RateLimiter::tooManyAttempts($rateKey, 30)) {
+        $assistantLimit = (int) config('security.throttle.assistant_service', 30);
+        if (RateLimiter::tooManyAttempts($rateKey, $assistantLimit)) {
             return (new ChatResponse(
                 message: 'You are sending questions too quickly. Please wait a moment and try again.',
                 confidence: 'low',

@@ -25,8 +25,10 @@ function post() {
                 <div><dt class="text-slate-500">Date</dt><dd>{{ adjustment.adjustment_date }}</dd></div>
                 <div><dt class="text-slate-500">Status</dt><dd class="capitalize">{{ adjustment.status }}</dd></div>
                 <div><dt class="text-slate-500">Material</dt><dd>{{ adjustment.material }}</dd></div>
+                <div><dt class="text-slate-500">Location</dt><dd>{{ adjustment.location || '—' }} <span v-if="adjustment.location_code" class="text-slate-400">({{ adjustment.location_code }})</span></dd></div>
                 <div><dt class="text-slate-500">Type</dt><dd class="capitalize">{{ adjustment.adjustment_type }}</dd></div>
                 <div><dt class="text-slate-500">Quantity</dt><dd class="tabular-nums">{{ adjustment.quantity }} {{ adjustment.unit }}</dd></div>
+                <div><dt class="text-slate-500">Reference</dt><dd>{{ adjustment.reference_number || '—' }}</dd></div>
                 <div><dt class="text-slate-500">Created by</dt><dd>{{ adjustment.created_by || '—' }}</dd></div>
                 <div class="sm:col-span-2"><dt class="text-slate-500">Reason</dt><dd>{{ adjustment.reason }}</dd></div>
                 <div v-if="adjustment.posted_by"><dt class="text-slate-500">Posted by</dt><dd>{{ adjustment.posted_by }} on {{ adjustment.posted_at }}</dd></div>

@@ -63,14 +63,28 @@ class VendorController extends Controller
     {
         abort_unless($access->allows($request->user(), 'vendors.view'), 403);
 
-        $summary = $balances->summary($vendor);
+        $scope = $access->projectScope($request->user(), $request->integer('project_id') ?: null);
+        $projectIds = $scope['project_ids'];
+        $projectId = $scope['project_id'];
+        $inVisibleProjects = function ($query) use ($projectId, $projectIds) {
+            if ($projectId !== null) {
+                return $query->where('project_id', $projectId);
+            }
+            if ($projectIds !== null) {
+                return $query->whereIn('project_id', $projectIds ?: [0]);
+            }
+
+            return $query;
+        };
+
+        $summary = $balances->summary($vendor, $projectId, null, null, $projectIds);
 
         return Inertia::render('Vendors/Show', [
             'vendor' => $this->payload($vendor),
             'summary' => $summary,
             'tab' => $request->string('tab')->toString() ?: 'overview',
-            'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
-            'purchaseOrders' => $vendor->purchaseOrders()->with('project')->latest('po_date')->get()->map(fn (PurchaseOrder $order) => [
+            'projects' => Project::query()->visibleTo($request->user())->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
+            'purchaseOrders' => $inVisibleProjects($vendor->purchaseOrders())->with('project')->latest('po_date')->get()->map(fn (PurchaseOrder $order) => [
                 'id' => $order->id,
                 'project_id' => $order->project_id,
                 'project_name' => $order->project?->project_name,
@@ -79,7 +93,7 @@ class VendorController extends Controller
                 'status' => $order->status,
                 'grand_total' => (string) $order->grand_total,
             ]),
-            'invoices' => $vendor->invoices()->with(['project', 'purchaseOrder'])->latest('invoice_date')->get()->map(fn (PurchaseInvoice $invoice) => [
+            'invoices' => $inVisibleProjects($vendor->invoices())->with(['project', 'purchaseOrder'])->latest('invoice_date')->get()->map(fn (PurchaseInvoice $invoice) => [
                 'id' => $invoice->id,
                 'project_id' => $invoice->project_id,
                 'project_name' => $invoice->project?->project_name,
@@ -90,13 +104,13 @@ class VendorController extends Controller
                 'outstanding' => $balances->invoiceOutstanding($invoice),
                 'status' => $invoice->status,
             ]),
-            'payments' => $vendor->payments()->with('project')->latest('payment_date')->get(),
-            'advances' => $vendor->payments()->where('payment_type', 'advance')->latest('payment_date')->get(),
+            'payments' => $inVisibleProjects($vendor->payments())->with('project')->latest('payment_date')->get(),
+            'advances' => $inVisibleProjects($vendor->payments()->where('payment_type', 'advance'))->latest('payment_date')->get(),
             'refunds' => [
-                'recoveries' => $vendor->recoveries()->latest()->get(),
-                'received' => $vendor->refunds()->latest('refund_date')->get(),
+                'recoveries' => $inVisibleProjects($vendor->recoveries())->latest()->get(),
+                'received' => $inVisibleProjects($vendor->refunds())->latest('refund_date')->get(),
             ],
-            'transactions' => $balances->transactions($vendor),
+            'transactions' => $balances->transactions($vendor, $projectIds ?? ($projectId !== null ? [$projectId] : null)),
         ]);
     }
 
@@ -141,7 +155,9 @@ class VendorController extends Controller
         abort_unless($access->allows($request->user(), 'vendors.view'), 403);
 
         $vendorId = $request->integer('vendor_id') ?: null;
-        $projectId = $request->integer('project_id') ?: null;
+        $scope = $access->projectScope($request->user(), $request->integer('project_id') ?: null);
+        $projectId = $scope['project_id'];
+        $projectIds = $scope['project_ids'];
         $from = $request->string('from')->toString() ?: null;
         $to = $request->string('to')->toString() ?: null;
 
@@ -158,9 +174,9 @@ class VendorController extends Controller
                 'to' => $to,
             ],
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name', 'vendor_code']),
-            'projects' => Project::query()->orderBy('project_name')->get(['id', 'project_name']),
-            'rows' => $vendors->map(function (Vendor $vendor) use ($balances, $projectId, $from, $to) {
-                $summary = $balances->summary($vendor, $projectId, $from, $to);
+            'projects' => Project::query()->visibleTo($request->user())->orderBy('project_name')->get(['id', 'project_name']),
+            'rows' => $vendors->map(function (Vendor $vendor) use ($balances, $projectId, $from, $to, $projectIds) {
+                $summary = $balances->summary($vendor, $projectId, $from, $to, $projectIds);
 
                 return [
                     'id' => $vendor->id,

@@ -13,10 +13,10 @@ use App\Services\DocumentPdf;
 use App\Services\GoodsReceiptService;
 use App\Services\PoReceiptProgress;
 use App\Support\PdfFormat;
+use App\Support\StoredUpload;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
@@ -190,7 +190,11 @@ class GoodsReceiptController extends Controller
         abort_unless($image->material_receipt_id === $receipt->id, 404);
         abort_unless(Storage::disk('local')->exists($image->image_path), 404);
 
-        return Storage::disk('local')->response($image->image_path);
+        return StoredUpload::serve(
+            $image->image_path,
+            inlineIfSafe: true,
+            expectedPrefix: 'projects/'.$project->id.'/receipts',
+        );
     }
 
     /**
@@ -206,7 +210,7 @@ class GoodsReceiptController extends Controller
             'vehicle_number' => ['nullable', 'string', 'max:255'],
             'inspection_notes' => ['nullable', 'string', 'max:5000'],
             'images' => ['nullable', 'array'],
-            'images.*' => ['file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'images.*' => StoredUpload::rules(StoredUpload::IMAGES, 5120),
         ]);
 
         return $validated;
@@ -309,8 +313,7 @@ class GoodsReceiptController extends Controller
     private function storeImages(Request $request, Project $project, MaterialReceipt $receipt): void
     {
         foreach ($request->file('images', []) as $image) {
-            $name = Str::uuid()->toString().'.'.strtolower($image->getClientOriginalExtension());
-            $path = $image->storeAs('projects/'.$project->id.'/receipts', $name, 'local');
+            $path = StoredUpload::store($image, 'projects/'.$project->id.'/receipts');
             $receipt->images()->create(['image_path' => $path]);
         }
     }

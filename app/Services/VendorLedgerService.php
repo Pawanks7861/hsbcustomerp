@@ -51,13 +51,16 @@ class VendorLedgerService
      *     reconciled: bool
      * }
      */
-    public function reconcile(Vendor $vendor, ?int $projectId = null, ?string $from = null, ?string $to = null): array
+    /**
+     * @param  list<int>|null  $projectIds
+     */
+    public function reconcile(Vendor $vendor, ?int $projectId = null, ?string $from = null, ?string $to = null, ?array $projectIds = null): array
     {
-        $statement = $this->statement($vendor, $projectId, $from, $to);
-        $summary = $this->balances->summary($vendor, $projectId, $from, $to);
-        $components = $this->balances->payableComponents($vendor, $projectId, $from, $to);
+        $statement = $this->statement($vendor, $projectId, $from, $to, $projectIds);
+        $summary = $this->balances->summary($vendor, $projectId, $from, $to, $projectIds);
+        $components = $this->balances->payableComponents($vendor, $projectId, $from, $to, $projectIds);
 
-        $payableOpening = $this->payableBasisOpening($vendor, $projectId, $from);
+        $payableOpening = $this->payableBasisOpening($vendor, $projectId, $from, $projectIds);
         $payableCredits = '0.00';
         $payableDebits = '0.00';
         $payableClosing = $payableOpening;
@@ -129,10 +132,13 @@ class VendorLedgerService
      *     entries: list<array<string, mixed>>
      * }
      */
-    public function statement(Vendor $vendor, ?int $projectId = null, ?string $from = null, ?string $to = null): array
+    /**
+     * @param  list<int>|null  $projectIds
+     */
+    public function statement(Vendor $vendor, ?int $projectId = null, ?string $from = null, ?string $to = null, ?array $projectIds = null): array
     {
-        $rows = $this->rawEntries($vendor, $projectId, $from, $to);
-        $opening = $this->openingBalance($vendor, $projectId, $from);
+        $rows = $this->rawEntries($vendor, $projectId, $from, $to, $projectIds);
+        $opening = $this->openingBalance($vendor, $projectId, $from, $projectIds);
         $balance = $opening;
         $totalDebit = '0.00';
         $totalCredit = '0.00';
@@ -161,9 +167,12 @@ class VendorLedgerService
         ];
     }
 
-    private function payableBasisOpening(Vendor $vendor, ?int $projectId, ?string $from): string
+    /**
+     * @param  list<int>|null  $projectIds
+     */
+    private function payableBasisOpening(Vendor $vendor, ?int $projectId, ?string $from, ?array $projectIds = null): string
     {
-        $filtered = $projectId !== null || $from !== null;
+        $filtered = $projectId !== null || $from !== null || $projectIds !== null;
         $balance = '0.00';
 
         if (! $filtered) {
@@ -174,7 +183,7 @@ class VendorLedgerService
             return Money::scale($balance, 2) ?? '0.00';
         }
 
-        $prior = $this->rawEntries($vendor, $projectId, null, date('Y-m-d', strtotime($from.' -1 day')));
+        $prior = $this->rawEntries($vendor, $projectId, null, date('Y-m-d', strtotime($from.' -1 day')), $projectIds);
 
         foreach ($prior as $row) {
             if ($this->excludedFromPayableBasis((string) ($row['type'] ?? ''))) {
@@ -202,9 +211,12 @@ class VendorLedgerService
         return bccomp($abs, $tolerance, 3) !== 1;
     }
 
-    private function openingBalance(Vendor $vendor, ?int $projectId, ?string $from): string
+    /**
+     * @param  list<int>|null  $projectIds
+     */
+    private function openingBalance(Vendor $vendor, ?int $projectId, ?string $from, ?array $projectIds = null): string
     {
-        $filtered = $projectId !== null || $from !== null;
+        $filtered = $projectId !== null || $from !== null || $projectIds !== null;
         $balance = '0.00';
 
         if (! $filtered) {
@@ -215,7 +227,7 @@ class VendorLedgerService
             return Money::scale($balance, 2) ?? '0.00';
         }
 
-        $prior = $this->rawEntries($vendor, $projectId, null, date('Y-m-d', strtotime($from.' -1 day')));
+        $prior = $this->rawEntries($vendor, $projectId, null, date('Y-m-d', strtotime($from.' -1 day')), $projectIds);
 
         foreach ($prior as $row) {
             $balance = Money::add(
@@ -228,16 +240,15 @@ class VendorLedgerService
     }
 
     /**
+     * @param  list<int>|null  $projectIds
      * @return list<array<string, mixed>>
      */
-    private function rawEntries(Vendor $vendor, ?int $projectId, ?string $from, ?string $to): array
+    private function rawEntries(Vendor $vendor, ?int $projectId, ?string $from, ?string $to, ?array $projectIds = null): array
     {
         $rows = [];
 
         $invoiceQuery = $vendor->invoices()->where('approval_status', PurchaseInvoice::APPROVAL_APPROVED);
-        if ($projectId !== null) {
-            $invoiceQuery->where('project_id', $projectId);
-        }
+        $this->constrainProject($invoiceQuery, 'project_id', $projectId, $projectIds);
         if ($from) {
             $invoiceQuery->whereDate('invoice_date', '>=', $from);
         }
@@ -259,9 +270,7 @@ class VendorLedgerService
         }
 
         $paymentQuery = $vendor->payments();
-        if ($projectId !== null) {
-            $paymentQuery->where('project_id', $projectId);
-        }
+        $this->constrainProject($paymentQuery, 'project_id', $projectId, $projectIds);
         if ($from) {
             $paymentQuery->whereDate('payment_date', '>=', $from);
         }
@@ -290,6 +299,8 @@ class VendorLedgerService
         $adjustmentQuery = VendorAdvanceAdjustment::query()->where('vendor_id', $vendor->id);
         if ($projectId !== null) {
             $adjustmentQuery->whereHas('invoice', fn ($q) => $q->where('project_id', $projectId));
+        } elseif ($projectIds !== null) {
+            $adjustmentQuery->whereHas('invoice', fn ($q) => $q->whereIn('project_id', $projectIds ?: [0]));
         }
         if ($from) {
             $adjustmentQuery->whereDate('adjustment_date', '>=', $from);
@@ -311,9 +322,7 @@ class VendorLedgerService
         }
 
         $recoveryQuery = VendorRecovery::query()->where('vendor_id', $vendor->id);
-        if ($projectId !== null) {
-            $recoveryQuery->where('project_id', $projectId);
-        }
+        $this->constrainProject($recoveryQuery, 'project_id', $projectId, $projectIds);
         if ($from) {
             $recoveryQuery->whereDate('created_at', '>=', $from);
         }
@@ -334,9 +343,7 @@ class VendorLedgerService
         }
 
         $refundQuery = $vendor->refunds();
-        if ($projectId !== null) {
-            $refundQuery->where('project_id', $projectId);
-        }
+        $this->constrainProject($refundQuery, 'project_id', $projectId, $projectIds);
         if ($from) {
             $refundQuery->whereDate('refund_date', '>=', $from);
         }
@@ -357,11 +364,11 @@ class VendorLedgerService
             );
         }
 
-        foreach ($this->approvedNotes($vendor->debitNotes(), DebitNote::class, $projectId, $from, $to) as $note) {
+        foreach ($this->approvedNotes($vendor->debitNotes(), DebitNote::class, $projectId, $from, $to, $projectIds) as $note) {
             $rows[] = $note;
         }
 
-        foreach ($this->approvedNotes($vendor->creditNotes(), CreditNote::class, $projectId, $from, $to) as $note) {
+        foreach ($this->approvedNotes($vendor->creditNotes(), CreditNote::class, $projectId, $from, $to, $projectIds) as $note) {
             $rows[] = $note;
         }
 
@@ -377,14 +384,13 @@ class VendorLedgerService
     /**
      * @param  HasMany<DebitNote|CreditNote>  $relation
      * @param  class-string<DebitNote|CreditNote>  $type
+     * @param  list<int>|null  $projectIds
      * @return list<array<string, mixed>>
      */
-    private function approvedNotes($relation, string $type, ?int $projectId, ?string $from, ?string $to): array
+    private function approvedNotes($relation, string $type, ?int $projectId, ?string $from, ?string $to, ?array $projectIds = null): array
     {
         $query = $relation->where('status', DocumentStatus::APPROVED);
-        if ($projectId !== null) {
-            $query->where('project_id', $projectId);
-        }
+        $this->constrainProject($query, 'project_id', $projectId, $projectIds);
         if ($from) {
             $query->whereDate('date', '>=', $from);
         }
@@ -425,5 +431,21 @@ class VendorLedgerService
             'credit' => $credit ? Money::scale($credit, 2) : null,
             'sort' => $sort,
         ];
+    }
+
+    /**
+     * @param  list<int>|null  $projectIds
+     */
+    private function constrainProject($query, string $column, ?int $projectId, ?array $projectIds): void
+    {
+        if ($projectId !== null) {
+            $query->where($column, $projectId);
+
+            return;
+        }
+
+        if ($projectIds !== null) {
+            $query->whereIn($column, $projectIds ?: [0]);
+        }
     }
 }

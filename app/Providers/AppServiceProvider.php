@@ -8,6 +8,8 @@ use App\Models\DebitNote;
 use App\Models\InternalDeliveryNote;
 use App\Models\InventoryLocation;
 use App\Models\Project;
+use App\Models\User;
+use App\Services\Access;
 use App\Services\ActivityLogger;
 use App\Services\InventoryLocationService;
 use Illuminate\Auth\Events\Failed;
@@ -39,20 +41,51 @@ class AppServiceProvider extends ServiceProvider
     {
         Vite::prefetch(concurrency: 3);
 
-        Route::bind('transfer', fn (string $value) => InternalDeliveryNote::query()->findOrFail($value));
-        Route::bind('location', fn (string $value) => InventoryLocation::query()->findOrFail($value));
+        Route::bind('transfer', function (string $value, \Illuminate\Routing\Route $route) {
+            $note = InternalDeliveryNote::query()->findOrFail($value);
+            $project = $route->parameter('project');
+            if ($project instanceof Project) {
+                $projectId = (int) $project->id;
+                abort_unless(
+                    (int) $note->source_project_id === $projectId
+                    || (int) $note->destination_project_id === $projectId,
+                    404
+                );
+            }
+
+            $user = auth()->user();
+            if ($user instanceof User) {
+                app(Access::class)->abortUnlessCanResolveTransfer($user, $note);
+            }
+
+            return $note;
+        });
+        Route::bind('location', function (string $value) {
+            $location = InventoryLocation::query()->findOrFail($value);
+            $user = auth()->user();
+            if ($user instanceof User) {
+                app(Access::class)->abortUnlessCanAccessLocation($user, $location);
+            }
+
+            return $location;
+        });
         Route::bind('note', function (string $value, \Illuminate\Routing\Route $route) {
             $name = $route->getName() ?? '';
+            $query = match (true) {
+                str_contains($name, 'debit-notes') => DebitNote::query(),
+                str_contains($name, 'credit-notes') => CreditNote::query(),
+                default => abort(404),
+            };
 
-            if (str_contains($name, 'debit-notes')) {
-                return DebitNote::query()->findOrFail($value);
+            $project = $route->parameter('project');
+            $projectId = $project instanceof Project
+                ? (int) $project->id
+                : (is_numeric($project) ? (int) $project : null);
+            if ($projectId) {
+                $query->where('project_id', $projectId);
             }
 
-            if (str_contains($name, 'credit-notes')) {
-                return CreditNote::query()->findOrFail($value);
-            }
-
-            abort(404);
+            return $query->findOrFail($value);
         });
 
         Project::created(function (Project $project): void {

@@ -50,7 +50,7 @@ class BoqImportController extends Controller
         $this->ensureBoq($project, $boq);
 
         $request->validate([
-            'file' => ['required', 'file', 'mimes:xlsx,xls', 'max:10240'],
+            'file' => ['required', 'file', 'mimes:xlsx,xls', 'extensions:xlsx,xls', 'max:10240'],
         ]);
 
         $parsed = $this->spreadsheet->parse($request->file('file')->getRealPath());

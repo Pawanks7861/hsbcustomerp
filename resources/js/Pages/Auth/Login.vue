@@ -3,6 +3,7 @@ import Checkbox from '@/Components/Checkbox.vue';
 import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
+import SecurityNotice from '@/Components/SecurityNotice.vue';
 import TextInput from '@/Components/TextInput.vue';
 import { Head, useForm, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -144,6 +145,8 @@ const submit = () => {
                     <div v-if="status" class="mb-4 text-sm font-medium text-green-600">
                         {{ status }}
                     </div>
+
+                    <SecurityNotice />
 
                     <form @submit.prevent="submit">
                         <div>

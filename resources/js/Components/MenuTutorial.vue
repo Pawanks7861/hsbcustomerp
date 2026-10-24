@@ -1,6 +1,6 @@
 <script setup>
 import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import { usePage } from '@inertiajs/vue3';
+import { router, usePage } from '@inertiajs/vue3';
 
 const page = usePage();
 const sidebarOpen = inject('sidebarOpen', ref(false));
@@ -52,6 +52,13 @@ function lockScroll(lock) {
     document.body.style.overflow = lock ? 'hidden' : '';
 }
 
+function persistCompletion() {
+    router.post('/menu-tutorial/complete', {}, {
+        preserveScroll: true,
+        preserveState: true,
+    });
+}
+
 function finish() {
     const key = storageKey();
     if (key) {
@@ -61,6 +68,7 @@ function finish() {
     visible.value = false;
     hole.value = null;
     lockScroll(false);
+    persistCompletion();
 }
 
 function skip() {
@@ -188,6 +196,14 @@ function onKey(event) {
     }
 }
 
+watch(tutorial, (value) => {
+    if (!value) {
+        visible.value = false;
+        hole.value = null;
+        lockScroll(false);
+    }
+});
+
 watch(stepIndex, () => {
     persistStep();
     place();
@@ -200,6 +216,7 @@ onMounted(() => {
 
     const key = storageKey();
     if (key && localStorage.getItem(key) === 'done') {
+        persistCompletion();
         return;
     }
 
