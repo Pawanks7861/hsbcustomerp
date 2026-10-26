@@ -24,7 +24,7 @@ class DocumentPdfTest extends TestCase
 
     public function test_purchase_request_pdf_renders_download_and_stays_in_project(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $request] = $this->purchaseRequest();
         $other = Project::factory()->create();
         $this->company();
@@ -32,14 +32,23 @@ class DocumentPdfTest extends TestCase
         $view = $this->actingAs($user)->get(route('projects.purchase-requests.pdf', [$project, $request]));
         $this->assertPdf($view, 'inline');
         $this->assertPdfContains($view, $request->pr_number);
-        $this->assertPdfContains($view, 'BOQ QTY EXCEEDED');
+        $this->assertPdfContains($view, 'Site OPC bags');
+        $this->assertPdfContains($view, 'OPC cement bags');
         $this->assertPdfContains($view, 'Site requirement approved');
-        $this->assertPdfContains($view, 'REV 0');
         $this->assertPdfContains($view, 'Acme Construction');
+        $pdfText = $this->pdfText($view->getContent());
+        $this->assertStringNotContainsString('BOQ QTY EXCEEDED', $pdfText);
+        $this->assertStringNotContainsString('SecretBoqItemNameXYZ', $pdfText);
+        $this->assertStringNotContainsString('BOQ-CODE-HIDDEN-XYZ', $pdfText);
+        $this->assertStringNotContainsString('BOQ-HIDDEN-XYZ', $pdfText);
+        $this->assertStringNotContainsString('HiddenBoqTitleXYZ', $pdfText);
 
         $download = $this->actingAs($user)->get(route('projects.purchase-requests.pdf.download', [$project, $request]));
         $this->assertPdf($download, 'attachment');
         $this->assertStringContainsString($request->pr_number.'.pdf', (string) $download->headers->get('content-disposition'));
+        $downloadText = $this->pdfText($download->getContent());
+        $this->assertStringNotContainsString('SecretBoqItemNameXYZ', $downloadText);
+        $this->assertStringNotContainsString('BOQ-CODE-HIDDEN-XYZ', $downloadText);
 
         $this->actingAs($user)
             ->get(route('projects.purchase-requests.pdf', [$other, $request]))
@@ -48,7 +57,7 @@ class DocumentPdfTest extends TestCase
 
     public function test_purchase_order_pdf_uses_snapshot_lines_and_stored_totals(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $order] = $this->purchaseOrder();
         $this->company();
 
@@ -79,6 +88,11 @@ class DocumentPdfTest extends TestCase
         $this->assertPdfContains($view, 'Round off');
         $this->assertPdfContains($view, '212.40');
         $text = $this->pdfText($view->getContent());
+        $this->assertStringNotContainsString('SecretBoqItemNameXYZ', $text);
+        $this->assertStringNotContainsString('BOQ-CODE-HIDDEN-XYZ', $text);
+        $this->assertStringNotContainsString('BOQ-HIDDEN-XYZ', $text);
+        $this->assertStringNotContainsString('HiddenBoqTitleXYZ', $text);
+        $this->assertStringNotContainsString('BOQ:', $text);
         $this->assertStringNotContainsString('##', $text);
         $this->assertStringNotContainsString('#PO', $text);
         $this->assertStringNotContainsString('#PR', $text);
@@ -95,6 +109,10 @@ class DocumentPdfTest extends TestCase
 
         $download = $this->actingAs($user)->get(route('projects.purchase-orders.pdf.download', [$project, $order]));
         $this->assertPdf($download, 'attachment');
+        $downloadText = $this->pdfText($download->getContent());
+        $this->assertStringContainsString('Locked cement line', $downloadText);
+        $this->assertStringNotContainsString('SecretBoqItemNameXYZ', $downloadText);
+        $this->assertStringNotContainsString('BOQ-CODE-HIDDEN-XYZ', $downloadText);
 
         $this->actingAs($user)
             ->get(route('projects.purchase-orders.pdf', [Project::factory()->create(), $order]))
@@ -103,7 +121,7 @@ class DocumentPdfTest extends TestCase
 
     public function test_material_receipt_pdf_shows_linked_order_and_project(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $order] = $this->purchaseOrder();
         $vendor = $order->vendor;
         $receipt = MaterialReceipt::query()->create([
@@ -139,7 +157,7 @@ class DocumentPdfTest extends TestCase
 
     public function test_purchase_invoice_pdf_uses_balance_service_amounts(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $order] = $this->purchaseOrder();
         $invoice = PurchaseInvoice::query()->create([
             'project_id' => $project->id,
@@ -184,7 +202,7 @@ class DocumentPdfTest extends TestCase
 
     public function test_pdf_renders_with_and_without_a_logo(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $order] = $this->purchaseOrder();
 
         $this->company();
@@ -209,14 +227,19 @@ class DocumentPdfTest extends TestCase
     private function purchaseRequest(): array
     {
         $project = Project::factory()->create(['project_name' => 'North Block', 'project_code' => 'NB']);
-        $boq = Boq::factory()->create(['project_id' => $project->id, 'title' => 'Cement']);
+        $boq = Boq::factory()->create([
+            'project_id' => $project->id,
+            'title' => 'HiddenBoqTitleXYZ',
+            'boq_number' => 'BOQ-HIDDEN-XYZ',
+        ]);
         $item = BoqItem::factory()->create([
             'boq_id' => $boq->id,
-            'description' => 'OPC Cement',
+            'item_number' => 'BOQ-CODE-HIDDEN-XYZ',
+            'description' => 'SecretBoqItemNameXYZ',
             'unit' => 'Bag',
             'quantity' => 10,
         ]);
-        $user = User::factory()->create(['name' => 'Requester']);
+        $user = User::factory()->admin()->create(['name' => 'Requester']);
         $request = PurchaseRequest::query()->create([
             'project_id' => $project->id,
             'boq_id' => $boq->id,
@@ -236,6 +259,7 @@ class DocumentPdfTest extends TestCase
             'over_quantity_approval_note' => 'Site requirement approved',
         ]);
         $request->items()->create([
+            'name' => 'Site OPC bags',
             'description' => 'OPC cement bags',
             'service_code' => 'CEM-01',
             'unit' => 'Bag',
@@ -306,6 +330,8 @@ class DocumentPdfTest extends TestCase
             'approved_at' => '2026-10-09 11:00:00',
         ]);
         $order->items()->create([
+            'name' => 'Locked cement line',
+            'purchase_request_item_id' => $request->items()->first()->id,
             'description' => 'Locked cement line',
             'hsn_sac' => '2523',
             'service_code' => 'CEM-01',
@@ -363,6 +389,7 @@ class DocumentPdfTest extends TestCase
 
         foreach ($matches[1] as $stream) {
             $chunk = @gzuncompress($stream);
+            $chunk = is_string($chunk) ? $chunk : @gzuncompress($stream."\r");
             if (! is_string($chunk) || ! str_contains($chunk, 'TJ')) {
                 continue;
             }

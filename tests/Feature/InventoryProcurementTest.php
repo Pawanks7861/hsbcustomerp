@@ -6,16 +6,19 @@ use App\Models\Boq;
 use App\Models\BoqItem;
 use App\Models\CompanySetting;
 use App\Models\Material;
+use App\Models\MaterialIssue;
 use App\Models\MaterialReceipt;
 use App\Models\Project;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseRequest;
+use App\Models\StockAdjustment;
 use App\Models\StockLedgerEntry;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Services\BoqProcurementQuantityService;
 use App\Services\BoqRevisionService;
 use App\Services\InventoryStock;
+use App\Services\PoReceiptProgress;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
@@ -26,7 +29,7 @@ class InventoryProcurementTest extends TestCase
 
     public function test_a_purchase_request_keeps_each_boq_item_on_its_own_line(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $first, $second] = $this->boqPair();
 
         $this->actingAs($user)->post(route('projects.purchase-requests.store', $project), [
@@ -72,7 +75,7 @@ class InventoryProcurementTest extends TestCase
         $this->actingAs($user)->post(route('projects.purchase-requests.store', $project), [
             'request_date' => '2026-10-12',
             'items' => [['quantity' => 1]],
-        ])->assertSessionHasErrors('items.0.boq_item_id');
+        ])->assertSessionHasErrors('items.0.name');
 
         $other = Project::factory()->create();
         $this->actingAs($user)->post(route('projects.purchase-requests.store', $other), [
@@ -84,7 +87,7 @@ class InventoryProcurementTest extends TestCase
 
     public function test_only_the_current_finalized_revision_can_be_requested_and_one_line_can_exceed(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         $admin = User::factory()->admin()->create();
         [$project, $first, $second] = $this->boqPair(10, 10);
         $boq = $first->boq;
@@ -131,7 +134,7 @@ class InventoryProcurementTest extends TestCase
 
     public function test_existing_single_item_requests_are_still_counted_once(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $first] = $this->boqPair();
         $this->actingAs($user)->post(route('projects.boqs.items.purchase-requests.store', [$project, $first->boq, $first]), [
             'request_date' => '2026-10-12',
@@ -146,7 +149,7 @@ class InventoryProcurementTest extends TestCase
 
     public function test_purchase_order_copies_every_approved_line_and_keeps_lines_locked(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         $admin = User::factory()->admin()->create();
         [$project, $first, $second] = $this->boqPair();
         $request = $this->multi($user, $project, $first, $second, 2, 5);
@@ -213,14 +216,16 @@ class InventoryProcurementTest extends TestCase
 
         $this->actingAs($user)->post(route('projects.grns.submit', [$project, $grn]))->assertRedirect();
         $this->assertSame(0, StockLedgerEntry::query()->count());
-        $this->actingAs($user)->post(route('projects.grns.post', [$project, $grn]))->assertForbidden();
+        $this->actingAs(User::factory()->withRoles('storekeeper')->create())
+            ->post(route('projects.grns.post', [$project, $grn]))
+            ->assertForbidden();
         $this->actingAs($admin)->post(route('projects.grns.post', [$project, $grn]))->assertRedirect();
         $this->actingAs($admin)->post(route('projects.grns.post', [$project, $grn]))->assertForbidden();
 
         $this->assertSame(1, StockLedgerEntry::query()->count());
         $this->assertSame('3.000', app(InventoryStock::class)->balance($project->id, $material->id));
         $order->refresh();
-        $this->assertSame('Partially Received', app(\App\Services\PoReceiptProgress::class)->label($order));
+        $this->assertSame('Partially Received', app(PoReceiptProgress::class)->label($order));
 
         $this->actingAs($user)->post(route('projects.purchase-orders.grns.store', [$project, $order]), $this->grn([
             $this->grnLine($line, $material, '8', '8', '0'),
@@ -263,8 +268,10 @@ class InventoryProcurementTest extends TestCase
             'items' => [['material_id' => $material->id, 'quantity' => 2]],
         ])->assertRedirect();
         $this->assertSame('8.000', app(InventoryStock::class)->balance($project->id, $material->id));
-        $issue = \App\Models\MaterialIssue::query()->first();
-        $this->actingAs($user)->post(route('projects.inventory.issues.post', [$project, $issue]))->assertForbidden();
+        $issue = MaterialIssue::query()->first();
+        $this->actingAs(User::factory()->withRoles('storekeeper')->create())
+            ->post(route('projects.inventory.issues.post', [$project, $issue]))
+            ->assertForbidden();
         $this->actingAs($admin)->post(route('projects.inventory.issues.post', [$project, $issue]))->assertRedirect();
         $this->assertSame('6.000', app(InventoryStock::class)->balance($project->id, $material->id));
 
@@ -275,7 +282,7 @@ class InventoryProcurementTest extends TestCase
             'quantity' => 1,
             'reason' => 'Count correction',
         ])->assertRedirect();
-        $adjustment = \App\Models\StockAdjustment::query()->first();
+        $adjustment = StockAdjustment::query()->first();
         $this->assertSame('draft', $adjustment->status);
         $this->assertSame('6.000', app(InventoryStock::class)->balance($project->id, $material->id));
         $this->actingAs($admin)->post(route('projects.inventory.adjustments.post', [$project, $adjustment]))->assertRedirect();
@@ -285,7 +292,7 @@ class InventoryProcurementTest extends TestCase
         $material->update(['minimum_stock' => 10]);
         $this->actingAs($user)->get(route('projects.inventory.stock', $project))
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->where('rows.0.status', 'Low Stock')->where('rows.0.available', '5.000'));
+            ->assertInertia(fn ($page) => $page->where('rows.data.0.status', 'Low Stock')->where('rows.data.0.available', '5.000'));
 
         $this->actingAs($admin)->post(route('projects.grns.cancel', [$project, $grn]))->assertRedirect();
         $this->assertSame('2.000', app(InventoryStock::class)->balance($project->id, $material->id));
@@ -375,7 +382,7 @@ class InventoryProcurementTest extends TestCase
      */
     private function approvedOrder(): array
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         $admin = User::factory()->admin()->create();
         [$project, $first, $second] = $this->boqPair();
         $request = $this->multi($user, $project, $first, $second, 10, 4);
@@ -389,7 +396,7 @@ class InventoryProcurementTest extends TestCase
         ])->assertRedirect();
         $order = PurchaseOrder::query()->firstOrFail();
         $this->actingAs($user)->post(route('projects.purchase-orders.submit', [$project, $order]));
-        $this->actingAs($admin)->post(route('projects.purchase-orders.approve', [$project, $order]));
+        $this->completePoApproval($order, $admin);
         $material = Material::query()->create([
             'material_code' => 'MAT-000001',
             'name' => 'Cement bags',
@@ -446,6 +453,7 @@ class InventoryProcurementTest extends TestCase
         if (preg_match_all('/stream\r?\n(.*?)\r?\nendstream/s', $response->getContent(), $matches)) {
             foreach ($matches[1] as $stream) {
                 $chunk = @gzuncompress($stream);
+                $chunk = is_string($chunk) ? $chunk : @gzuncompress($stream."\r");
 
                 if (! is_string($chunk) || ! str_contains($chunk, 'TJ')) {
                     continue;

@@ -69,8 +69,7 @@ class InternalDeliveryTest extends TestCase
         ])->assertRedirect();
         $this->assertSame('6.000', $note->fresh()->items()->first()->quantity);
 
-        $outsider = User::factory()->create([
-            'role_id' => \App\Models\Role::query()->where('slug', 'storekeeper')->value('id'),
+        $outsider = User::factory()->withRoles('storekeeper')->create([
             'project_access' => 'selected',
         ]);
         $outsider->projects()->sync([$destination->id]);
@@ -79,7 +78,7 @@ class InternalDeliveryTest extends TestCase
             'source_location_id' => $from->id,
             'destination_location_id' => $to->id,
             'items' => [['material_id' => $material->id, 'quantity' => 1]],
-        ])->assertForbidden();
+        ])->assertNotFound();
 
         $this->actingAs($admin)->post(route('inventory.transfers.submit', $note))->assertRedirect();
         $this->actingAs($admin)->post(route('inventory.transfers.approve', $note))->assertRedirect();
@@ -161,8 +160,7 @@ class InternalDeliveryTest extends TestCase
             ->assertOk()
             ->assertHeader('content-disposition');
 
-        $stranger = User::factory()->create([
-            'role_id' => \App\Models\Role::query()->where('slug', 'viewer')->value('id'),
+        $stranger = User::factory()->withRoles('viewer')->create([
             'project_access' => 'selected',
         ]);
         $this->actingAs($stranger)->get(route('inventory.transfers.pdf', $printed))->assertNotFound();

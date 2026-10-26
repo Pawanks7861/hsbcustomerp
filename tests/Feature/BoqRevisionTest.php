@@ -18,7 +18,7 @@ class BoqRevisionTest extends TestCase
 
     public function test_original_boq_is_revision_zero_and_new_revisions_keep_history(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         $project = Project::factory()->create();
         $boq = Boq::factory()->create(['project_id' => $project->id, 'title' => 'Finishes']);
         $item = BoqItem::factory()->create([

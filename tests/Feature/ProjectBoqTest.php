@@ -19,7 +19,7 @@ class ProjectBoqTest extends TestCase
     {
         parent::setUp();
 
-        $this->actingAs(User::factory()->create());
+        $this->actingAs(User::factory()->admin()->create());
     }
 
     public function test_project_crud(): void
@@ -36,10 +36,11 @@ class ProjectBoqTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Projects/Index')
-                ->where('projects.0.project_code', 'CW-01')
-                ->where('projects.0.project_name', 'Chamber Works')
-                ->where('projects.0.boq_total', '0.00')
-                ->where('projects.0.budget_total', '0.00')
+                ->where('projects.data.0.project_code', 'CW-01')
+                ->where('projects.data.0.project_name', 'Chamber Works')
+                ->where('projects.data.0.boq_total', '0.00')
+                ->where('projects.data.0.budget_total', '0.00')
+                ->where('projects.per_page', 30)
             );
 
         $this->put("/projects/{$project->id}", [
@@ -274,8 +275,8 @@ class ProjectBoqTest extends TestCase
 
         $this->get(route('projects.boqs.index', $projectA))
             ->assertInertia(fn (Assert $page) => $page
-                ->has('boqs', 1)
-                ->where('boqs.0.title', 'Only A')
+                ->has('boqs.data', 1)
+                ->where('boqs.data.0.title', 'Only A')
             );
 
         $this->get(route('projects.show', $projectB))

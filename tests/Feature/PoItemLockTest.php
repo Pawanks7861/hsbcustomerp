@@ -19,7 +19,7 @@ class PoItemLockTest extends TestCase
     public function test_purchase_order_items_are_copied_from_the_approved_request_and_cannot_be_changed(): void
     {
         $admin = User::factory()->admin()->create();
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq, $item] = $this->procurable();
         $other = Project::factory()->create();
 
@@ -109,6 +109,24 @@ class PoItemLockTest extends TestCase
                     'rate' => 4,
                     'amount' => 32,
                 ]],
+            ]))->assertSessionHasErrors('rate_change_reason');
+
+        $this->actingAs($user)
+            ->put(route('projects.purchase-orders.update', [$project, $order]), $this->header($revised, [
+                'delivery_date' => '2026-11-01',
+                'delivery_address' => 'Bapunagar',
+                'gst_percentage' => 18,
+                'terms_conditions' => 'Net 30',
+                'remarks' => 'Header only',
+                'rate_change_reason' => 'Vendor negotiated rate',
+                'items' => [[
+                    'description' => 'Edited description',
+                    'service_code' => '999',
+                    'unit' => 'Nos',
+                    'quantity' => 8,
+                    'rate' => 100,
+                    'amount' => 32,
+                ]],
             ]))->assertRedirect();
 
         $order->refresh()->load('items');
@@ -122,16 +140,21 @@ class PoItemLockTest extends TestCase
         $this->assertSame('2026-11-01', $order->delivery_date?->toDateString());
         $this->assertSame('Bapunagar', $order->delivery_address);
         $this->assertSame('18.00', (string) $order->gst_percentage);
-        $this->assertSame('39.60', (string) $order->gst_amount);
-        $this->assertSame('259.60', (string) $order->grand_total);
+        $this->assertSame('36.00', (string) $order->gst_amount);
+        $this->assertSame('236.00', (string) $order->grand_total);
         $this->assertSame('Net 30', $order->terms_conditions);
         $this->assertSame('Header only', $order->remarks);
         $this->assertCount(1, $order->items);
         $this->assertSame('Cement putty', $order->items[0]->description);
         $this->assertSame('90130546', $order->items[0]->service_code);
         $this->assertSame('2.000', (string) $order->items[0]->quantity);
-        $this->assertSame('110.00', (string) $order->items[0]->rate);
-        $this->assertSame('220.00', (string) $order->items[0]->amount);
+        $this->assertSame('100.00', (string) $order->items[0]->rate);
+        $this->assertSame('200.00', (string) $order->items[0]->amount);
+        $this->assertDatabaseHas('activity_logs', [
+            'action' => 'purchase_order.rate_changed',
+            'subject_type' => PurchaseOrder::class,
+            'subject_id' => $order->id,
+        ]);
 
         $this->actingAs($user)
             ->put(route('projects.purchase-orders.update', [$project, $order]), $this->header($revised, [
@@ -143,7 +166,7 @@ class PoItemLockTest extends TestCase
                 'items' => [[
                     'description' => 'Should stay locked',
                     'quantity' => 50,
-                    'rate' => 1,
+                    'rate' => 100,
                     'hsn_sac' => '2523',
                     'discount_percentage' => 10,
                 ]],
@@ -152,29 +175,27 @@ class PoItemLockTest extends TestCase
         $order->refresh()->load('items');
         $this->assertSame('Cement putty', $order->items[0]->description);
         $this->assertSame('2.000', (string) $order->items[0]->quantity);
-        $this->assertSame('110.00', (string) $order->items[0]->rate);
-        $this->assertSame('220.00', (string) $order->items[0]->amount);
+        $this->assertSame('100.00', (string) $order->items[0]->rate);
+        $this->assertSame('200.00', (string) $order->items[0]->amount);
         $this->assertSame('2523', $order->items[0]->hsn_sac);
         $this->assertSame('10.00', (string) $order->items[0]->discount_percentage);
-        $this->assertSame('22.00', (string) $order->items[0]->discount_amount);
-        $this->assertSame('198.00', (string) $order->items[0]->taxable_amount);
-        $this->assertSame('17.82', (string) $order->items[0]->cgst_amount);
-        $this->assertSame('17.82', (string) $order->items[0]->sgst_amount);
+        $this->assertSame('20.00', (string) $order->items[0]->discount_amount);
+        $this->assertSame('180.00', (string) $order->items[0]->taxable_amount);
+        $this->assertSame('16.20', (string) $order->items[0]->cgst_amount);
+        $this->assertSame('16.20', (string) $order->items[0]->sgst_amount);
         $this->assertSame('Gujarat', $order->place_of_supply);
         $this->assertSame('9.00', (string) $order->cgst_percentage);
         $this->assertSame('9.00', (string) $order->sgst_percentage);
         $this->assertSame('18.00', (string) $order->gst_percentage);
-        $this->assertSame('35.64', (string) $order->gst_amount);
+        $this->assertSame('32.40', (string) $order->gst_amount);
         $this->assertSame('10.00', (string) $order->freight);
         $this->assertSame('-0.04', (string) $order->round_off);
-        $this->assertSame('243.60', (string) $order->grand_total);
+        $this->assertSame('222.36', (string) $order->grand_total);
 
         $this->actingAs($user)
             ->post(route('projects.purchase-orders.submit', [$project, $order]))
             ->assertRedirect();
-        $this->actingAs($admin)
-            ->post(route('projects.purchase-orders.approve', [$project, $order]))
-            ->assertRedirect();
+        $this->completePoApproval($order, $admin);
 
         $this->actingAs($admin)
             ->put(route('projects.purchase-orders.update', [$project, $order]), $this->header($revised, [
@@ -190,7 +211,7 @@ class PoItemLockTest extends TestCase
         $this->assertSame('approved', $order->status);
         $this->assertSame('Revised Supplier', $order->supplier_name);
         $this->assertSame('Cement putty', $order->items[0]->description);
-        $this->assertSame('220.00', (string) $order->items[0]->amount);
+        $this->assertSame('200.00', (string) $order->items[0]->amount);
     }
 
     /**

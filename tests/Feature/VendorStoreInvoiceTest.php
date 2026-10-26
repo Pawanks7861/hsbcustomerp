@@ -4,13 +4,16 @@ namespace Tests\Feature;
 
 use App\Models\Boq;
 use App\Models\BoqItem;
+use App\Models\MaterialReceipt;
 use App\Models\Project;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseRequest;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorPayment;
 use App\Models\VendorRecovery;
+use App\Services\VendorBalanceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
@@ -21,20 +24,25 @@ class VendorStoreInvoiceTest extends TestCase
 
     public function test_vendor_master_po_snapshot_and_delete_protection(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
 
-        $this->actingAs($user)->post(route('vendors.store'), [
+        $this->actingAs($user)->post(route('vendors.store'), $this->vendorProfile([
             'name' => 'ABC Cement',
             'phone' => '9999999999',
             'gst_number' => '24AAAAA0000A1Z5',
-        ])->assertRedirect();
+        ]))->assertRedirect();
 
         $vendor = Vendor::query()->firstOrFail();
         $this->assertSame('VEN-001', $vendor->vendor_code);
 
         $this->actingAs($user)->post(route('vendors.store'), [
             'name' => 'Second Vendor',
-        ])->assertRedirect();
+        ])->assertSessionHasErrors();
+        $this->actingAs($user)->post(route('vendors.store'), $this->vendorProfile([
+            'name' => 'Second Vendor',
+            'email' => 'second@example.com',
+            'gst_number' => '27AAAAA0000A1Z5',
+        ]))->assertRedirect();
         $this->assertSame('VEN-002', Vendor::query()->orderByDesc('id')->first()->vendor_code);
 
         $this->actingAs($user)->put(route('vendors.update', $vendor), [
@@ -66,7 +74,7 @@ class VendorStoreInvoiceTest extends TestCase
 
     public function test_store_receipts_support_po_linked_and_manual_entries(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         $vendor = Vendor::factory()->create();
         [$project, $order] = $this->approvedOrder($user, $vendor);
         $other = Project::factory()->create();
@@ -129,11 +137,28 @@ class VendorStoreInvoiceTest extends TestCase
         $manual = $project->materialReceipts()->whereNull('purchase_order_id')->firstOrFail();
         $this->assertNull($manual->vendor_id);
         $this->assertSame('Loose sand', $manual->items()->first()->description);
+
+        $this->actingAs($user)
+            ->get(route('projects.store.show', [$project, $manual]))
+            ->assertInertia(fn ($page) => $page
+                ->where('receipt.is_grn', false)
+                ->where('receipt.can_edit', true)
+                ->where('receipt.can_delete', true));
+
+        $manual->update(['document_kind' => MaterialReceipt::KIND_GRN, 'status' => MaterialReceipt::STATUS_POSTED]);
+
+        $this->actingAs($user)
+            ->get(route('projects.store.show', [$project, $manual]))
+            ->assertInertia(fn ($page) => $page
+                ->where('receipt.is_grn', true)
+                ->where('receipt.can_edit', false)
+                ->where('receipt.can_delete', false));
+        $this->actingAs($user)->get(route('projects.store.edit', [$project, $manual]))->assertNotFound();
     }
 
     public function test_purchase_invoices_follow_the_purchase_order_vendor(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         $vendor = Vendor::factory()->create();
         $otherVendor = Vendor::factory()->create();
         [$project, $order] = $this->approvedOrder($user, $vendor);
@@ -202,7 +227,7 @@ class VendorStoreInvoiceTest extends TestCase
 
     public function test_payments_advances_adjustments_refunds_and_report(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         $vendor = Vendor::factory()->create(['opening_advance' => 0, 'opening_outstanding' => 0]);
         [$project, $order] = $this->approvedOrder($user, $vendor);
         $order->update(['grand_total' => 800000, 'status' => 'approved']);
@@ -215,6 +240,7 @@ class VendorStoreInvoiceTest extends TestCase
             'tax_amount' => 0,
         ])->assertRedirect();
         $invoice = PurchaseInvoice::query()->firstOrFail();
+        $this->markInvoiceApproved($invoice, $user);
 
         $this->actingAs($user)->post(route('vendors.payments.store', $vendor), [
             'payment_date' => '2026-10-01',
@@ -242,7 +268,7 @@ class VendorStoreInvoiceTest extends TestCase
 
         $payment = VendorPayment::query()->where('payment_type', VendorPayment::TYPE_INVOICE)->first();
         $this->assertSame('upi', $payment->payment_mode);
-        $this->assertSame('250000.00', app(\App\Services\VendorBalanceService::class)->invoiceOutstanding($invoice->fresh()));
+        $this->assertSame('250000.00', app(VendorBalanceService::class)->invoiceOutstanding($invoice->fresh()));
 
         $this->actingAs($user)->post(route('projects.purchase-invoices.advance', [$project, $invoice]), [
             'amount' => 150000,
@@ -252,7 +278,7 @@ class VendorStoreInvoiceTest extends TestCase
             'amount' => 60000,
         ])->assertSessionHasErrors('amount');
 
-        $summary = app(\App\Services\VendorBalanceService::class)->summary($vendor->fresh());
+        $summary = app(VendorBalanceService::class)->summary($vendor->fresh());
         $this->assertSame('150000.00', $summary['advance_adjusted']);
         $this->assertSame('50000.00', $summary['available_advance']);
         $this->assertSame('100000.00', $summary['outstanding_payable']);
@@ -268,7 +294,7 @@ class VendorStoreInvoiceTest extends TestCase
         ])->assertRedirect();
 
         $recovery = VendorRecovery::query()->firstOrFail();
-        $summary = app(\App\Services\VendorBalanceService::class)->summary($vendor->fresh());
+        $summary = app(VendorBalanceService::class)->summary($vendor->fresh());
         $this->assertSame('10000.00', $summary['available_advance']);
         $this->assertSame('40000.00', $summary['refund_due']);
 
@@ -284,7 +310,7 @@ class VendorStoreInvoiceTest extends TestCase
             'refund_mode' => 'bank_transfer',
         ])->assertRedirect();
         $this->assertSame('partial', $recovery->fresh()->status);
-        $this->assertSame('15000.00', app(\App\Services\VendorBalanceService::class)->summary($vendor->fresh())['refund_due']);
+        $this->assertSame('15000.00', app(VendorBalanceService::class)->summary($vendor->fresh())['refund_due']);
 
         $this->actingAs($user)->post(route('vendors.recoveries.refunds.store', [$vendor, $recovery]), [
             'refund_date' => '2026-10-13',
@@ -292,7 +318,7 @@ class VendorStoreInvoiceTest extends TestCase
             'refund_mode' => 'cash',
         ])->assertRedirect();
         $this->assertSame('recovered', $recovery->fresh()->status);
-        $closed = app(\App\Services\VendorBalanceService::class)->summary($vendor->fresh());
+        $closed = app(VendorBalanceService::class)->summary($vendor->fresh());
         $this->assertSame('0.00', $closed['refund_due']);
         $this->assertSame('40000.00', $closed['refund_received']);
 
@@ -303,19 +329,19 @@ class VendorStoreInvoiceTest extends TestCase
             'to' => '2026-10-31',
         ]))->assertOk()->assertInertia(fn ($page) => $page
             ->component('Vendors/Report')
-            ->where('rows.0.vendor_code', $vendor->vendor_code)
-            ->where('rows.0.advance_paid', '200000.00')
-            ->where('rows.0.invoice_payments', '500000.00')
-            ->where('rows.0.refund_received', '40000.00')
-            ->has('rows', 1)
+            ->where('rows.data.0.vendor_code', $vendor->vendor_code)
+            ->where('rows.data.0.advance_paid', '200000.00')
+            ->where('rows.data.0.invoice_payments', '500000.00')
+            ->where('rows.data.0.refund_received', '40000.00')
+            ->has('rows.data', 1)
         );
 
         $this->actingAs($user)->get(route('vendors.report', [
             'from' => '2026-01-01',
             'to' => '2026-01-31',
         ]))->assertInertia(fn ($page) => $page
-            ->where('rows.0.advance_paid', '0.00')
-            ->where('rows.0.total_invoice_value', '0.00')
+            ->where('rows.data.0.advance_paid', '0.00')
+            ->where('rows.data.0.total_invoice_value', '0.00')
         );
     }
 
@@ -345,7 +371,7 @@ class VendorStoreInvoiceTest extends TestCase
             ]],
         ])->assertRedirect();
 
-        $request = \App\Models\PurchaseRequest::query()->firstOrFail();
+        $request = PurchaseRequest::query()->firstOrFail();
         $request->update(['status' => 'approved', 'approved_at' => now(), 'approved_by' => $user->id]);
 
         $this->actingAs($user)->post(route('projects.purchase-requests.purchase-orders.store', [$project, $request]), [

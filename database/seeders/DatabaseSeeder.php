@@ -9,14 +9,19 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        User::query()->firstOrCreate(
+        $admin = User::query()->firstOrCreate(
             ['email' => 'admin@hsb.local'],
             [
                 'name' => 'Administrator',
                 'password' => 'password',
-                'status' => User::STATUS_ACTIVE,
-                'is_admin' => true,
             ],
         );
+
+        if ($admin->wasRecentlyCreated) {
+            $admin->forceFill([
+                'status' => User::STATUS_ACTIVE,
+                'is_admin' => true,
+            ])->save();
+        }
     }
 }

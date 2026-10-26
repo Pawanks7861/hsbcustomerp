@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ActivityLog;
 use App\Models\Boq;
 use App\Models\BoqItem;
 use App\Models\BoqRevision;
@@ -19,6 +20,8 @@ use App\Models\VendorPayment;
 use App\Models\WorkOrder;
 use App\Services\BoqReceiptProgress;
 use App\Services\BoqRevisionService;
+use App\Services\DocumentPdf;
+use App\Support\PdfFormat;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -53,9 +56,9 @@ class WorkOrderTest extends TestCase
             ->get(route('projects.work-orders.index', $project))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('workOrders.0.item_count', 4)
-                ->where('workOrders.0.grand_total', '305000.00')
-                ->where('workOrders.0.contractor_name', 'Sharma Contractors')
+                ->where('workOrders.data.0.item_count', 4)
+                ->where('workOrders.data.0.grand_total', '305000.00')
+                ->where('workOrders.data.0.contractor_name', 'Sharma Contractors')
             );
     }
 
@@ -241,7 +244,7 @@ class WorkOrderTest extends TestCase
         $this->actingAs($admin)
             ->get(route('projects.work-orders.show', [$project, $issued]))
             ->assertOk();
-        $this->assertTrue(\App\Models\ActivityLog::query()
+        $this->assertTrue(ActivityLog::query()
             ->where('subject_type', WorkOrder::class)
             ->where('subject_id', $issued->id)
             ->where('action', 'work_order.superseded')
@@ -253,8 +256,8 @@ class WorkOrderTest extends TestCase
         [$admin, $project] = $this->scene();
         $approverRole = Role::query()->where('slug', 'purchase_approver')->firstOrFail();
         $viewerRole = Role::query()->where('slug', 'viewer')->firstOrFail();
-        $blocked = User::factory()->create(['role_id' => $approverRole->id, 'is_admin' => false]);
-        $viewer = User::factory()->create(['role_id' => $viewerRole->id, 'is_admin' => false]);
+        $blocked = User::factory()->withRoles($approverRole->slug)->create(['is_admin' => false]);
+        $viewer = User::factory()->withRoles($viewerRole->slug)->create(['is_admin' => false]);
 
         $this->actingAs($blocked)->get(route('projects.work-orders.index', $project))->assertForbidden();
         $this->actingAs($blocked)->post(route('projects.work-orders.store', $project), [])->assertForbidden();
@@ -320,13 +323,13 @@ class WorkOrderTest extends TestCase
 
         $show = $this->actingAs($user)->get(route('projects.work-orders.show', [$project, $order]));
         $document = $show->original->getData()['page']['props']['workOrder'];
-        $html = view('pdf.work-order', app(\App\Services\DocumentPdf::class)->viewData([
+        $html = view('pdf.work-order', app(DocumentPdf::class)->viewData([
             'title' => 'WORK ORDER',
             'number' => $order->work_order_number,
             'revision' => null,
             'subject' => $project->project_name,
             'dateLabel' => 'Work order date',
-            'date' => \App\Support\PdfFormat::date($document['work_order_date']),
+            'date' => PdfFormat::date($document['work_order_date']),
             'status' => $document['status_label'],
             'party' => [
                 'label' => 'Contractor',

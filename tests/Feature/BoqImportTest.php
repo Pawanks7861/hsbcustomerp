@@ -21,7 +21,7 @@ class BoqImportTest extends TestCase
 
     public function test_template_download_uses_the_required_columns(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq] = $this->boq();
 
         $response = $this->actingAs($user)
@@ -59,7 +59,7 @@ class BoqImportTest extends TestCase
 
     public function test_reference_workbook_is_previewed_and_then_imported(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq] = $this->boq();
         $description = "SPLY&APLY, PUTTY, CEMENT, 2 COATS\nLine text: Providing and Applying cement putty in two coats across the complete surface.";
 
@@ -149,7 +149,7 @@ class BoqImportTest extends TestCase
 
     public function test_invalid_rows_block_confirm_and_are_shown_in_preview(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq] = $this->boq();
 
         $file = $this->workbook(function (Worksheet $sheet): void {
@@ -183,7 +183,7 @@ class BoqImportTest extends TestCase
 
     public function test_import_appends_to_an_existing_boq(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq] = $this->boq();
         $existing = BoqItem::factory()->create([
             'boq_id' => $boq->id,
@@ -222,7 +222,7 @@ class BoqImportTest extends TestCase
 
     public function test_import_cannot_target_another_project_or_boq(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq] = $this->boq();
         $other = Project::factory()->create();
         $otherBoq = Boq::factory()->create(['project_id' => $project->id, 'title' => 'Other']);
@@ -260,7 +260,7 @@ class BoqImportTest extends TestCase
 
     public function test_reuploaded_template_recalculates_amount_and_keeps_the_section_example(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq] = $this->boq();
 
         $download = $this->actingAs($user)

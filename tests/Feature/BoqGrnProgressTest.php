@@ -22,7 +22,7 @@ class BoqGrnProgressTest extends TestCase
 
     public function test_boq_progress_uses_posted_grn_accepted_quantity(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         $vendor = Vendor::factory()->create();
         $project = Project::factory()->create();
         $boq = Boq::factory()->create(['project_id' => $project->id, 'gst_percentage' => 0]);
@@ -75,13 +75,15 @@ class BoqGrnProgressTest extends TestCase
 
         $progress = app(BoqReceiptProgress::class);
         $this->assertSame('200.000', $progress->acceptedFor([$item->id])[$item->id]);
+        $this->assertSame('209.000', $progress->recordedFor([$item->id])[$item->id]);
         $this->assertSame('300.000', $progress->orderedFor([$item->id])[$item->id]);
 
         $this->actingAs($user)
             ->get(route('projects.boqs.show', [$project, $boq]))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->where('boq.items.0.quantity_usage.received_quantity', '200.000')
+                ->where('boq.items.0.quantity_usage.received_quantity', '209.000')
+                ->where('boq.items.0.quantity_usage.used_quantity', '200.000')
                 ->where('boq.items.0.quantity_usage.boq_quantity', '7536.000')
             );
 
@@ -105,7 +107,7 @@ class BoqGrnProgressTest extends TestCase
         $this->actingAs($user)
             ->get(route('projects.boqs.show', [$project, $boq]).'?revision='.$original->id)
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->where('boq.items.0.quantity_usage.received_quantity', '200.000'));
+            ->assertInertia(fn ($page) => $page->where('boq.items.0.quantity_usage.received_quantity', '209.000'));
 
         $this->actingAs($user)
             ->get(route('projects.boqs.show', [$project, $boq]))

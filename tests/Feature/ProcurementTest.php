@@ -20,7 +20,7 @@ class ProcurementTest extends TestCase
     public function test_purchase_request_workflow_approval_and_project_isolation(): void
     {
         $admin = User::factory()->admin()->create();
-        $user = User::factory()->create();
+        $user = User::factory()->withRoles('purchase_requester')->create();
         [$project, $boq, $item] = $this->procurable();
         $other = Project::factory()->create();
 
@@ -66,9 +66,10 @@ class ProcurementTest extends TestCase
         $this->assertSame($boq->id, $request->boq_id);
         $this->assertSame($item->id, $request->boq_item_id);
         $this->assertSame($user->id, $request->requested_by);
-        $this->assertSame('50.00', (string) $request->items[0]->estimated_amount);
+        $this->assertNull($request->items[0]->estimated_rate);
+        $this->assertNull($request->items[0]->estimated_amount);
         $this->assertNull($request->items[1]->estimated_amount);
-        $this->assertSame('50.00', $request->estimatedTotal());
+        $this->assertSame('0.00', $request->estimatedTotal());
 
         $this->actingAs($user)
             ->post(route('projects.boqs.items.purchase-requests.store', [$project, $boq, $item]), $this->requestPayload())
@@ -78,7 +79,7 @@ class ProcurementTest extends TestCase
         $this->actingAs($user)
             ->put(route('projects.purchase-requests.update', [$project, $request]), $this->requestPayload())
             ->assertRedirect();
-        $this->assertSame('20.00', $request->fresh()->estimatedTotal());
+        $this->assertSame('0.00', $request->fresh()->estimatedTotal());
 
         $this->actingAs($user)
             ->post(route('projects.purchase-requests.submit', [$project, $request]))
@@ -156,7 +157,7 @@ class ProcurementTest extends TestCase
     public function test_purchase_order_workflow_calculations_and_locks(): void
     {
         $admin = User::factory()->admin()->create();
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq, $item] = $this->procurable();
         $other = Project::factory()->create();
 
@@ -184,7 +185,7 @@ class ProcurementTest extends TestCase
                 ->where('purchaseOrder.items.0.description', 'Cement')
                 ->where('purchaseOrder.items.0.unit', 'Bag')
                 ->where('purchaseOrder.items.0.quantity', '2.000')
-                ->where('purchaseOrder.items.0.rate', '10.00')
+                ->where('purchaseOrder.items.0.rate', '100.00')
             );
 
         $this->actingAs($user)
@@ -200,19 +201,20 @@ class ProcurementTest extends TestCase
         $this->assertSame($boq->id, $order->boq_id);
         $this->assertSame($item->id, $order->boq_item_id);
         $this->assertSame($user->id, $order->created_by);
-        $this->assertSame('10.00', (string) $order->items[0]->rate);
-        $this->assertSame('20.00', (string) $order->items[0]->amount);
-        $this->assertSame('20.00', (string) $order->subtotal);
+        // Create locks commercial rate from BOQ (PR no longer carries rates); posted rate is ignored.
+        $this->assertSame('100.00', (string) $order->items[0]->rate);
+        $this->assertSame('200.00', (string) $order->items[0]->amount);
+        $this->assertSame('200.00', (string) $order->subtotal);
         $this->assertSame('5.00', (string) $order->gst_percentage);
-        $this->assertSame('1.00', (string) $order->gst_amount);
-        $this->assertSame('21.00', (string) $order->grand_total);
+        $this->assertSame('10.00', (string) $order->gst_amount);
+        $this->assertSame('210.00', (string) $order->grand_total);
 
         $this->actingAs($user)
             ->post(route('projects.purchase-orders.submit', [$project, $order]))
             ->assertRedirect();
         $this->assertSame('submitted', $order->fresh()->status);
 
-        $this->actingAs($user)
+        $this->actingAs(User::factory()->withRoles('purchase_requester')->create())
             ->post(route('projects.purchase-orders.approve', [$project, $order]))
             ->assertForbidden();
         $this->actingAs($user)
@@ -231,13 +233,13 @@ class ProcurementTest extends TestCase
         $this->actingAs($user)
             ->post(route('projects.purchase-orders.submit', [$project, $order]))
             ->assertRedirect();
-        $this->actingAs($admin)
-            ->post(route('projects.purchase-orders.approve', [$project, $order]))
-            ->assertRedirect();
+        $second = $this->completePoApproval($order, $admin);
 
         $order->refresh();
         $this->assertSame('approved', $order->status);
-        $this->assertSame($admin->id, $order->approved_by);
+        $this->assertSame($second->id, $order->approved_by);
+        $this->assertSame($admin->id, $order->first_approved_by);
+        $this->assertSame($second->id, $order->second_approved_by);
 
         $this->actingAs($admin)
             ->put(route('projects.purchase-orders.update', [$project, $order]), $this->orderPayload())
@@ -267,7 +269,7 @@ class ProcurementTest extends TestCase
 
     public function test_boq_item_with_procurement_cannot_be_deleted(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq, $item] = $this->procurable();
         $this->makeRequest($user, $project, $boq, $item);
 

@@ -19,7 +19,7 @@ class BoqQuantityControlTest extends TestCase
 
     public function test_quantity_is_within_exact_or_over_the_boq_quantity(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         $service = app(BoqProcurementQuantityService::class);
 
         [$project, $boq, $item] = $this->item('100');
@@ -47,7 +47,7 @@ class BoqQuantityControlTest extends TestCase
 
     public function test_only_submitted_and_approved_quantities_are_counted(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         $admin = User::factory()->admin()->create();
         [$project, $boq, $item] = $this->item('100');
         $service = app(BoqProcurementQuantityService::class);
@@ -80,7 +80,7 @@ class BoqQuantityControlTest extends TestCase
 
     public function test_current_purchase_request_is_excluded_from_existing_quantity(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq, $item] = $this->item('100');
         $request = $this->submitted($user, $project, $boq, $item, '40');
         $service = app(BoqProcurementQuantityService::class);
@@ -97,7 +97,7 @@ class BoqQuantityControlTest extends TestCase
 
     public function test_submission_stores_snapshots_and_flags_excess(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq, $item] = $this->item('140', 'Rmt');
         $this->submitted($user, $project, $boq, $item, '80');
         $approved = PurchaseRequest::query()->firstOrFail();
@@ -126,7 +126,7 @@ class BoqQuantityControlTest extends TestCase
     public function test_normal_approval_does_not_require_an_excess_note(): void
     {
         $admin = User::factory()->admin()->create();
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq, $item] = $this->item('100');
         $request = $this->submitted($user, $project, $boq, $item, '30');
 
@@ -145,7 +145,7 @@ class BoqQuantityControlTest extends TestCase
     public function test_over_quantity_approval_requires_a_note_and_records_the_admin(): void
     {
         $admin = User::factory()->admin()->create();
-        $user = User::factory()->create();
+        $user = User::factory()->withRoles('purchase_requester')->create();
         [$project, $boq, $item] = $this->item('100');
         $this->submitted($user, $project, $boq, $item, '70');
         $request = $this->submitted($user, $project, $boq, $item, '40');
@@ -178,7 +178,7 @@ class BoqQuantityControlTest extends TestCase
     public function test_approved_requested_quantity_cannot_be_edited(): void
     {
         $admin = User::factory()->admin()->create();
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq, $item] = $this->item('100');
         $request = $this->submitted($user, $project, $boq, $item, '20');
         $this->actingAs($admin)
@@ -193,7 +193,7 @@ class BoqQuantityControlTest extends TestCase
 
     public function test_boq_item_without_quantity_cannot_submit_a_purchase_request(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq, $item] = $this->item('100');
         $request = $this->draft($user, $project, $boq, $item, '10');
         $item->update(['quantity' => null]);
@@ -208,7 +208,7 @@ class BoqQuantityControlTest extends TestCase
 
     public function test_cross_project_submission_is_not_found(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq, $item] = $this->item('100');
         $request = $this->draft($user, $project, $boq, $item, '10');
         $other = Project::factory()->create();
@@ -220,7 +220,7 @@ class BoqQuantityControlTest extends TestCase
 
     public function test_submission_locks_the_boq_item_inside_a_transaction(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq, $item] = $this->item('100');
         $request = $this->draft($user, $project, $boq, $item, '10');
         $lockedInsideTransaction = false;
@@ -245,7 +245,7 @@ class BoqQuantityControlTest extends TestCase
     public function test_rejected_request_can_be_revised_and_resubmitted_against_current_quantity(): void
     {
         $admin = User::factory()->admin()->create();
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         [$project, $boq, $item] = $this->item('100');
         $request = $this->submitted($user, $project, $boq, $item, '120');
         $this->assertTrue($request->is_boq_quantity_exceeded);
@@ -275,7 +275,7 @@ class BoqQuantityControlTest extends TestCase
 
     public function test_procurement_page_shows_the_quantity_summary(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->admin()->create();
         $admin = User::factory()->admin()->create();
         [$project, $boq, $item] = $this->item('140', 'Rmt');
         $approved = $this->submitted($user, $project, $boq, $item, '80');
@@ -296,8 +296,8 @@ class BoqQuantityControlTest extends TestCase
             ->get(route('projects.purchase-requests.index', $project))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->where('purchaseRequests.0.quantity_control.state', 'within')
-                ->where('purchaseRequests.1.quantity_control.state', 'within')
+                ->where('purchaseRequests.data.0.quantity_control.state', 'within')
+                ->where('purchaseRequests.data.1.quantity_control.state', 'within')
             );
     }
 
