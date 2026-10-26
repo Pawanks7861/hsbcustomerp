@@ -7,6 +7,7 @@ use App\Models\UserPermissionOverride;
 use App\Services\Access;
 use App\Services\ActivityLogger;
 use App\Services\ApprovalInbox;
+use App\Support\Listing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -30,14 +31,16 @@ class ApprovalController extends Controller
         $counts = $this->inbox->counts($user);
 
         return Inertia::render('Approvals/Index', [
-            'filters' => ['type' => $type],
+            'filters' => [...Listing::filters($request), 'type' => $type],
             'types' => collect($counts)->map(fn (int $count, string $key) => [
                 'key' => $key,
                 'label' => ApprovalInbox::types()[$key]['label'],
                 'action' => ApprovalInbox::types()[$key]['action'],
                 'count' => $count,
             ])->values(),
-            'items' => $this->inbox->items($user, $type),
+            'items' => Listing::paginateRows($this->inbox->items($user, $type), $request, [
+                'number', 'type_label', 'project.code', 'project.name', 'date', 'summary', 'flag', 'requested_by', 'amount', 'waiting_since',
+            ]),
             'canConfigure' => $this->access->canConfigureApprovals($user),
         ]);
     }

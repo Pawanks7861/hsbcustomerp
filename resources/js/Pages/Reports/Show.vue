@@ -1,14 +1,18 @@
 <script setup>
 import { computed } from 'vue';
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TablePagination from '../../Components/TablePagination.vue';
+import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
+import { visitListing } from '../../lib/listing';
 
 const props = defineProps({
     report: { type: Object, required: true },
     filters: { type: Object, required: true },
-    rows: { type: Array, required: true },
+    listing: { type: Object, default: () => ({ search: '', per_page: 30 }) },
+    rows: { type: Object, required: true },
     totals: { type: Object, default: () => ({}) },
     sections: { type: Array, default: () => [] },
     projects: { type: Array, required: true },
@@ -41,8 +45,9 @@ const queryString = computed(() => {
 });
 
 function apply(event) {
-    const data = new FormData(event.target);
-    router.get(`/reports/${props.report.id}`, Object.fromEntries(data.entries()), { preserveState: true });
+    const data = Object.fromEntries(new FormData(event.target).entries());
+    const changes = Object.fromEntries(['project_id', 'vendor_id', 'client_id', 'from', 'to', 'status'].map((key) => [key, data[key] || '']));
+    visitListing(changes);
 }
 
 function formatCell(row, column) {
@@ -120,6 +125,10 @@ function formatTotal(key, value) {
             <button class="ui-btn-primary md:col-span-1">Apply</button>
         </form>
 
+        <TableToolbar :search="listing.search" placeholder="Search any value in this report…">
+            <p v-if="listing.search" class="text-xs text-slate-500">Totals and exports use the report filters above, not the search box.</p>
+        </TableToolbar>
+
         <template v-if="sections.length">
             <section v-for="section in sections" :key="section.key" class="mb-8">
                 <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">{{ section.title }}</h2>
@@ -147,7 +156,7 @@ function formatTotal(key, value) {
                                 </td>
                             </tr>
                             <tr v-if="!section.rows.length">
-                                <td :colspan="section.columns.length" class="text-center text-slate-500">No data for the selected filters.</td>
+                                <td :colspan="section.columns.length" class="text-center text-slate-500">{{ listing.search ? 'No matching records found.' : 'No data for the selected filters.' }}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -170,7 +179,7 @@ function formatTotal(key, value) {
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="(row, index) in rows" :key="index">
+                        <tr v-for="(row, index) in rows.data" :key="`${rows.current_page}-${index}`">
                             <td
                                 v-for="column in report.columns"
                                 :key="column.key"
@@ -179,11 +188,11 @@ function formatTotal(key, value) {
                                 {{ formatCell(row, column) }}
                             </td>
                         </tr>
-                        <tr v-if="!rows.length">
-                            <td :colspan="report.columns.length || 1" class="text-center text-slate-500">No data for the selected filters.</td>
+                        <tr v-if="!rows.data.length">
+                            <td :colspan="report.columns.length || 1" class="text-center text-slate-500">{{ listing.search ? 'No matching records found.' : 'No data for the selected filters.' }}</td>
                         </tr>
                     </tbody>
-                    <tfoot v-if="Object.keys(totals).length && rows.length">
+                    <tfoot v-if="Object.keys(totals).length && rows.data.length">
                         <tr class="font-semibold bg-slate-50">
                             <td :colspan="Math.max(1, (report.columns.length || 1) - Object.keys(totals).length)">Totals</td>
                             <td
@@ -197,6 +206,7 @@ function formatTotal(key, value) {
                     </tfoot>
                 </table>
             </div>
+            <TablePagination :paginator="rows" label="rows" />
 
             <div v-if="report.metric && Object.keys(totals).length" class="ui-card mt-4 p-4 text-sm text-slate-600">
                 <dl class="grid gap-2 md:grid-cols-2">

@@ -9,6 +9,7 @@ use App\Models\Boq;
 use App\Models\BoqItem;
 use App\Models\Project;
 use App\Support\BoqTotals;
+use App\Support\Listing;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -17,15 +18,17 @@ class ProjectController extends Controller
 {
     public function index(Request $request): Response
     {
-        $projects = Project::query()
+        $filters = Listing::filters($request);
+        $query = Project::query()
             ->visibleTo($request->user())
             ->with(['boqs.items.budgets', 'boqs.items.children'])
             ->orderBy('project_code')
-            ->get()
-            ->map(fn (Project $project) => BoqTotals::projectPayload($project));
+            ->orderBy('id');
+        Listing::applySearch($query, $filters['search'], ['project_code', 'project_name']);
 
         return Inertia::render('Projects/Index', [
-            'projects' => $projects,
+            'projects' => Listing::paginate($query, $request)->through(fn (Project $project) => BoqTotals::projectPayload($project)),
+            'filters' => $filters,
         ]);
     }
 

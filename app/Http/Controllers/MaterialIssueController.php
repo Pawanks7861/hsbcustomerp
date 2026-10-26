@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Models\StockLedgerEntry;
 use App\Services\DocumentNumber;
 use App\Services\InventoryStock;
+use App\Support\Listing;
 use App\Support\Money;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
@@ -22,13 +23,18 @@ class MaterialIssueController extends Controller
 {
     public function __construct(private InventoryStock $stock) {}
 
-    public function index(Project $project): Response
+    public function index(Request $request, Project $project): Response
     {
-        $issues = $project->materialIssues()->with('items.material')->latest('issue_date')->get();
+        $filters = Listing::filters($request);
+        $query = $project->materialIssues()->with('items.material')->latest('issue_date')->orderByDesc('id');
+        Listing::applySearch($query, $filters['search'], [
+            'issue_number', 'issue_date', 'issued_to', 'purpose', 'status', 'items.material.name', 'items.material.material_code',
+        ]);
 
         return Inertia::render('Inventory/Issues/Index', [
             'project' => $this->projectCard($project),
-            'issues' => $issues->map(fn (MaterialIssue $issue) => [
+            'filters' => $filters,
+            'issues' => Listing::paginate($query, $request)->through(fn (MaterialIssue $issue) => [
                 'id' => $issue->id,
                 'issue_number' => $issue->issue_number,
                 'issue_date' => $issue->issue_date?->toDateString(),

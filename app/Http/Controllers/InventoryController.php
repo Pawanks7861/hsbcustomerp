@@ -12,6 +12,7 @@ use App\Services\Access;
 use App\Services\InventoryLocationService;
 use App\Services\InventoryStock;
 use App\Services\StockAdjustmentService;
+use App\Support\Listing;
 use App\Support\Money;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -108,9 +109,13 @@ class InventoryController extends Controller
             'project' => $this->projectCard($project),
             'locations' => $this->adjustments->locationCards($user, $project),
             'filters' => [
+                ...Listing::filters($request),
                 'location_id' => $request->integer('location_id') ?: null,
             ],
-            'rows' => $this->locationBalances($request, $project),
+            'rows' => Listing::paginateRows($this->locationBalances($request, $project), $request, [
+                'material_code', 'material_name', 'unit', 'location', 'location_code', 'available', 'total_available',
+                'total_received', 'total_issued', 'adjustments', 'minimum_stock', 'status',
+            ]),
             'canAdjust' => $this->access->allows($user, 'inventory.adjust') || $user->is_admin,
             'canImport' => $this->access->allows($user, 'inventory.import') || $user->is_admin,
         ]);
@@ -120,8 +125,9 @@ class InventoryController extends Controller
     {
         $materialId = $request->integer('material_id') ?: null;
         $locationId = $request->integer('location_id') ?: null;
+        $filters = Listing::filters($request);
 
-        $entries = StockLedgerEntry::query()
+        $query = StockLedgerEntry::query()
             ->where('project_id', $project->id)
             ->when($materialId, fn ($query) => $query->where('material_id', $materialId))
             ->when($locationId, function ($query) use ($locationId, $project) {
@@ -135,15 +141,19 @@ class InventoryController extends Controller
                 }
             })
             ->with(['material', 'location', 'postedBy'])
-            ->orderBy('id')
-            ->get();
+            ->orderBy('id');
+        Listing::applySearch($query, $filters['search'], [
+            'transaction_number', 'transaction_date', 'transaction_type', 'source_type', 'source_number',
+            'stock_in', 'stock_out', 'balance', 'remarks',
+            'material.name', 'material.material_code', 'location.name', 'postedBy.name',
+        ]);
 
         return Inertia::render('Inventory/Ledger', [
             'project' => $this->projectCard($project),
             'materials' => Material::query()->orderBy('name')->get(['id', 'material_code', 'name']),
             'locations' => $this->adjustments->locationCards($request->user(), $project),
-            'filters' => ['material_id' => $materialId, 'location_id' => $locationId],
-            'entries' => $entries->map(fn (StockLedgerEntry $entry) => [
+            'filters' => [...$filters, 'material_id' => $materialId, 'location_id' => $locationId],
+            'entries' => Listing::paginate($query, $request)->through(fn (StockLedgerEntry $entry) => [
                 'id' => $entry->id,
                 'transaction_number' => $entry->transaction_number,
                 'transaction_date' => $entry->transaction_date?->toDateString(),

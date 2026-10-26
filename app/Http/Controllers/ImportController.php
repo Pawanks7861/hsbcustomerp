@@ -9,6 +9,7 @@ use App\Imports\Support\DuplicateMode;
 use App\Models\ImportBatch;
 use App\Models\Project;
 use App\Services\Access;
+use App\Support\Listing;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -163,19 +164,20 @@ class ImportController extends Controller
             403
         );
 
-        $batches = ImportBatch::query()
+        $filters = Listing::filters($request);
+        $query = ImportBatch::query()
             ->with('uploader:id,name')
             ->when(
                 ! $this->access->seesAllProjects($request->user()) && ! $request->user()->is_admin,
                 fn ($q) => $q->where('uploaded_by', $request->user()->id)
             )
             ->latest()
-            ->limit(100)
-            ->get()
-            ->map(fn (ImportBatch $batch) => $this->engine->batchPayload($batch));
+            ->orderByDesc('id');
+        Listing::applySearch($query, $filters['search'], ['batch_number', 'module', 'original_filename', 'status', 'created_at', 'uploader.name']);
 
         return Inertia::render('Imports/History', [
-            'batches' => $batches,
+            'batches' => Listing::paginate($query, $request)->through(fn (ImportBatch $batch) => $this->engine->batchPayload($batch)),
+            'filters' => $filters,
             'catalog' => collect($this->registry->catalog())
                 ->filter(fn (array $item) => $this->access->allows($request->user(), $item['permission']) || $request->user()->is_admin)
                 ->values(),

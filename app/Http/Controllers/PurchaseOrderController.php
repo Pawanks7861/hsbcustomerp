@@ -19,6 +19,7 @@ use App\Services\BoqReceiptProgress;
 use App\Services\PoReceiptProgress;
 use App\Services\PurchaseOrderRateAmendmentService;
 use App\Support\DocumentStatus;
+use App\Support\Listing;
 use App\Support\Money;
 use App\Support\PdfFormat;
 use App\Support\PurchaseLines;
@@ -42,34 +43,21 @@ class PurchaseOrderController extends Controller
     public function index(Request $request, Project $project): Response
     {
         $status = $request->string('status')->toString();
-        $search = trim($request->string('search')->toString());
+        $filters = Listing::filters($request);
 
-        $records = $project->purchaseOrders()
+        $query = $project->purchaseOrders()
             ->with(['boqItem', 'purchaseRequest', 'items'])
             ->when(in_array($status, DocumentStatus::all(), true), fn ($query) => $query->where('status', $status))
-            ->when($search !== '', function ($query) use ($search) {
-                $like = '%'.$search.'%';
-                $query->where(function ($inner) use ($like) {
-                    $inner->where('po_number', 'like', $like)
-                        ->orWhere('supplier_name', 'like', $like)
-                        ->orWhereHas('purchaseRequest', fn ($pr) => $pr->where('pr_number', 'like', $like))
-                        ->orWhereHas('items', function ($items) use ($like) {
-                            $items->where('name', 'like', $like)
-                                ->orWhere('description', 'like', $like);
-                        })
-                        ->orWhereHas('boqItem', function ($item) use ($like) {
-                            $item->where('description', 'like', $like)
-                                ->orWhere('item_number', 'like', $like);
-                        });
-                });
-            })
             ->orderByDesc('po_date')
-            ->orderByDesc('id')
-            ->get();
+            ->orderByDesc('id');
+        Listing::applySearch($query, $filters['search'], [
+            'po_number', 'supplier_name', 'vendor_name_snapshot', 'po_date', 'grand_total', 'status',
+            'purchaseRequest.pr_number', 'items.name', 'items.description', 'boqItem.description', 'boqItem.item_number',
+        ]);
 
         return Inertia::render('PurchaseOrders/Index', [
             'project' => $this->projectCard($project),
-            'purchaseOrders' => $records->map(fn (PurchaseOrder $record) => [
+            'purchaseOrders' => Listing::paginate($query, $request)->through(fn (PurchaseOrder $record) => [
                 'id' => $record->id,
                 'po_number' => $record->po_number,
                 'pr_number' => $record->purchaseRequest?->pr_number,
@@ -80,10 +68,10 @@ class PurchaseOrderController extends Controller
                 'po_date' => $record->po_date?->toDateString(),
                 'grand_total' => (string) $record->grand_total,
                 'status' => $record->status,
-            ])->values(),
+            ]),
             'filters' => [
+                ...$filters,
                 'status' => in_array($status, DocumentStatus::all(), true) ? $status : '',
-                'search' => $search,
             ],
         ]);
     }

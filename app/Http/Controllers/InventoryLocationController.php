@@ -9,6 +9,7 @@ use App\Services\Access;
 use App\Services\ActivityLogger;
 use App\Services\InventoryLocationService;
 use App\Services\InventoryStock;
+use App\Support\Listing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -53,10 +54,12 @@ class InventoryLocationController extends Controller
                 'responsible' => $location->responsibleUser?->name,
                 'is_active' => $location->is_active,
                 'is_default' => $location->is_default,
+                'status_label' => $location->is_active ? 'Active' : 'Inactive',
             ]);
 
         return Inertia::render('Inventory/Locations/Index', [
-            'locations' => $locations,
+            'locations' => Listing::paginateRows($locations, $request, ['location_code', 'name', 'location_type', 'project', 'address', 'responsible', 'status_label']),
+            'filters' => Listing::filters($request),
             'projects' => Project::query()->visibleTo($request->user())->orderBy('project_name')->get(['id', 'project_name']),
             'types' => InventoryLocation::TYPES,
             'canManage' => $this->access->allows($request->user(), 'inventory.create'),

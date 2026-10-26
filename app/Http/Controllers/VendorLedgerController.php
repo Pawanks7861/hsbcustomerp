@@ -6,6 +6,7 @@ use App\Models\Project;
 use App\Models\Vendor;
 use App\Services\Access;
 use App\Services\VendorLedgerService;
+use App\Support\Listing;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -23,14 +24,17 @@ class VendorLedgerController extends Controller
         $from = $request->string('from')->toString() ?: null;
         $to = $request->string('to')->toString() ?: null;
 
-        $vendors = Vendor::query()
+        $filters = Listing::filters($request);
+        $query = Vendor::query()
             ->when($vendorId, fn ($query) => $query->whereKey($vendorId))
             ->orderBy('name')
-            ->get();
+            ->orderBy('id');
+        Listing::applySearch($query, $filters['search'], ['name', 'vendor_code', 'gst_number']);
 
         return Inertia::render('Vendors/Reconciliation', [
             'vendor' => null,
             'filters' => [
+                ...$filters,
                 'vendor_id' => $vendorId,
                 'project_id' => $projectId,
                 'from' => $from,
@@ -39,12 +43,12 @@ class VendorLedgerController extends Controller
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name', 'vendor_code']),
             'projects' => Project::query()->visibleTo($request->user())->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
             'reconciliation' => null,
-            'rows' => $vendors->map(fn (Vendor $vendor) => [
+            'rows' => Listing::paginate($query, $request)->through(fn (Vendor $vendor) => [
                 'id' => $vendor->id,
                 'name' => $vendor->name,
                 'vendor_code' => $vendor->vendor_code,
                 ...$ledger->reconcile($vendor, $projectId, $from, $to, $projectIds),
-            ])->values(),
+            ]),
         ]);
     }
 
@@ -73,7 +77,7 @@ class VendorLedgerController extends Controller
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name', 'vendor_code']),
             'projects' => Project::query()->visibleTo($request->user())->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
             'reconciliation' => $ledger->reconcile($vendor, $projectId, $from, $to, $projectIds),
-            'rows' => [],
+            'rows' => null,
         ]);
     }
 
@@ -96,6 +100,7 @@ class VendorLedgerController extends Controller
                 'vendor_code' => $vendor->vendor_code,
             ],
             'filters' => [
+                ...Listing::filters($request),
                 'project_id' => $projectId,
                 'from' => $from,
                 'to' => $to,
@@ -105,7 +110,7 @@ class VendorLedgerController extends Controller
             'closing' => $statement['closing'],
             'total_debit' => $statement['total_debit'],
             'total_credit' => $statement['total_credit'],
-            'entries' => $statement['entries'],
+            'entries' => Listing::paginateRows($statement['entries'], $request, ['date', 'type', 'reference', 'project', 'debit', 'credit', 'balance']),
         ]);
     }
 }

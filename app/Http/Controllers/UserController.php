@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\UserPermissionOverride;
 use App\Services\Access;
 use App\Services\ActivityLogger;
+use App\Support\Listing;
 use App\Support\Permissions;
 use App\Support\RoleMenus;
 use Illuminate\Http\RedirectResponse;
@@ -24,11 +25,18 @@ class UserController extends Controller
 
     public function index(Request $request): Response
     {
-        $users = User::query()
+        $filters = Listing::filters($request);
+        $query = User::query()
             ->with(['roles', 'projects'])
             ->orderBy('name')
-            ->get()
-            ->map(fn (User $user) => [
+            ->orderBy('id');
+        Listing::applySearch($query, $filters['search'], [
+            'name', 'email', 'phone', 'designation', 'status', 'last_login_at', 'created_at',
+            'roles.name', 'projects.project_name',
+        ]);
+
+        $users = Listing::paginate($query, $request)
+            ->through(fn (User $user) => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
@@ -46,6 +54,7 @@ class UserController extends Controller
 
         return Inertia::render('Users/Index', [
             'users' => $users,
+            'filters' => $filters,
         ]);
     }
 

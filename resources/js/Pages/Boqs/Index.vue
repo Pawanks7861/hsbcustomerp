@@ -7,11 +7,14 @@ import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import EmptyState from '../../Components/EmptyState.vue';
 import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TablePagination from '../../Components/TablePagination.vue';
+import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
 
 const props = defineProps({
     project: { type: Object, required: true },
-    boqs: { type: Array, required: true },
+    boqs: { type: Object, required: true },
+    filters: { type: Object, required: true },
 });
 
 const pending = ref(null);
@@ -36,8 +39,9 @@ function destroy() {
             </PageHeader>
         </template>
 
+        <TableToolbar :search="filters.search" placeholder="Search BOQ number, title, revision…" />
         <div class="ui-table-wrap">
-            <EmptyState v-if="boqs.length === 0" title="No BOQs for this project." />
+            <EmptyState v-if="boqs.data.length === 0" :title="filters.search ? 'No matching records found.' : 'No BOQs for this project.'" />
             <table v-else class="ui-table">
                 <thead>
                     <tr>
@@ -51,7 +55,7 @@ function destroy() {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="boq in boqs" :key="boq.id">
+                    <tr v-for="boq in boqs.data" :key="boq.id">
                         <td class="font-medium text-slate-900">{{ boq.boq_number }}</td>
                         <td>{{ boq.title }}</td>
                         <td>Rev {{ boq.revision_number ?? 0 }}</td>
@@ -68,6 +72,7 @@ function destroy() {
                 </tbody>
             </table>
         </div>
+        <TablePagination :paginator="boqs" label="BOQs" />
 
         <ConfirmDialog
             :open="pending !== null"

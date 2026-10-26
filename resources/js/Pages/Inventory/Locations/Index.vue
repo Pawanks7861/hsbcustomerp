@@ -4,9 +4,12 @@ import { ref } from 'vue';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
 import ImportButton from '../../../Components/ImportButton.vue';
 import PageHeader from '../../../Components/PageHeader.vue';
+import TablePagination from '../../../Components/TablePagination.vue';
+import TableToolbar from '../../../Components/TableToolbar.vue';
 
 const props = defineProps({
-    locations: { type: Array, required: true },
+    locations: { type: Object, required: true },
+    filters: { type: Object, required: true },
     projects: { type: Array, required: true },
     types: { type: Array, required: true },
     canManage: { type: Boolean, default: false },
@@ -75,6 +78,8 @@ function reset() {
                 <button class="ui-btn-primary" :disabled="form.processing">Save</button>
                 <button v-if="editing" type="button" class="ui-btn-secondary ml-2" @click="reset">Cancel</button>
             </form>
+            <div>
+            <TableToolbar :search="filters.search" placeholder="Search code, name, type, project, status…" />
             <div class="ui-table-wrap">
                 <table class="ui-table">
                     <thead>
@@ -88,7 +93,8 @@ function reset() {
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="location in locations" :key="location.id">
+                        <tr v-if="locations.data.length === 0"><td colspan="6" class="py-8 text-center text-slate-400">{{ filters.search ? 'No matching records found.' : 'No locations yet.' }}</td></tr>
+                        <tr v-for="location in locations.data" :key="location.id">
                             <td>{{ location.location_code }}</td>
                             <td>{{ location.name }}</td>
                             <td>{{ location.location_type }}</td>
@@ -98,6 +104,8 @@ function reset() {
                         </tr>
                     </tbody>
                 </table>
+            </div>
+            <TablePagination :paginator="locations" label="locations" />
             </div>
         </div>
     </AdminLayout>

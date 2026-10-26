@@ -22,6 +22,17 @@ class Vendor extends Model
 
     public const BOTH = 'both';
 
+    /**
+     * Every relation that holds procurement, financial, or audit history.
+     * A vendor with any of these must never be hard-deleted.
+     *
+     * @var list<string>
+     */
+    public const TRANSACTION_RELATIONS = [
+        'purchaseOrders', 'receipts', 'invoices', 'payments', 'adjustments',
+        'recoveries', 'refunds', 'workOrders', 'debitNotes', 'creditNotes', 'expenses',
+    ];
+
     protected $fillable = [
         'vendor_code',
         'party_type',
@@ -122,16 +133,12 @@ class Vendor extends Model
 
     public function hasTransactions(): bool
     {
-        return $this->purchaseOrders()->exists()
-            || $this->receipts()->exists()
-            || $this->invoices()->exists()
-            || $this->payments()->exists()
-            || $this->adjustments()->exists()
-            || $this->recoveries()->exists()
-            || $this->refunds()->exists()
-            || $this->workOrders()->exists()
-            || $this->debitNotes()->exists()
-            || $this->creditNotes()->exists()
-            || $this->expenses()->exists();
+        foreach (self::TRANSACTION_RELATIONS as $relation) {
+            if ($this->{$relation}()->exists()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

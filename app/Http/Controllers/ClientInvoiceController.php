@@ -11,6 +11,7 @@ use App\Services\Access;
 use App\Services\ClientInvoiceService;
 use App\Services\DocumentPdf;
 use App\Support\DocumentStatus;
+use App\Support\Listing;
 use App\Support\PdfFormat;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -30,7 +31,8 @@ class ClientInvoiceController extends Controller
         abort_unless($this->access->allows($request->user(), 'client_invoices.view'), 403);
         $project = $this->routeProject($request);
 
-        $search = trim($request->string('search')->toString());
+        $filters = Listing::filters($request);
+        $search = $filters['search'];
         $approval = $request->string('approval_status')->toString();
         $payment = $request->string('payment_status')->toString();
         $clientId = $request->integer('client_id') ?: null;
@@ -42,25 +44,21 @@ class ClientInvoiceController extends Controller
             ->when($clientId, fn ($q) => $q->where('client_id', $clientId))
             ->when(in_array($approval, DocumentStatus::all(), true), fn ($q) => $q->where('approval_status', $approval))
             ->when(in_array($payment, [ClientInvoice::PAYMENT_UNPAID, ClientInvoice::PAYMENT_PARTIAL, ClientInvoice::PAYMENT_PAID], true), fn ($q) => $q->where('payment_status', $payment))
-            ->when($search !== '', function ($q) use ($search) {
-                $like = '%'.$search.'%';
-                $q->where(function ($inner) use ($like) {
-                    $inner->where('invoice_number', 'like', $like)
-                        ->orWhere('client_name', 'like', $like)
-                        ->orWhere('reference_number', 'like', $like);
-                });
-            })
             ->orderByDesc('invoice_date')
             ->orderByDesc('id');
+        Listing::applySearch($query, $search, [
+            'invoice_number', 'invoice_date', 'client_name', 'reference_number', 'grand_total', 'approval_status', 'payment_status',
+            'client.name', 'client.client_code', 'project.project_code', 'project.project_name',
+        ]);
 
-        $page = $query->paginate(25)->withQueryString();
+        $page = Listing::paginate($query, $request);
 
         return Inertia::render('ClientInvoices/Index', [
             'project' => $project ? $this->projectCard($project) : null,
             'invoices' => $page->through(fn (ClientInvoice $row) => $this->listRow($row)),
             'clients' => Client::query()->orderBy('name')->get(['id', 'name', 'client_code']),
             'filters' => [
-                'search' => $search,
+                ...$filters,
                 'approval_status' => in_array($approval, DocumentStatus::all(), true) ? $approval : '',
                 'payment_status' => $payment,
                 'client_id' => $clientId,

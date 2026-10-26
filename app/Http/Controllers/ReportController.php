@@ -11,6 +11,7 @@ use App\Services\Reports\ReportCatalog;
 use App\Services\Reports\ReportQueryService;
 use App\Services\Reports\ReportSpreadsheet;
 use App\Support\DocumentStatus;
+use App\Support\Listing;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -40,7 +41,22 @@ class ReportController extends Controller
         $filters = $this->filters($request);
         $payload = $queries->run($report, $request->user(), $filters);
 
-        return Inertia::render('Reports/Show', $this->showPayload($definition, $filters, $payload, $request->user(), $access));
+        $listing = Listing::filters($request);
+        $keys = collect($definition['columns'] ?? [])->pluck('key')->filter()->values()->all();
+        $payload['rows'] = Listing::paginateRows($payload['rows'] ?? [], $request, $keys);
+        if (! empty($payload['sections'])) {
+            $payload['sections'] = collect($payload['sections'])->map(function (array $section) use ($listing) {
+                $sectionKeys = collect($section['columns'] ?? [])->pluck('key')->filter()->values()->all();
+                $section['rows'] = Listing::filterRows($section['rows'] ?? [], $listing['search'], $sectionKeys)->all();
+
+                return $section;
+            })->all();
+        }
+
+        return Inertia::render('Reports/Show', [
+            ...$this->showPayload($definition, $filters, $payload, $request->user(), $access),
+            'listing' => $listing,
+        ]);
     }
 
     public function exportExcel(string $report, Request $request, Access $access, ReportQueryService $queries, ReportSpreadsheet $excel): HttpResponse

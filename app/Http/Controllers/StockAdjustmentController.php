@@ -6,6 +6,7 @@ use App\Models\Material;
 use App\Models\Project;
 use App\Models\StockAdjustment;
 use App\Services\StockAdjustmentService;
+use App\Support\Listing;
 use App\Support\StoredUpload;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,13 +20,19 @@ class StockAdjustmentController extends Controller
 {
     public function __construct(private StockAdjustmentService $adjustments) {}
 
-    public function index(Project $project): Response
+    public function index(Request $request, Project $project): Response
     {
-        $adjustments = $project->stockAdjustments()->with(['material', 'location'])->latest('adjustment_date')->get();
+        $filters = Listing::filters($request);
+        $query = $project->stockAdjustments()->with(['material', 'location'])->latest('adjustment_date')->orderByDesc('id');
+        Listing::applySearch($query, $filters['search'], [
+            'adjustment_number', 'adjustment_date', 'adjustment_type', 'quantity', 'status',
+            'material.name', 'material.material_code', 'location.name',
+        ]);
 
         return Inertia::render('Inventory/Adjustments/Index', [
             'project' => $this->projectCard($project),
-            'adjustments' => $adjustments->map(fn (StockAdjustment $adjustment) => [
+            'filters' => $filters,
+            'adjustments' => Listing::paginate($query, $request)->through(fn (StockAdjustment $adjustment) => [
                 'id' => $adjustment->id,
                 'adjustment_number' => $adjustment->adjustment_number,
                 'adjustment_date' => $adjustment->adjustment_date?->toDateString(),

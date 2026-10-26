@@ -1,29 +1,49 @@
 <script setup>
+import { computed } from 'vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import StatCard from '../../Components/StatCard.vue';
+import TablePagination from '../../Components/TablePagination.vue';
+import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
 
 const props = defineProps({
     vendor: { type: Object, required: true },
     summary: { type: Object, required: true },
     tab: { type: String, required: true },
+    filters: { type: Object, default: () => ({ search: '' }) },
     projects: { type: Array, required: true },
-    purchaseOrders: { type: Array, required: true },
-    invoices: { type: Array, required: true },
-    payments: { type: Array, required: true },
-    advances: { type: Array, required: true },
+    purchaseOrders: { type: Object, required: true },
+    invoices: { type: Object, required: true },
+    payments: { type: Object, required: true },
+    advances: { type: Object, required: true },
     refunds: { type: Object, required: true },
-    transactions: { type: Array, required: true },
+    transactions: { type: Object, required: true },
 });
 
 const tabs = ['overview', 'purchase-orders', 'invoices', 'payments', 'advances', 'refunds', 'transactions'];
+const listTabs = ['purchase-orders', 'invoices', 'payments', 'advances', 'transactions'];
 const refund = useForm({ project_id: '', amount_due: '', remarks: '' });
 const received = useForm({ recovery_id: '', refund_date: new Date().toISOString().slice(0, 10), amount: '', refund_mode: 'bank_transfer', reference_number: '', remarks: '' });
 
+const activeList = computed(() => ({
+    'purchase-orders': props.purchaseOrders,
+    invoices: props.invoices,
+    payments: props.payments,
+    advances: props.advances,
+    transactions: props.transactions,
+}[props.tab] ?? null));
+
+const emptyText = computed(() => (props.filters.search ? 'No matching records found.' : 'No records yet.'));
+
 function openTab(name) {
-    router.get(`/vendors/${props.vendor.id}`, { tab: name }, { preserveState: true, preserveScroll: true });
+    const params = { tab: name };
+    const projectId = new URL(window.location.href).searchParams.get('project_id');
+    if (projectId) {
+        params.project_id = projectId;
+    }
+    router.get(`/vendors/${props.vendor.id}`, params, { preserveState: true, preserveScroll: true });
 }
 
 function confirmDelete() {
@@ -70,6 +90,8 @@ function recordRefund() {
             </button>
         </div>
 
+        <TableToolbar v-if="listTabs.includes(tab)" :search="filters.search" placeholder="Search records in this tab…" />
+
         <section v-if="tab === 'overview'" class="ui-card space-y-2 p-5 text-sm">
             <p>{{ vendor.address || 'No address' }}</p>
             <p>{{ vendor.phone || '—' }} · {{ vendor.email || '—' }}</p>
@@ -86,7 +108,8 @@ function recordRefund() {
             <table class="ui-table">
                 <thead><tr><th>PO</th><th>Project</th><th>Date</th><th>Status</th><th class="text-right">Total</th></tr></thead>
                 <tbody>
-                    <tr v-for="order in purchaseOrders" :key="order.id">
+                    <tr v-if="purchaseOrders.data.length === 0"><td colspan="5" class="py-8 text-center text-slate-400">{{ emptyText }}</td></tr>
+                    <tr v-for="order in purchaseOrders.data" :key="order.id">
                         <td><Link :href="`/projects/${order.project_id}/purchase-orders/${order.id}`" class="hover:underline">{{ order.po_number }}</Link></td>
                         <td>{{ order.project_name }}</td>
                         <td>{{ order.po_date }}</td>
@@ -101,7 +124,8 @@ function recordRefund() {
             <table class="ui-table">
                 <thead><tr><th>Invoice</th><th>Project</th><th>PO</th><th class="text-right">Total</th><th class="text-right">Outstanding</th></tr></thead>
                 <tbody>
-                    <tr v-for="invoice in invoices" :key="invoice.id">
+                    <tr v-if="invoices.data.length === 0"><td colspan="5" class="py-8 text-center text-slate-400">{{ emptyText }}</td></tr>
+                    <tr v-for="invoice in invoices.data" :key="invoice.id">
                         <td><Link :href="`/projects/${invoice.project_id}/purchase-invoices/${invoice.id}`" class="hover:underline">{{ invoice.invoice_number }}</Link></td>
                         <td>{{ invoice.project_name }}</td>
                         <td>{{ invoice.po_number }}</td>
@@ -118,7 +142,8 @@ function recordRefund() {
                 <table class="ui-table">
                     <thead><tr><th>Date</th><th>Type</th><th>Mode</th><th class="text-right">Amount</th><th>Reference</th></tr></thead>
                     <tbody>
-                        <tr v-for="payment in (tab === 'advances' ? advances : payments)" :key="payment.id">
+                        <tr v-if="(tab === 'advances' ? advances : payments).data.length === 0"><td colspan="5" class="py-8 text-center text-slate-400">{{ emptyText }}</td></tr>
+                        <tr v-for="payment in (tab === 'advances' ? advances : payments).data" :key="payment.id">
                             <td>{{ payment.payment_date }}</td>
                             <td>{{ payment.payment_type }}</td>
                             <td>{{ payment.payment_mode }}</td>
@@ -164,7 +189,8 @@ function recordRefund() {
             <table class="ui-table">
                 <thead><tr><th>Date</th><th>Type</th><th>Project</th><th>Reference</th><th class="text-right">Debit/Payment</th><th class="text-right">Credit/Refund</th><th>Remarks</th></tr></thead>
                 <tbody>
-                    <tr v-for="(row, index) in transactions" :key="index">
+                    <tr v-if="transactions.data.length === 0"><td colspan="7" class="py-8 text-center text-slate-400">{{ emptyText }}</td></tr>
+                    <tr v-for="(row, index) in transactions.data" :key="`${transactions.current_page}-${index}`">
                         <td>{{ row.date }}</td>
                         <td>{{ row.type }}</td>
                         <td>{{ row.project || '—' }}</td>
@@ -176,5 +202,7 @@ function recordRefund() {
                 </tbody>
             </table>
         </section>
+
+        <TablePagination v-if="activeList" :paginator="activeList" label="records" />
     </AdminLayout>
 </template>

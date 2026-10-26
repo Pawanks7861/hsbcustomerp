@@ -12,6 +12,7 @@ use App\Models\WorkOrderItem;
 use App\Services\Access;
 use App\Services\DocumentPdf;
 use App\Services\WorkOrderService;
+use App\Support\Listing;
 use App\Support\PdfFormat;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,27 +26,23 @@ class WorkOrderController extends Controller
 
     public function index(Request $request, Project $project): Response
     {
-        $search = trim((string) $request->query('search', ''));
+        $filters = Listing::filters($request);
         $status = trim((string) $request->query('status', ''));
 
-        $orders = WorkOrder::query()
+        $query = WorkOrder::query()
             ->withCount('items')
             ->where('project_id', $project->id)
             ->when($status !== '', fn ($query) => $query->where('status', $status))
-            ->when($search !== '', function ($query) use ($search): void {
-                $query->where(function ($inner) use ($search): void {
-                    $inner->where('work_order_number', 'like', "%{$search}%")
-                        ->orWhere('contractor_name', 'like', "%{$search}%");
-                });
-            })
-            ->orderByDesc('id')
-            ->get();
+            ->orderByDesc('id');
+        Listing::applySearch($query, $filters['search'], [
+            'work_order_number', 'work_order_date', 'contractor_name', 'grand_total', 'status', 'work_status',
+        ]);
 
         return Inertia::render('WorkOrders/Index', [
             'project' => $this->projectCard($project),
-            'filters' => ['search' => $search, 'status' => $status],
+            'filters' => [...$filters, 'status' => $status],
             'abilities' => $this->abilities($request->user()),
-            'workOrders' => $orders->map(fn (WorkOrder $order) => [
+            'workOrders' => Listing::paginate($query, $request)->through(fn (WorkOrder $order) => [
                 'id' => $order->id,
                 'work_order_number' => $order->work_order_number,
                 'work_order_date' => $order->work_order_date?->toDateString(),
@@ -58,7 +55,7 @@ class WorkOrderController extends Controller
                 'work_status' => $order->work_status,
                 'work_label' => $order->workLabel(),
                 'is_quantity_exceeded' => (bool) $order->is_quantity_exceeded,
-            ])->values(),
+            ]),
         ]);
     }
 

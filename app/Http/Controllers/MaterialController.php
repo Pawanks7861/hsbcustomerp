@@ -8,6 +8,7 @@ use App\Models\MaterialReceiptItem;
 use App\Models\Project;
 use App\Models\StockAdjustment;
 use App\Services\DocumentNumber;
+use App\Support\Listing;
 use App\Support\MaterialUnits;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
@@ -21,27 +22,21 @@ class MaterialController extends Controller
 {
     public function index(Request $request, Project $project): Response
     {
-        $search = trim($request->string('search')->toString());
+        $filters = Listing::filters($request);
         $status = $request->string('status')->toString();
 
-        $materials = Material::query()
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where(function ($inner) use ($search) {
-                    $inner->where('material_code', 'like', "%{$search}%")
-                        ->orWhere('name', 'like', "%{$search}%")
-                        ->orWhere('category', 'like', "%{$search}%");
-                });
-            })
+        $query = Material::query()
             ->when($status === 'active', fn ($query) => $query->where('is_active', true))
             ->when($status === 'inactive', fn ($query) => $query->where('is_active', false))
             ->orderBy('name')
-            ->get();
+            ->orderBy('id');
+        Listing::applySearch($query, $filters['search'], ['material_code', 'name', 'category', 'unit', 'minimum_stock', 'description']);
 
         return Inertia::render('Inventory/Materials/Index', [
             'project' => $this->projectCard($project),
-            'filters' => ['search' => $search, 'status' => $status],
+            'filters' => [...$filters, 'status' => in_array($status, ['active', 'inactive'], true) ? $status : ''],
             'units' => MaterialUnits::all(),
-            'materials' => $materials->map(fn (Material $material) => $this->payload($material)),
+            'materials' => Listing::paginate($query, $request)->through(fn (Material $material) => $this->payload($material)),
         ]);
     }
 

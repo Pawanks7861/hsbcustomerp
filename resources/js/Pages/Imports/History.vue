@@ -2,10 +2,13 @@
 import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TablePagination from '../../Components/TablePagination.vue';
+import TableToolbar from '../../Components/TableToolbar.vue';
 
 defineProps({
-    batches: { type: Array, required: true },
+    batches: { type: Object, required: true },
     catalog: { type: Array, required: true },
+    filters: { type: Object, required: true },
 });
 </script>
 
@@ -28,6 +31,7 @@ defineProps({
             </Link>
         </div>
 
+        <TableToolbar :search="filters.search" placeholder="Search batch, module, file, uploader, status…" />
         <div class="ui-table-wrap">
             <table class="ui-table">
                 <thead>
@@ -46,10 +50,10 @@ defineProps({
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-if="batches.length === 0">
-                        <td colspan="11" class="py-8 text-center text-slate-400">No imports yet.</td>
+                    <tr v-if="batches.data.length === 0">
+                        <td colspan="11" class="py-8 text-center text-slate-400">{{ filters.search ? 'No matching records found.' : 'No imports yet.' }}</td>
                     </tr>
-                    <tr v-for="batch in batches" :key="batch.id">
+                    <tr v-for="batch in batches.data" :key="batch.id">
                         <td class="font-medium">{{ batch.batch_number }}</td>
                         <td>{{ batch.module }}</td>
                         <td>{{ batch.original_filename }}</td>
@@ -71,5 +75,6 @@ defineProps({
                 </tbody>
             </table>
         </div>
+        <TablePagination :paginator="batches" label="imports" />
     </AdminLayout>
 </template>

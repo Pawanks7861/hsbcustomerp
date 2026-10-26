@@ -3,7 +3,10 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TablePagination from '../../Components/TablePagination.vue';
+import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
+import { visitListing } from '../../lib/listing';
 
 const props = defineProps({
     vendor: { type: Object, default: null },
@@ -11,7 +14,7 @@ const props = defineProps({
     vendors: { type: Array, required: true },
     projects: { type: Array, required: true },
     reconciliation: { type: Object, default: null },
-    rows: { type: Array, default: () => [] },
+    rows: { type: Object, default: null },
 });
 
 const vendorId = ref(props.filters.vendor_id || '');
@@ -34,10 +37,12 @@ function apply() {
         return;
     }
 
-    router.get('/vendors/reconciliation', {
-        ...query,
-        vendor_id: vendorId.value || undefined,
-    }, { preserveState: true });
+    visitListing({
+        project_id: projectId.value,
+        from: from.value,
+        to: to.value,
+        vendor_id: vendorId.value,
+    });
 }
 
 function ledgerHref(id) {
@@ -156,7 +161,8 @@ function badgeClass(reconciled) {
             </div>
         </template>
 
-        <div v-else class="ui-table-wrap">
+        <TableToolbar v-if="!singleVendor" :search="filters.search" placeholder="Search vendor name, code, GST…" />
+        <div v-if="!singleVendor && rows" class="ui-table-wrap">
             <table class="ui-table min-w-[1100px]">
                 <thead>
                     <tr>
@@ -170,8 +176,8 @@ function badgeClass(reconciled) {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-if="rows.length === 0"><td colspan="7" class="py-8 text-center text-slate-400">No vendors.</td></tr>
-                    <tr v-for="row in rows" :key="row.id">
+                    <tr v-if="rows.data.length === 0"><td colspan="7" class="py-8 text-center text-slate-400">{{ filters.search ? 'No matching records found.' : 'No vendors.' }}</td></tr>
+                    <tr v-for="row in rows.data" :key="row.id">
                         <td>
                             <Link :href="`/vendors/${row.id}/reconciliation`" class="font-medium hover:underline">{{ row.name }}</Link>
                             <span class="ml-1 text-xs text-slate-400">{{ row.vendor_code }}</span>
@@ -192,5 +198,6 @@ function badgeClass(reconciled) {
                 </tbody>
             </table>
         </div>
+        <TablePagination v-if="!singleVendor && rows" :paginator="rows" label="vendors" />
     </AdminLayout>
 </template>

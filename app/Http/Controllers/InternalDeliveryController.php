@@ -12,6 +12,7 @@ use App\Services\Access;
 use App\Services\DocumentPdf;
 use App\Services\InternalDeliveryService;
 use App\Services\InventoryStock;
+use App\Support\Listing;
 use App\Support\Money;
 use App\Support\PdfFormat;
 use App\Support\StoredUpload;
@@ -35,15 +36,12 @@ class InternalDeliveryController extends Controller
     public function index(Request $request, ?Project $project = null): Response
     {
         $this->authorizeView($request->user());
-        $notes = $this->visibleQuery($request->user())
+        $filters = Listing::filters($request);
+        $query = $this->visibleQuery($request->user())
             ->with(['sourceLocation', 'destinationLocation', 'sourceProject', 'destinationProject', 'requester', 'dispatcher', 'receiver', 'items'])
             ->when($project, fn ($query) => $query->where(function ($inner) use ($project): void {
                 $inner->where('source_project_id', $project->id)->orWhere('destination_project_id', $project->id);
             }))
-            ->when($request->string('search')->toString() !== '', function ($query) use ($request): void {
-                $term = '%'.$request->string('search')->toString().'%';
-                $query->where('idn_number', 'like', $term);
-            })
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')->toString()))
             ->when($request->filled('source_location_id'), fn ($query) => $query->where('source_location_id', $request->integer('source_location_id')))
             ->when($request->filled('destination_location_id'), fn ($query) => $query->where('destination_location_id', $request->integer('destination_location_id')))
@@ -51,13 +49,17 @@ class InternalDeliveryController extends Controller
             ->when($request->filled('to'), fn ($query) => $query->whereDate('transfer_date', '<=', $request->date('to')))
             ->when($request->filled('requested_by'), fn ($query) => $query->where('requested_by', $request->integer('requested_by')))
             ->latest('transfer_date')
-            ->limit(200)
-            ->get();
+            ->orderByDesc('id');
+        Listing::applySearch($query, $filters['search'], [
+            'idn_number', 'transfer_date', 'status',
+            'sourceLocation.name', 'destinationLocation.name', 'sourceProject.project_name', 'destinationProject.project_name',
+            'requester.name', 'dispatcher.name', 'receiver.name',
+        ]);
 
         return Inertia::render('Inventory/Transfers/Index', [
             'project' => $project ? $this->card($project) : null,
-            'transfers' => $notes->map(fn (InternalDeliveryNote $note) => $this->row($note)),
-            'filters' => $request->only(['search', 'status', 'source_location_id', 'destination_location_id', 'from', 'to', 'requested_by']),
+            'transfers' => Listing::paginate($query, $request)->through(fn (InternalDeliveryNote $note) => $this->row($note)),
+            'filters' => [...$request->only(['status', 'source_location_id', 'destination_location_id', 'from', 'to', 'requested_by']), ...$filters],
             'locations' => $this->locationOptions($request->user(), false),
             'users' => User::query()->orderBy('name')->get(['id', 'name']),
         ]);

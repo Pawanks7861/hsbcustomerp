@@ -2,12 +2,15 @@
 import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TablePagination from '../../Components/TablePagination.vue';
+import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
 
 defineProps({
     client: { type: Object, required: true },
     summary: { type: Object, required: true },
-    invoices: { type: Array, required: true },
+    invoices: { type: Object, required: true },
+    filters: { type: Object, default: () => ({ search: '' }) },
     abilities: { type: Object, default: () => ({}) },
 });
 </script>
@@ -33,6 +36,7 @@ defineProps({
             <div><p class="text-slate-500">GSTIN</p><p>{{ client.gst_number || '—' }}</p></div>
             <div><p class="text-slate-500">PAN</p><p>{{ client.pan_number || '—' }}</p></div>
         </div>
+        <TableToolbar :search="filters.search" placeholder="Search invoice, date, project, amount, status…" />
         <div class="ui-table-wrap">
             <table class="ui-table">
                 <thead>
@@ -46,8 +50,8 @@ defineProps({
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-if="invoices.length === 0"><td colspan="6" class="py-8 text-center text-slate-400">No client invoices yet.</td></tr>
-                    <tr v-for="invoice in invoices" :key="invoice.id">
+                    <tr v-if="invoices.data.length === 0"><td colspan="6" class="py-8 text-center text-slate-400">{{ filters.search ? 'No matching records found.' : 'No client invoices yet.' }}</td></tr>
+                    <tr v-for="invoice in invoices.data" :key="invoice.id">
                         <td><Link :href="`/projects/${invoice.project_id}/client-invoices/${invoice.id}`" class="hover:underline">{{ invoice.invoice_number }}</Link></td>
                         <td>{{ invoice.invoice_date }}</td>
                         <td>{{ invoice.project_code }}</td>
@@ -58,5 +62,6 @@ defineProps({
                 </tbody>
             </table>
         </div>
+        <TablePagination :paginator="invoices" label="invoices" />
     </AdminLayout>
 </template>

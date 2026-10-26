@@ -4,16 +4,17 @@ import { ref } from 'vue';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
 import ImportButton from '../../../Components/ImportButton.vue';
 import PageHeader from '../../../Components/PageHeader.vue';
+import TablePagination from '../../../Components/TablePagination.vue';
+import TableToolbar from '../../../Components/TableToolbar.vue';
+import { visitListing } from '../../../lib/listing';
 
 const props = defineProps({
     project: { type: Object, required: true },
     filters: { type: Object, required: true },
     units: { type: Array, required: true },
-    materials: { type: Array, required: true },
+    materials: { type: Object, required: true },
 });
 
-const search = ref(props.filters.search || '');
-const status = ref(props.filters.status || '');
 const editing = ref(null);
 
 const form = useForm({
@@ -24,13 +25,6 @@ const form = useForm({
     minimum_stock: '0',
     is_active: true,
 });
-
-function apply() {
-    router.get(`/projects/${props.project.id}/inventory/materials`, {
-        search: search.value || undefined,
-        status: status.value || undefined,
-    }, { preserveState: true, replace: true });
-}
 
 function edit(material) {
     editing.value = material.id;
@@ -64,7 +58,7 @@ function destroy(material) {
         return;
     }
 
-    router.delete(`/projects/${props.project.id}/inventory/materials/${material.id}`);
+    router.delete(`/projects/${props.project.id}/inventory/materials/${material.id}`, { preserveScroll: true, preserveState: true });
 }
 </script>
 
@@ -93,13 +87,11 @@ function destroy(material) {
             <p v-if="form.errors.name" class="text-sm text-red-700 sm:col-span-2">{{ form.errors.name }}</p>
         </form>
 
-        <form class="mb-4 flex flex-wrap items-end gap-3" @submit.prevent="apply">
-            <label class="text-sm"><span class="mb-1 block font-medium">Search</span><input v-model="search" class="ui-input w-56" placeholder="Code, name, category"></label>
-            <label class="text-sm"><span class="mb-1 block font-medium">Status</span>
-                <select v-model="status" class="ui-input w-36"><option value="">All</option><option value="active">Active</option><option value="inactive">Inactive</option></select>
+        <TableToolbar :search="filters.search" placeholder="Search code, name, category, unit…">
+            <label class="text-sm"><span class="sr-only">Status</span>
+                <select class="ui-input w-36" :value="filters.status || ''" @change="visitListing({ status: $event.target.value })"><option value="">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option></select>
             </label>
-            <button class="ui-btn-secondary" type="submit">Filter</button>
-        </form>
+        </TableToolbar>
 
         <div class="ui-table-wrap overflow-x-auto">
             <table class="ui-table">
@@ -107,8 +99,8 @@ function destroy(material) {
                     <tr><th>Code</th><th>Name</th><th>Category</th><th>Unit</th><th class="text-right">Minimum</th><th>Status</th><th></th></tr>
                 </thead>
                 <tbody>
-                    <tr v-if="materials.length === 0"><td colspan="7" class="py-8 text-center text-slate-400">No materials.</td></tr>
-                    <tr v-for="material in materials" :key="material.id">
+                    <tr v-if="materials.data.length === 0"><td colspan="7" class="py-8 text-center text-slate-400">{{ filters.search || filters.status ? 'No matching records found.' : 'No materials.' }}</td></tr>
+                    <tr v-for="material in materials.data" :key="material.id">
                         <td>{{ material.material_code }}</td>
                         <td>{{ material.name }}</td>
                         <td>{{ material.category || '—' }}</td>
@@ -123,5 +115,6 @@ function destroy(material) {
                 </tbody>
             </table>
         </div>
+        <TablePagination :paginator="materials" label="materials" />
     </AdminLayout>
 </template>

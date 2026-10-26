@@ -3,11 +3,14 @@ import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TablePagination from '../../Components/TablePagination.vue';
+import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
 
 defineProps({
     project: { type: Object, required: true },
-    invoices: { type: Array, required: true },
+    invoices: { type: Object, required: true },
+    filters: { type: Object, required: true },
 });
 </script>
 
@@ -20,6 +23,7 @@ defineProps({
                 <Link :href="`/projects/${project.id}/purchase-invoices/create`" class="ui-btn-primary">+ Invoice</Link>
             </PageHeader>
         </template>
+        <TableToolbar :search="filters.search" placeholder="Search invoice, date, PO, vendor, amount, status…" />
         <div class="ui-table-wrap">
             <table class="ui-table">
                 <thead>
@@ -36,8 +40,8 @@ defineProps({
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-if="invoices.length === 0"><td colspan="9" class="py-8 text-center text-slate-400">No invoices yet.</td></tr>
-                    <tr v-for="invoice in invoices" :key="invoice.id">
+                    <tr v-if="invoices.data.length === 0"><td colspan="9" class="py-8 text-center text-slate-400">{{ filters.search ? 'No matching records found.' : 'No invoices yet.' }}</td></tr>
+                    <tr v-for="invoice in invoices.data" :key="invoice.id">
                         <td>{{ invoice.invoice_number }}</td>
                         <td>{{ invoice.invoice_date }}</td>
                         <td>{{ invoice.po_number }}</td>
@@ -51,5 +55,6 @@ defineProps({
                 </tbody>
             </table>
         </div>
+        <TablePagination :paginator="invoices" label="invoices" />
     </AdminLayout>
 </template>

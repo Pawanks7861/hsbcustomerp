@@ -10,6 +10,7 @@ use App\Models\PurchaseOrderItem;
 use App\Models\Vendor;
 use App\Services\DocumentNumber;
 use App\Services\DocumentPdf;
+use App\Support\Listing;
 use App\Support\PdfFormat;
 use App\Support\Money;
 use App\Support\StoredUpload;
@@ -26,13 +27,21 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MaterialReceiptController extends Controller
 {
-    public function index(Project $project): Response
+    public function index(Request $request, Project $project): Response
     {
-        $receipts = $project->materialReceipts()->with(['vendor', 'purchaseOrder', 'items', 'images'])->latest('receipt_date')->get();
+        $filters = Listing::filters($request);
+        $query = $project->materialReceipts()
+            ->with(['vendor', 'purchaseOrder', 'items', 'images'])
+            ->latest('receipt_date')
+            ->orderByDesc('id');
+        Listing::applySearch($query, $filters['search'], [
+            'receipt_number', 'receipt_date', 'received_by', 'document_kind', 'purchaseOrder.po_number', 'vendor.name',
+        ]);
 
         return Inertia::render('Store/Index', [
             'project' => $this->projectCard($project),
-            'receipts' => $receipts->map(fn (MaterialReceipt $receipt) => [
+            'filters' => $filters,
+            'receipts' => Listing::paginate($query, $request)->through(fn (MaterialReceipt $receipt) => [
                 'id' => $receipt->id,
                 'receipt_number' => $receipt->receipt_number,
                 'receipt_date' => $receipt->receipt_date?->toDateString(),

@@ -4,19 +4,22 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import EmptyState from '../../Components/EmptyState.vue';
+import TablePagination from '../../Components/TablePagination.vue';
+import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
+import { visitListing } from '../../lib/listing';
 
 const props = defineProps({
     filters: { type: Object, required: true },
     types: { type: Array, required: true },
-    items: { type: Array, required: true },
+    items: { type: Object, required: true },
     canConfigure: { type: Boolean, default: false },
 });
 
 const total = computed(() => props.types.reduce((sum, type) => sum + type.count, 0));
 
-function filterHref(type) {
-    return type ? `/approvals?type=${type}` : '/approvals';
+function filterType(type) {
+    visitListing({ type: type || '' });
 }
 
 function chipClass(active) {
@@ -41,27 +44,28 @@ function open(item) {
         </template>
 
         <div class="mb-4 flex flex-wrap gap-2">
-            <Link :href="filterHref(null)" :class="chipClass(!filters.type)" preserve-scroll>
+            <button type="button" :class="chipClass(!filters.type)" @click="filterType(null)">
                 All
                 <span class="rounded-full bg-amber-500 px-1.5 text-xs font-semibold text-white">{{ total }}</span>
-            </Link>
-            <Link
+            </button>
+            <button
                 v-for="type in types"
                 :key="type.key"
-                :href="filterHref(type.key)"
+                type="button"
                 :class="chipClass(filters.type === type.key)"
-                preserve-scroll
+                @click="filterType(type.key)"
             >
                 {{ type.label }}
                 <span
                     class="rounded-full px-1.5 text-xs font-semibold"
                     :class="type.count > 0 ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500'"
                 >{{ type.count }}</span>
-            </Link>
+            </button>
         </div>
 
+        <TableToolbar :search="filters.search" placeholder="Search document, project, details, requester, amount…" />
         <div class="ui-table-wrap">
-            <table v-if="items.length" class="ui-table">
+            <table v-if="items.data.length" class="ui-table">
                 <thead>
                     <tr>
                         <th>Document</th>
@@ -75,7 +79,7 @@ function open(item) {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="item in items" :key="item.key" class="cursor-pointer" @click="open(item)">
+                    <tr v-for="item in items.data" :key="item.key" class="cursor-pointer" @click="open(item)">
                         <td>
                             <div class="text-xs text-slate-500">{{ item.type_label }}</div>
                             <Link :href="item.url" class="font-medium text-amber-700 hover:underline" @click.stop>{{ item.number }}</Link>
@@ -98,7 +102,8 @@ function open(item) {
                     </tr>
                 </tbody>
             </table>
-            <EmptyState v-else :title="types.length ? 'Nothing is waiting for your approval.' : 'You are not set up as an approver for any document type.'" />
+            <EmptyState v-else :title="filters.search ? 'No matching records found.' : (types.length ? 'Nothing is waiting for your approval.' : 'You are not set up as an approver for any document type.')" />
         </div>
+        <TablePagination :paginator="items" label="pending approvals" />
     </AdminLayout>
 </template>

@@ -1,19 +1,22 @@
 <script setup>
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TablePagination from '../../Components/TablePagination.vue';
+import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
+import { visitListing } from '../../lib/listing';
 
-const props = defineProps({
+defineProps({
     filters: { type: Object, required: true },
     vendors: { type: Array, required: true },
     projects: { type: Array, required: true },
-    rows: { type: Array, required: true },
+    rows: { type: Object, required: true },
 });
 
 function apply(event) {
-    const data = new FormData(event.target);
-    router.get('/vendors/report', Object.fromEntries(data.entries()), { preserveState: true });
+    const data = Object.fromEntries(new FormData(event.target).entries());
+    visitListing({ vendor_id: data.vendor_id || '', project_id: data.project_id || '', from: data.from || '', to: data.to || '' });
 }
 </script>
 
@@ -26,6 +29,7 @@ function apply(event) {
                 <Link href="/vendors" class="ui-btn-secondary">Vendors</Link>
             </PageHeader>
         </template>
+        <TableToolbar :search="filters.search" placeholder="Search vendor name, code, GST…" />
         <form class="ui-card mb-4 grid gap-3 p-4 md:grid-cols-5" @submit.prevent="apply">
             <select name="vendor_id" class="ui-input" :value="filters.vendor_id || ''"><option value="">All vendors</option><option v-for="vendor in vendors" :key="vendor.id" :value="vendor.id">{{ vendor.name }}</option></select>
             <select name="project_id" class="ui-input" :value="filters.project_id || ''"><option value="">All projects</option><option v-for="project in projects" :key="project.id" :value="project.id">{{ project.project_name }}</option></select>
@@ -50,7 +54,8 @@ function apply(event) {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="row in rows" :key="row.id">
+                    <tr v-if="rows.data.length === 0"><td colspan="10" class="py-8 text-center text-slate-400">{{ filters.search ? 'No matching records found.' : 'No vendors.' }}</td></tr>
+                    <tr v-for="row in rows.data" :key="row.id">
                         <td><Link :href="`/vendors/${row.id}`" class="font-medium hover:underline">{{ row.name }}</Link></td>
                         <td class="text-right">{{ formatInr(row.total_po_value) }}</td>
                         <td class="text-right">{{ formatInr(row.total_invoice_value) }}</td>
@@ -65,5 +70,6 @@ function apply(event) {
                 </tbody>
             </table>
         </div>
+        <TablePagination :paginator="rows" label="vendors" />
     </AdminLayout>
 </template>

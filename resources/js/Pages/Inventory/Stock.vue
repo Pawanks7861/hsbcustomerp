@@ -1,15 +1,18 @@
 <script setup>
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TablePagination from '../../Components/TablePagination.vue';
+import TableToolbar from '../../Components/TableToolbar.vue';
+import { visitListing } from '../../lib/listing';
 
 const props = defineProps({
     project: { type: Object, required: true },
     locations: { type: Array, default: () => [] },
     filters: { type: Object, default: () => ({}) },
-    rows: { type: Array, required: true },
+    rows: { type: Object, required: true },
     canAdjust: { type: Boolean, default: false },
     canImport: { type: Boolean, default: false },
 });
@@ -30,9 +33,7 @@ const createUrl = computed(() => {
 });
 
 function apply() {
-    router.get(`/projects/${props.project.id}/inventory/stock`, {
-        location_id: locationId.value || undefined,
-    }, { preserveState: true, replace: true });
+    visitListing({ location_id: locationId.value });
 }
 
 function tone(status) {
@@ -63,6 +64,7 @@ function tone(status) {
             </PageHeader>
         </template>
 
+        <TableToolbar :search="filters.search" placeholder="Search material, code, location, status, quantity…" />
         <form class="mb-4 flex flex-wrap items-end gap-3" @submit.prevent="apply">
             <label class="text-sm">
                 <span class="mb-1 block font-medium">Location</span>
@@ -95,10 +97,13 @@ function tone(status) {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-if="rows.length === 0">
-                        <td colspan="11" class="py-8 text-center text-slate-400">No stock has been posted for this project{{ locationId ? ' at the selected location' : '' }}.</td>
+                    <tr v-if="rows.data.length === 0">
+                        <td colspan="11" class="py-8 text-center text-slate-400">
+                            <template v-if="filters.search">No matching records found.</template>
+                            <template v-else>No stock has been posted for this project{{ locationId ? ' at the selected location' : '' }}.</template>
+                        </td>
                     </tr>
-                    <tr v-for="row in rows" :key="`${row.material_id}-${row.location_id}`">
+                    <tr v-for="row in rows.data" :key="`${row.material_id}-${row.location_id}`">
                         <td>{{ row.material_code }}</td>
                         <td>{{ row.material_name }}</td>
                         <td>{{ row.unit }}</td>
@@ -114,5 +119,6 @@ function tone(status) {
                 </tbody>
             </table>
         </div>
+        <TablePagination :paginator="rows" label="stock rows" />
     </AdminLayout>
 </template>

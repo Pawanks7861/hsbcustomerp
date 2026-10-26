@@ -13,6 +13,7 @@ use App\Services\DocumentPdf;
 use App\Services\PurchaseInvoiceLineService;
 use App\Services\VendorBalanceService;
 use App\Support\DocumentStatus;
+use App\Support\Listing;
 use App\Support\Money;
 use App\Support\PdfFormat;
 use App\Support\StoredUpload;
@@ -34,11 +35,17 @@ class PurchaseInvoiceController extends Controller
     {
         abort_unless($access->allows($request->user(), 'invoices.view'), 403);
 
-        $invoices = $project->purchaseInvoices()->with(['vendor', 'purchaseOrder'])->latest('invoice_date')->get();
+        $filters = Listing::filters($request);
+        $query = $project->purchaseInvoices()->with(['vendor', 'purchaseOrder'])->latest('invoice_date')->orderByDesc('id');
+        Listing::applySearch($query, $filters['search'], [
+            'invoice_number', 'invoice_date', 'total_amount', 'status', 'approval_status',
+            'purchaseOrder.po_number', 'vendor.name', 'vendor.vendor_code',
+        ]);
 
         return Inertia::render('PurchaseInvoices/Index', [
             'project' => $this->projectCard($project),
-            'invoices' => $invoices->map(fn (PurchaseInvoice $invoice) => [
+            'filters' => $filters,
+            'invoices' => Listing::paginate($query, $request)->through(fn (PurchaseInvoice $invoice) => [
                 'id' => $invoice->id,
                 'invoice_number' => $invoice->invoice_number,
                 'invoice_date' => $invoice->invoice_date?->toDateString(),

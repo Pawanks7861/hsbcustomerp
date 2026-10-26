@@ -6,6 +6,7 @@ use App\Http\Requests\ClientRequest;
 use App\Models\Client;
 use App\Services\Access;
 use App\Services\ClientLedgerService;
+use App\Support\Listing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,20 +19,12 @@ class ClientController extends Controller
     {
         abort_unless($access->allows($request->user(), 'clients.view'), 403);
 
-        $search = trim($request->string('search')->toString());
-        $clients = Client::query()
-            ->when($search !== '', function ($query) use ($search) {
-                $like = '%'.$search.'%';
-                $query->where(function ($inner) use ($like) {
-                    $inner->where('name', 'like', $like)
-                        ->orWhere('client_code', 'like', $like)
-                        ->orWhere('phone', 'like', $like)
-                        ->orWhere('gst_number', 'like', $like);
-                });
-            })
-            ->orderBy('name')
-            ->get()
-            ->map(fn (Client $client) => [
+        $filters = Listing::filters($request);
+        $query = Client::query()->orderBy('name')->orderBy('id');
+        Listing::applySearch($query, $filters['search'], ['client_code', 'name', 'phone', 'email', 'gst_number', 'status']);
+
+        return Inertia::render('Clients/Index', [
+            'clients' => Listing::paginate($query, $request)->through(fn (Client $client) => [
                 'id' => $client->id,
                 'client_code' => $client->client_code,
                 'name' => $client->name,
@@ -39,11 +32,8 @@ class ClientController extends Controller
                 'email' => $client->email,
                 'gst_number' => $client->gst_number,
                 'status' => $client->status,
-            ]);
-
-        return Inertia::render('Clients/Index', [
-            'clients' => $clients,
-            'filters' => ['search' => $search],
+            ]),
+            'filters' => $filters,
             'canCreate' => $access->allows($request->user(), 'clients.create'),
         ]);
     }
@@ -76,17 +66,21 @@ class ClientController extends Controller
 
         $projectIds = $access->visibleProjectIds($request->user());
         $summary = $ledger->summary($client, $projectIds);
+        $filters = Listing::filters($request);
         $invoices = $client->invoices()
             ->with('project:id,project_name,project_code')
             ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds ?: [0]))
             ->latest('invoice_date')
-            ->limit(50)
-            ->get();
+            ->orderByDesc('id');
+        Listing::applySearch($invoices, $filters['search'], [
+            'invoice_number', 'invoice_date', 'grand_total', 'approval_status', 'payment_status', 'project.project_code', 'project.project_name',
+        ]);
 
         return Inertia::render('Clients/Show', [
             'client' => $this->payload($client),
             'summary' => $summary,
-            'invoices' => $invoices->map(fn ($invoice) => [
+            'filters' => $filters,
+            'invoices' => Listing::paginate($invoices, $request)->through(fn ($invoice) => [
                 'id' => $invoice->id,
                 'project_id' => $invoice->project_id,
                 'project_code' => $invoice->project?->project_code,
@@ -128,9 +122,9 @@ class ClientController extends Controller
 
         return Inertia::render('Clients/Ledger', [
             'client' => $this->payload($client),
-            'entries' => $statement['entries'],
+            'entries' => Listing::paginateRows($statement['entries'], $request, ['date', 'type', 'reference', 'project_code', 'particulars', 'debit', 'credit', 'balance']),
             'totals' => $statement['totals'],
-            'filters' => ['project_id' => $scope['project_id']],
+            'filters' => [...Listing::filters($request), 'project_id' => $scope['project_id']],
         ]);
     }
 

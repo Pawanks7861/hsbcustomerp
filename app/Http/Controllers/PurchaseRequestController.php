@@ -18,6 +18,7 @@ use App\Services\ProjectBoqCatalog;
 use App\Services\PurchaseRequestLineComposer;
 use App\Support\PdfFormat;
 use App\Support\DocumentStatus;
+use App\Support\Listing;
 use App\Support\Money;
 use App\Support\PurchaseLines;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -39,37 +40,27 @@ class PurchaseRequestController extends Controller
     public function index(Request $request, Project $project): Response
     {
         $status = $request->string('status')->toString();
-        $search = trim($request->string('search')->toString());
+        $filters = Listing::filters($request);
 
-        $records = $project->purchaseRequests()
+        $query = $project->purchaseRequests()
             ->with(['boqItem', 'requestedBy', 'items'])
             ->when(in_array($status, DocumentStatus::all(), true), fn ($query) => $query->where('status', $status))
-            ->when($search !== '', function ($query) use ($search) {
-                $like = '%'.$search.'%';
-                $query->where(function ($inner) use ($like) {
-                    $inner->where('pr_number', 'like', $like)
-                        ->orWhereHas('items', function ($items) use ($like) {
-                            $items->where('name', 'like', $like)
-                                ->orWhere('description', 'like', $like);
-                        })
-                        ->orWhereHas('boqItem', function ($item) use ($like) {
-                            $item->where('description', 'like', $like)
-                                ->orWhere('item_number', 'like', $like);
-                        });
-                });
-            })
             ->orderByDesc('request_date')
-            ->orderByDesc('id')
-            ->get();
+            ->orderByDesc('id');
+        Listing::applySearch($query, $filters['search'], [
+            'pr_number', 'request_date', 'required_date', 'status',
+            'items.name', 'items.description', 'boqItem.description', 'boqItem.item_number', 'requestedBy.name',
+        ]);
 
-        $summaries = $this->quantities->summariesForItems($records->map(fn (PurchaseRequest $record) => $record->boqItem));
+        $page = Listing::paginate($query, $request);
+        $summaries = $this->quantities->summariesForItems($page->getCollection()->map(fn (PurchaseRequest $record) => $record->boqItem));
 
         return Inertia::render('PurchaseRequests/Index', [
             'project' => $this->projectCard($project),
-            'purchaseRequests' => $records->map(fn (PurchaseRequest $record) => $this->listPayload($record, $summaries[$record->boq_item_id] ?? null))->values(),
+            'purchaseRequests' => $page->through(fn (PurchaseRequest $record) => $this->listPayload($record, $summaries[$record->boq_item_id] ?? null)),
             'filters' => [
+                ...$filters,
                 'status' => in_array($status, DocumentStatus::all(), true) ? $status : '',
-                'search' => $search,
             ],
         ]);
     }

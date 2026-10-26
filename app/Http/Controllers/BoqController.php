@@ -11,19 +11,25 @@ use App\Services\BoqItemSync;
 use App\Services\BoqReceiptProgress;
 use App\Services\BoqRevisionService;
 use App\Support\BoqTotals;
+use App\Support\Listing;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class BoqController extends Controller
 {
-    public function index(Project $project): Response
+    public function index(Request $request, Project $project): Response
     {
-        $project->load(['boqs.currentRevision', 'boqs.currentItems.budgets', 'boqs.currentItems.children']);
+        $filters = Listing::filters($request);
+        $query = $project->boqs()
+            ->with(['currentRevision', 'currentItems.budgets', 'currentItems.children'])
+            ->orderBy('id');
+        Listing::applySearch($query, $filters['search'], ['boq_number', 'title', 'gst_percentage', 'currentRevision.revision_number']);
 
         return Inertia::render('Boqs/Index', [
             'project' => $this->projectIdentity($project),
-            'boqs' => $project->boqs->map(fn (Boq $boq) => [
+            'boqs' => Listing::paginate($query, $request)->through(fn (Boq $boq) => [
                 'id' => $boq->id,
                 'boq_number' => $boq->boq_number,
                 'title' => $boq->title,
@@ -31,7 +37,8 @@ class BoqController extends Controller
                 'gst_percentage' => (string) $boq->gst_percentage,
                 'grand_total' => $boq->grandTotal(),
                 'budget_total' => $boq->budgetTotal(),
-            ])->values(),
+            ]),
+            'filters' => $filters,
         ]);
     }
 

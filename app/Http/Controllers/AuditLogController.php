@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\Access;
+use App\Support\Listing;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -20,7 +21,7 @@ class AuditLogController extends Controller
         abort_unless($access->canViewAuditLog($request->user()), 403);
 
         $filters = [
-            'search' => trim((string) $request->query('search', '')),
+            ...Listing::filters($request),
             'user_id' => $request->integer('user_id') ?: null,
             'event' => array_key_exists((string) $request->query('event'), ActivityLog::EVENTS) ? (string) $request->query('event') : null,
             'module' => (string) $request->query('module', '') ?: null,
@@ -41,19 +42,12 @@ class AuditLogController extends Controller
             ->when($filters['from'], fn (Builder $query, string $from) => $query->where('created_at', '>=', $this->utc($from.' 00:00:00')))
             ->when($filters['to'], fn (Builder $query, string $to) => $query->where('created_at', '<=', $this->utc($to.' 23:59:59')))
             ->when($filters['batch'], fn (Builder $query, string $batch) => $query->where('batch_id', $batch))
-            ->when($filters['search'] !== '', function (Builder $query) use ($filters): void {
-                $term = '%'.$filters['search'].'%';
-                $query->where(fn (Builder $inner) => $inner
-                    ->where('action', 'like', $term)
-                    ->orWhere('subject_label', 'like', $term)
-                    ->orWhere('ip_address', 'like', $term)
-                    ->orWhere('url', 'like', $term)
-                    ->orWhere('properties', 'like', $term)
-                    ->orWhereHas('user', fn (Builder $user) => $user->where('name', 'like', $term)->orWhere('email', 'like', $term)));
-            })
-            ->orderByDesc('id')
-            ->paginate(50)
-            ->withQueryString();
+            ->orderByDesc('id');
+        Listing::applySearch($logs, $filters['search'], [
+            'action', 'event', 'subject_label', 'subject_type', 'ip_address', 'url', 'properties', 'created_at',
+            'user.name', 'user.email', 'project.project_name', 'project.project_code',
+        ]);
+        $logs = Listing::paginate($logs, $request);
 
         return Inertia::render('AuditLog/Index', [
             'filters' => $filters,

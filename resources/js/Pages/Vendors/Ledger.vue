@@ -1,9 +1,12 @@
 <script setup>
-import { Head, router } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TablePagination from '../../Components/TablePagination.vue';
+import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
+import { visitListing } from '../../lib/listing';
 
 const props = defineProps({
     vendor: { type: Object, required: true },
@@ -13,7 +16,7 @@ const props = defineProps({
     closing: { type: String, required: true },
     total_debit: { type: String, required: true },
     total_credit: { type: String, required: true },
-    entries: { type: Array, required: true },
+    entries: { type: Object, required: true },
 });
 
 const projectId = ref(props.filters.project_id || '');
@@ -21,11 +24,7 @@ const from = ref(props.filters.from || '');
 const to = ref(props.filters.to || '');
 
 function apply() {
-    router.get(`/vendors/${props.vendor.id}/ledger`, {
-        project_id: projectId.value || undefined,
-        from: from.value || undefined,
-        to: to.value || undefined,
-    }, { preserveState: true });
+    visitListing({ project_id: projectId.value, from: from.value, to: to.value });
 }
 </script>
 
@@ -47,12 +46,13 @@ function apply() {
             <div class="ui-card p-4 text-sm"><p class="text-slate-500">Credit</p><p class="text-lg font-semibold">{{ formatInr(total_credit) }}</p></div>
             <div class="ui-card p-4 text-sm"><p class="text-slate-500">Closing</p><p class="text-lg font-semibold">{{ formatInr(closing) }}</p></div>
         </div>
+        <TableToolbar :search="filters.search" placeholder="Search date, type, reference, project, amount…" />
         <div class="ui-table-wrap overflow-x-auto">
             <table class="ui-table min-w-[900px]">
                 <thead><tr><th>Date</th><th>Type</th><th>Reference</th><th>Project</th><th class="text-right">Debit</th><th class="text-right">Credit</th><th class="text-right">Balance</th></tr></thead>
                 <tbody>
-                    <tr v-if="entries.length === 0"><td colspan="7" class="py-8 text-center text-slate-400">No entries.</td></tr>
-                    <tr v-for="(entry, index) in entries" :key="index">
+                    <tr v-if="entries.data.length === 0"><td colspan="7" class="py-8 text-center text-slate-400">{{ filters.search ? 'No matching records found.' : 'No entries.' }}</td></tr>
+                    <tr v-for="(entry, index) in entries.data" :key="`${entries.current_page}-${index}`">
                         <td>{{ entry.date }}</td>
                         <td>{{ entry.type }}</td>
                         <td>{{ entry.reference }}</td>
@@ -64,5 +64,6 @@ function apply() {
                 </tbody>
             </table>
         </div>
+        <TablePagination :paginator="entries" label="entries" />
     </AdminLayout>
 </template>

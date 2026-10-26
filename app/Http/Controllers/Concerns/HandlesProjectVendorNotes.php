@@ -13,6 +13,7 @@ use App\Services\Access;
 use App\Services\DocumentPdf;
 use App\Services\VendorNoteService;
 use App\Support\DocumentStatus;
+use App\Support\Listing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -36,16 +37,20 @@ trait HandlesProjectVendorNotes
     public function index(Project $project, Access $access, Request $request): Response
     {
         $this->authorizeView($request->user(), $access);
-        $model = $this->noteModelClass();
-        $notes = $project->{$this->relationName()}()
+        $filters = Listing::filters($request);
+        $query = $project->{$this->relationName()}()
             ->with(['vendor', 'purchaseOrder', 'purchaseInvoice'])
             ->latest('date')
-            ->limit(200)
-            ->get();
+            ->orderByDesc('id');
+        Listing::applySearch($query, $filters['search'], [
+            'number', 'date', 'total_amount', 'status', 'vendor.name', 'vendor.vendor_code',
+            'purchaseOrder.po_number', 'purchaseInvoice.invoice_number',
+        ]);
 
         return Inertia::render($this->inertiaFolder().'/Index', [
             'project' => $this->projectCard($project),
-            'notes' => $notes->map(fn (DebitNote|CreditNote $note) => $this->listRow($note)),
+            'notes' => Listing::paginate($query, $request)->through(fn (DebitNote|CreditNote $note) => $this->listRow($note)),
+            'filters' => $filters,
         ]);
     }
 

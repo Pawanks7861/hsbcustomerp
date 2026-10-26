@@ -7,12 +7,15 @@ import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
+import TablePagination from '../../Components/TablePagination.vue';
+import TableToolbar from '../../Components/TableToolbar.vue';
 
 defineProps({
     users: {
-        type: Array,
+        type: Object,
         required: true,
     },
+    filters: { type: Object, required: true },
 });
 
 const pending = ref(null);
@@ -27,7 +30,7 @@ function confirmStatus() {
         return;
     }
 
-    router.patch(`/users/${statusTarget.value.user.id}/status`, { status: statusTarget.value.status });
+    router.patch(`/users/${statusTarget.value.user.id}/status`, { status: statusTarget.value.status }, { preserveScroll: true, preserveState: true });
     statusTarget.value = null;
 }
 
@@ -36,7 +39,7 @@ function destroy() {
         return;
     }
 
-    router.delete(`/users/${pending.value.id}`);
+    router.delete(`/users/${pending.value.id}`, { preserveScroll: true, preserveState: true });
     pending.value = null;
 }
 
@@ -60,6 +63,7 @@ function initials(name) {
             </PageHeader>
         </template>
 
+        <TableToolbar :search="filters.search" placeholder="Search name, email, phone, role, project, status…" />
         <div class="ui-table-wrap">
             <table class="ui-table">
                 <thead>
@@ -77,7 +81,8 @@ function initials(name) {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="user in users" :key="user.id">
+                    <tr v-if="users.data.length === 0"><td colspan="10" class="py-8 text-center text-slate-400">{{ filters.search ? 'No matching records found.' : 'No users yet.' }}</td></tr>
+                    <tr v-for="user in users.data" :key="user.id">
                         <td>
                             <div class="flex items-center gap-3">
                                 <span class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">{{ initials(user.name) }}</span>
@@ -105,6 +110,7 @@ function initials(name) {
                 </tbody>
             </table>
         </div>
+        <TablePagination :paginator="users" label="users" />
 
         <ConfirmDialog
             :open="pending !== null"

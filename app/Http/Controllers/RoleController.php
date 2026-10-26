@@ -6,6 +6,7 @@ use App\Models\Role;
 use App\Models\RolePermission;
 use App\Services\Access;
 use App\Services\ActivityLogger;
+use App\Support\Listing;
 use App\Support\Permissions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,20 +19,23 @@ class RoleController extends Controller
 {
     public function __construct(private Access $access, private ActivityLogger $activity) {}
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
-        $roles = Role::query()->withCount('users')->orderBy('name')->get()->map(fn (Role $role) => [
-            'id' => $role->id,
-            'name' => $role->name,
-            'slug' => $role->slug,
-            'description' => $role->description,
-            'is_system' => $role->is_system,
-            'is_active' => $role->is_active,
-            'users_count' => $role->users_count,
-        ]);
+        $filters = Listing::filters($request);
+        $query = Role::query()->withCount('users')->orderBy('name')->orderBy('id');
+        Listing::applySearch($query, $filters['search'], ['name', 'slug', 'description']);
 
         return Inertia::render('Roles/Index', [
-            'roles' => $roles,
+            'roles' => Listing::paginate($query, $request)->through(fn (Role $role) => [
+                'id' => $role->id,
+                'name' => $role->name,
+                'slug' => $role->slug,
+                'description' => $role->description,
+                'is_system' => $role->is_system,
+                'is_active' => $role->is_active,
+                'users_count' => $role->users_count,
+            ]),
+            'filters' => $filters,
             'canManage' => $this->access->allows(auth()->user(), 'roles.edit'),
         ]);
     }

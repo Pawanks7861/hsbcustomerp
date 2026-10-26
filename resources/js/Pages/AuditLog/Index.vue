@@ -1,9 +1,11 @@
 <script setup>
 import { reactive, ref } from 'vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import EmptyState from '../../Components/EmptyState.vue';
+import TablePagination from '../../Components/TablePagination.vue';
+import { visitListing } from '../../lib/listing';
 
 const props = defineProps({
     filters: { type: Object, required: true },
@@ -43,8 +45,7 @@ function eventLabel(key) {
 }
 
 function apply() {
-    const query = Object.fromEntries(Object.entries(form).filter(([, value]) => value !== '' && value !== null));
-    router.get('/audit-log', query, { preserveState: true, preserveScroll: true });
+    visitListing({ ...form, search: String(form.search || '').trim().slice(0, 100) });
 }
 
 function reset() {
@@ -96,7 +97,7 @@ function attributeRows(properties) {
 
         <form class="ui-card mb-4 grid gap-3 p-4 md:grid-cols-4 xl:grid-cols-8" @submit.prevent="apply">
             <label class="text-sm md:col-span-2">Search
-                <input v-model="form.search" class="ui-input" placeholder="Number, user, IP, value…">
+                <input v-model="form.search" type="search" maxlength="100" class="ui-input" placeholder="Search records...">
             </label>
             <label class="text-sm">User
                 <select v-model="form.user_id" class="ui-input">
@@ -199,16 +200,9 @@ function attributeRows(properties) {
                     </template>
                 </tbody>
             </table>
-            <EmptyState v-else title="No audit entries match these filters." />
+            <EmptyState v-else title="No matching records found." />
         </div>
 
-        <div v-if="logs.last_page > 1" class="mt-4 flex items-center justify-between text-sm">
-            <span class="text-slate-500">Showing {{ logs.from }}–{{ logs.to }} of {{ logs.total }}</span>
-            <div class="flex gap-2">
-                <Link v-if="logs.prev_page_url" :href="logs.prev_page_url" class="ui-btn-secondary" preserve-scroll>Previous</Link>
-                <span class="px-2 py-2 text-slate-500">Page {{ logs.current_page }} of {{ logs.last_page }}</span>
-                <Link v-if="logs.next_page_url" :href="logs.next_page_url" class="ui-btn-secondary" preserve-scroll>Next</Link>
-            </div>
-        </div>
+        <TablePagination :paginator="logs" label="entries" />
     </AdminLayout>
 </template>

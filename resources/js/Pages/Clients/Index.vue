@@ -1,17 +1,15 @@
 <script setup>
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TablePagination from '../../Components/TablePagination.vue';
+import TableToolbar from '../../Components/TableToolbar.vue';
 
 defineProps({
-    clients: { type: Array, required: true },
+    clients: { type: Object, required: true },
     filters: { type: Object, required: true },
     canCreate: { type: Boolean, default: false },
 });
-
-function search(event) {
-    router.get('/clients', { search: event.target.value }, { preserveState: true, replace: true });
-}
 </script>
 
 <template>
@@ -23,9 +21,7 @@ function search(event) {
                 <Link v-if="canCreate" href="/clients/create" class="ui-btn-primary">+ Add Client</Link>
             </PageHeader>
         </template>
-        <div class="mb-4">
-            <input :value="filters.search" type="search" placeholder="Search clients" class="ui-input max-w-sm" @change="search">
-        </div>
+        <TableToolbar :search="filters.search" placeholder="Search code, client, phone, email, GST, status…" />
         <div class="ui-table-wrap">
             <table class="ui-table">
                 <thead>
@@ -40,10 +36,10 @@ function search(event) {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-if="clients.length === 0">
-                        <td colspan="7" class="py-8 text-center text-slate-400">No clients yet.</td>
+                    <tr v-if="clients.data.length === 0">
+                        <td colspan="7" class="py-8 text-center text-slate-400">{{ filters.search ? 'No matching records found.' : 'No clients yet.' }}</td>
                     </tr>
-                    <tr v-for="client in clients" :key="client.id">
+                    <tr v-for="client in clients.data" :key="client.id">
                         <td>{{ client.client_code }}</td>
                         <td class="font-medium">{{ client.name }}</td>
                         <td>{{ client.phone || '—' }}</td>
@@ -55,5 +51,6 @@ function search(event) {
                 </tbody>
             </table>
         </div>
+        <TablePagination :paginator="clients" label="clients" />
     </AdminLayout>
 </template>

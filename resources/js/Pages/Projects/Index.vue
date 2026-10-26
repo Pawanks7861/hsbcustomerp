@@ -7,10 +7,13 @@ import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import EmptyState from '../../Components/EmptyState.vue';
 import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TablePagination from '../../Components/TablePagination.vue';
+import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
 
 defineProps({
-    projects: { type: Array, required: true },
+    projects: { type: Object, required: true },
+    filters: { type: Object, required: true },
 });
 
 const pending = ref(null);
@@ -35,8 +38,9 @@ function destroy() {
             </PageHeader>
         </template>
 
+        <TableToolbar :search="filters.search" placeholder="Search project code or name…" />
         <div class="ui-table-wrap">
-            <EmptyState v-if="projects.length === 0" title="No projects yet." />
+            <EmptyState v-if="projects.data.length === 0" :title="filters.search ? 'No matching records found.' : 'No projects yet.'" />
             <table v-else class="ui-table">
                 <thead>
                     <tr>
@@ -48,7 +52,7 @@ function destroy() {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="project in projects" :key="project.id">
+                    <tr v-for="project in projects.data" :key="project.id">
                         <td class="font-medium text-slate-900">{{ project.project_code }}</td>
                         <td>{{ project.project_name }}</td>
                         <td class="text-right tabular-nums">{{ formatInr(project.boq_total) }}</td>
@@ -64,6 +68,7 @@ function destroy() {
                 </tbody>
             </table>
         </div>
+        <TablePagination :paginator="projects" label="projects" />
 
         <ConfirmDialog
             :open="pending !== null"

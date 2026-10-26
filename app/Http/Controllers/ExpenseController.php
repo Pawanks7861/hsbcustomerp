@@ -12,6 +12,7 @@ use App\Services\Access;
 use App\Services\DocumentNumber;
 use App\Services\DocumentPdf;
 use App\Support\DocumentStatus;
+use App\Support\Listing;
 use App\Support\Money;
 use App\Support\StoredUpload;
 use Illuminate\Http\RedirectResponse;
@@ -61,14 +62,20 @@ class ExpenseController extends Controller
             $query->whereDate('date', '<=', $to);
         }
 
-        $expenses = $query->latest('date')->limit(200)->get();
+        $filters = Listing::filters($request);
+        $query->latest('date')->orderByDesc('id');
+        Listing::applySearch($query, $filters['search'], [
+            'number', 'date', 'payee', 'description', 'reference_number', 'total_amount', 'status', 'payment_status',
+            'category.name', 'project.project_name', 'project.project_code', 'vendor.name',
+        ]);
 
         return Inertia::render('Expenses/Index', [
             'project' => $project ? $this->projectCard($project) : null,
-            'expenses' => $expenses->map(fn (Expense $expense) => $this->listRow($expense)),
+            'expenses' => Listing::paginate($query, $request)->through(fn (Expense $expense) => $this->listRow($expense)),
             'categories' => ExpenseCategory::query()->orderBy('name')->get(['id', 'name']),
             'projects' => $project ? [] : Project::query()->visibleTo($request->user())->orderBy('project_name')->get(['id', 'project_name']),
             'filters' => [
+                ...$filters,
                 'category_id' => $categoryId,
                 'project_id' => $project ? null : $projectId,
                 'from' => $from,

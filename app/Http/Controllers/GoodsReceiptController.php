@@ -12,6 +12,7 @@ use App\Models\Vendor;
 use App\Services\DocumentPdf;
 use App\Services\GoodsReceiptService;
 use App\Services\PoReceiptProgress;
+use App\Support\Listing;
 use App\Support\PdfFormat;
 use App\Support\StoredUpload;
 use Illuminate\Http\RedirectResponse;
@@ -30,10 +31,10 @@ class GoodsReceiptController extends Controller
 
     public function index(Request $request, Project $project): Response
     {
-        $search = trim($request->string('search')->toString());
+        $filters = Listing::filters($request);
         $status = $request->string('status')->toString();
 
-        $rows = MaterialReceipt::query()
+        $query = MaterialReceipt::query()
             ->where('project_id', $project->id)
             ->where('document_kind', MaterialReceipt::KIND_GRN)
             ->with(['purchaseOrder.vendor', 'vendor', 'items', 'creator'])
@@ -42,20 +43,18 @@ class GoodsReceiptController extends Controller
             ->when($request->filled('purchase_order_id'), fn ($query) => $query->where('purchase_order_id', $request->integer('purchase_order_id')))
             ->when($request->filled('from'), fn ($query) => $query->whereDate('receipt_date', '>=', $request->string('from')))
             ->when($request->filled('to'), fn ($query) => $query->whereDate('receipt_date', '<=', $request->string('to')))
-            ->when($search !== '', function ($query) use ($search) {
-                $query->where(function ($inner) use ($search) {
-                    $inner->where('receipt_number', 'like', "%{$search}%")
-                        ->orWhere('challan_number', 'like', "%{$search}%")
-                        ->orWhereHas('purchaseOrder', fn ($order) => $order->where('po_number', 'like', "%{$search}%"));
-                });
-            })
             ->latest('receipt_date')
-            ->get();
+            ->orderByDesc('id');
+        Listing::applySearch($query, $filters['search'], [
+            'receipt_number', 'challan_number', 'receipt_date', 'status',
+            'purchaseOrder.po_number', 'purchaseOrder.vendor_name_snapshot', 'vendor.name', 'creator.name',
+        ]);
+        $rows = Listing::paginate($query, $request);
 
         return Inertia::render('Grns/Index', [
             'project' => $this->projectCard($project),
             'filters' => [
-                'search' => $search,
+                ...$filters,
                 'status' => $status,
                 'vendor_id' => $request->integer('vendor_id') ?: null,
                 'purchase_order_id' => $request->integer('purchase_order_id') ?: null,
@@ -64,7 +63,7 @@ class GoodsReceiptController extends Controller
             ],
             'vendors' => Vendor::query()->orderBy('name')->get(['id', 'name']),
             'orders' => $project->purchaseOrders()->orderByDesc('po_date')->get(['id', 'po_number']),
-            'receipts' => $rows->map(fn (MaterialReceipt $receipt) => [
+            'receipts' => $rows->through(fn (MaterialReceipt $receipt) => [
                 'id' => $receipt->id,
                 'receipt_number' => $receipt->receipt_number,
                 'receipt_date' => $receipt->receipt_date?->toDateString(),

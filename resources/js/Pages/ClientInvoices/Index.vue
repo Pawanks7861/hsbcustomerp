@@ -1,8 +1,11 @@
 <script setup>
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TablePagination from '../../Components/TablePagination.vue';
+import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
+import { visitListing } from '../../lib/listing';
 
 const props = defineProps({
     project: { type: Object, default: null },
@@ -14,9 +17,15 @@ const props = defineProps({
 
 const base = props.project ? `/projects/${props.project.id}/client-invoices` : '/client-invoices';
 
+const filtered = () => Boolean(props.filters.search || props.filters.client_id || props.filters.approval_status || props.filters.payment_status);
+
 function apply(event) {
     const data = Object.fromEntries(new FormData(event.target).entries());
-    router.get(base, data, { preserveState: true });
+    visitListing({
+        client_id: data.client_id || '',
+        approval_status: data.approval_status || '',
+        payment_status: data.payment_status || '',
+    });
 }
 
 function invoiceHref(invoice) {
@@ -33,8 +42,8 @@ function invoiceHref(invoice) {
                 <Link v-if="canCreate" :href="`${base}/create`" class="ui-btn-primary">+ Client Invoice</Link>
             </PageHeader>
         </template>
-        <form class="ui-card mb-4 grid gap-3 p-4 md:grid-cols-5" @submit.prevent="apply">
-            <input name="search" :value="filters.search" type="search" placeholder="Search" class="ui-input">
+        <TableToolbar :search="filters.search" placeholder="Search invoice, client, project, date, amount, status…" />
+        <form class="ui-card mb-4 grid gap-3 p-4 md:grid-cols-4" @submit.prevent="apply">
             <select name="client_id" class="ui-input" :value="filters.client_id || ''">
                 <option value="">All clients</option>
                 <option v-for="client in clients" :key="client.id" :value="client.id">{{ client.name }}</option>
@@ -70,7 +79,7 @@ function invoiceHref(invoice) {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-if="invoices.data.length === 0"><td :colspan="project ? 8 : 9" class="py-8 text-center text-slate-400">No client invoices yet.</td></tr>
+                    <tr v-if="invoices.data.length === 0"><td :colspan="project ? 8 : 9" class="py-8 text-center text-slate-400">{{ filtered() ? 'No matching records found.' : 'No client invoices yet.' }}</td></tr>
                     <tr v-for="invoice in invoices.data" :key="invoice.id">
                         <td>{{ invoice.invoice_number }}</td>
                         <td>{{ invoice.invoice_date }}</td>
@@ -88,9 +97,6 @@ function invoiceHref(invoice) {
                 </tbody>
             </table>
         </div>
-        <div v-if="invoices.prev_page_url || invoices.next_page_url" class="mt-4 flex gap-2">
-            <Link v-if="invoices.prev_page_url" :href="invoices.prev_page_url" class="ui-btn-secondary">Previous</Link>
-            <Link v-if="invoices.next_page_url" :href="invoices.next_page_url" class="ui-btn-secondary">Next</Link>
-        </div>
+        <TablePagination :paginator="invoices" label="client invoices" />
     </AdminLayout>
 </template>

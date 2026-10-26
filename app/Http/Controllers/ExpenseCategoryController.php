@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ExpenseCategory;
 use App\Services\Access;
+use App\Support\Listing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -15,12 +16,21 @@ class ExpenseCategoryController extends Controller
     {
         abort_unless($access->allows($request->user(), 'expenses.manage_categories'), 403);
 
+        $filters = Listing::filters($request);
+        $status = in_array($request->query('status'), ['active', 'inactive'], true) ? (string) $request->query('status') : '';
+        $query = ExpenseCategory::query()
+            ->when($status !== '', fn ($q) => $q->where('is_active', $status === 'active'))
+            ->orderBy('name')
+            ->orderBy('id');
+        Listing::applySearch($query, $filters['search'], ['name']);
+
         return Inertia::render('Expenses/Categories', [
-            'categories' => ExpenseCategory::query()->orderBy('name')->get()->map(fn (ExpenseCategory $category) => [
+            'categories' => Listing::paginate($query, $request)->through(fn (ExpenseCategory $category) => [
                 'id' => $category->id,
                 'name' => $category->name,
                 'is_active' => $category->is_active,
             ]),
+            'filters' => [...$filters, 'status' => $status],
             'title' => 'Expense Heads',
         ]);
     }
