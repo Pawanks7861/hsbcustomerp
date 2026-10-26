@@ -19,6 +19,10 @@ class ThrottleByOperation
         $name = (string) $request->route()?->getName();
         $mutating = in_array($request->method(), ['POST', 'PUT', 'PATCH', 'DELETE'], true);
 
+        if ($name === 'global-search') {
+            return 'search';
+        }
+
         if ($name === 'assistant.ask' || str_starts_with($name, 'assistant.')) {
             return $mutating ? 'assistant' : 'authenticated';
         }

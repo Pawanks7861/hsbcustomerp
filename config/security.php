@@ -73,6 +73,7 @@ return [
         'exports' => max(1, (int) env('SECURITY_THROTTLE_EXPORTS', 10)),
         'pdfs' => max(1, (int) env('SECURITY_THROTTLE_PDFS', 15)),
         'assistant' => max(1, (int) env('SECURITY_THROTTLE_ASSISTANT', 20)),
+        'search' => max(10, (int) env('SECURITY_THROTTLE_SEARCH', 60)),
         'assistant_service' => max(1, (int) env('SECURITY_THROTTLE_ASSISTANT_SERVICE', 30)),
     ],
 

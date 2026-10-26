@@ -297,13 +297,13 @@ const budgetTotal = computed(() => items.value.reduce((sum, row) => sum + (Numbe
                 <thead class="sticky top-0">
                     <tr>
                         <th class="w-24">Sr. No.</th>
-                        <th class="w-32">Service Code</th>
+                        <th class="min-w-[8rem]">Service Code</th>
                         <th class="min-w-[20rem]">Item Description</th>
                         <th class="w-28">Unit</th>
-                        <th class="w-28 text-right">B.O.Q.</th>
-                        <th class="w-32 text-right">Rate</th>
-                        <th class="w-40 text-right">BOQ Amount</th>
-                        <th class="w-36 text-right">Budget</th>
+                        <th class="text-right">B.O.Q.</th>
+                        <th class="text-right">Rate</th>
+                        <th class="min-w-[10rem] text-right">BOQ Amount</th>
+                        <th class="min-w-[9rem] text-right">Budget</th>
                         <th class="w-14">Actions</th>
                     </tr>
                 </thead>
@@ -316,7 +316,7 @@ const budgetTotal = computed(() => items.value.reduce((sum, row) => sum + (Numbe
                             <input v-model="row.item_number" type="text" class="cell-input" :disabled="!boq.editable">
                         </td>
                         <td>
-                            <input v-model="row.service_code" type="text" class="cell-input" :disabled="!boq.editable">
+                            <input v-model="row.service_code" type="text" class="cell-input min-w-[7rem]" :disabled="!boq.editable">
                         </td>
                         <td>
                             <textarea
@@ -331,13 +331,13 @@ const budgetTotal = computed(() => items.value.reduce((sum, row) => sum + (Numbe
                                 Section header
                             </label>
                         </td>
-                        <td><input v-model="row.unit" type="text" class="cell-input" :disabled="!boq.editable"></td>
-                        <td><input v-model="row.quantity" type="number" min="0" step="0.001" class="cell-input text-right tabular-nums" :disabled="!boq.editable"></td>
-                        <td><input v-model="row.rate" type="number" min="0" step="0.01" class="cell-input text-right tabular-nums" :disabled="!boq.editable"></td>
-                        <td class="text-right font-medium tabular-nums">
+                        <td><input v-model="row.unit" type="text" class="cell-input unit-input" :disabled="!boq.editable"></td>
+                        <td><input v-model="row.quantity" type="number" min="0" step="0.001" class="cell-input num-input" :disabled="!boq.editable"></td>
+                        <td><input v-model="row.rate" type="number" min="0" step="0.01" class="cell-input num-input" :disabled="!boq.editable"></td>
+                        <td class="num-cell font-medium">
                             {{ row.is_section || lineAmount(row.quantity, row.rate) === null ? '—' : formatInr(lineAmount(row.quantity, row.rate)) }}
                         </td>
-                        <td class="text-right tabular-nums">
+                        <td class="num-cell">
                             <button type="button" class="font-medium text-slate-800 hover:underline" @click="openBudget(row)">
                                 {{ formatInr(row.budget_total) }}
                             </button>

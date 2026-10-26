@@ -94,6 +94,12 @@ class SecurityServiceProvider extends ServiceProvider
                 ->response($tooMany);
         });
 
+        RateLimiter::for('search', function (Request $request) use ($tooMany) {
+            return Limit::perMinute((int) config('security.throttle.search'))
+                ->by($request->user()?->getAuthIdentifier() ?: $request->ip())
+                ->response($tooMany);
+        });
+
         RateLimiter::for('assistant', function (Request $request) use ($tooMany) {
             return Limit::perMinute((int) config('security.throttle.assistant'))
                 ->by($request->user()?->getAuthIdentifier() ?: $request->ip())

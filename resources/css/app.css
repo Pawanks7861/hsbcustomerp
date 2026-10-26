@@ -63,6 +63,29 @@
         @apply w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100;
     }
 
+    /*
+     * Editable numbers in item-entry tables. The minimum width fits values such as
+     * 1250000.750 plus the input padding and spin buttons, so digits are never cut off;
+     * wide tables scroll horizontally instead of squeezing these fields.
+     */
+    .num-input {
+        @apply text-right tabular-nums;
+        min-width: 10rem;
+    }
+
+    .num-input-sm {
+        @apply text-right tabular-nums;
+        min-width: 6.5rem;
+    }
+
+    .unit-input {
+        min-width: 6rem;
+    }
+
+    .num-cell {
+        @apply whitespace-nowrap text-right tabular-nums;
+    }
+
     .menu-item {
         @apply flex w-full items-center rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50;
     }

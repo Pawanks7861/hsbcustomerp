@@ -175,11 +175,11 @@ function submit() {
                                 </select>
                                 <p v-if="remaining(line) !== null" class="mt-1 text-xs text-slate-500">Billed {{ previouslyBilled(line) }} · remaining {{ remaining(line) }}</p>
                             </td>
-                            <td><input v-model="line.description" required class="ui-input w-full"></td>
-                            <td><input v-model="line.unit" class="ui-input w-20"></td>
-                            <td><input v-model="line.quantity" type="number" min="0.001" step="0.001" required class="ui-input w-24 text-right"></td>
-                            <td><input v-model="line.rate" type="number" min="0" step="0.01" required class="ui-input w-28 text-right"></td>
-                            <td><input v-model="line.discount_percentage" type="number" min="0" max="100" step="0.01" class="ui-input w-20 text-right"></td>
+                            <td><input v-model="line.description" required class="ui-input w-full min-w-[14rem]"></td>
+                            <td><input v-model="line.unit" class="ui-input unit-input"></td>
+                            <td><input v-model="line.quantity" type="number" min="0.001" step="0.001" required class="ui-input num-input"></td>
+                            <td><input v-model="line.rate" type="number" min="0" step="0.01" required class="ui-input num-input"></td>
+                            <td><input v-model="line.discount_percentage" type="number" min="0" max="100" step="0.01" class="ui-input num-input-sm"></td>
                             <td><button type="button" class="text-sm text-rose-700" @click="removeLine(index)">Remove</button></td>
                         </tr>
                     </tbody>

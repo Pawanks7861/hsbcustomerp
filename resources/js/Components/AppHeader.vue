@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import { LogOut, Menu } from '@lucide/vue';
+import GlobalSearch from './GlobalSearch.vue';
 
 defineProps({
     user: { type: Object, default: null },
@@ -38,6 +39,7 @@ onBeforeUnmount(() => document.removeEventListener('click', onDocumentClick));
         <div class="min-w-0 flex-1">
             <slot />
         </div>
+        <GlobalSearch v-if="user" />
         <div v-if="user" ref="root" class="relative shrink-0">
             <button type="button" class="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 hover:bg-slate-50" @click="open = !open">
                 <span class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">

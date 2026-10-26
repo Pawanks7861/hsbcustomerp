@@ -92,6 +92,8 @@ function ignoreDrop(event) {
             v-if="currentUrl && previews.length === 0"
             :src="currentUrl"
             alt=""
+            loading="lazy"
+            decoding="async"
             class="mb-3 max-h-16 max-w-[160px] rounded-lg border border-slate-200 bg-white object-contain p-1"
         >
 

@@ -207,23 +207,23 @@ function submit() {
                                 <input v-if="form.items[index]" v-model="form.items[index].hsn_sac" type="text" maxlength="20" class="ui-input w-24">
                             </td>
                             <td class="border border-slate-200 px-3 py-2">{{ line.unit || '—' }}</td>
-                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ line.quantity }}</td>
-                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ line.previous_grn_quantity ?? '0.000' }}</td>
-                            <td class="border border-slate-200 px-3 py-2 text-right">
+                            <td class="num-cell border border-slate-200 px-3 py-2">{{ line.quantity }}</td>
+                            <td class="num-cell border border-slate-200 px-3 py-2">{{ line.previous_grn_quantity ?? '0.000' }}</td>
+                            <td class="num-cell border border-slate-200 px-3 py-2">
                                 <input
                                     v-if="form.items[index] && canEditRates"
                                     v-model="form.items[index].rate"
                                     type="number"
                                     min="0"
                                     step="0.01"
-                                    class="ui-input w-28 text-right"
+                                    class="ui-input num-input"
                                 >
                                 <span v-else class="tabular-nums">{{ formatInr(line.rate) }}</span>
                             </td>
                             <td class="border border-slate-200 px-3 py-2 text-right">
-                                <input v-if="form.items[index]" v-model="form.items[index].discount_percentage" type="number" min="0" max="100" step="0.01" class="ui-input w-20 text-right">
+                                <input v-if="form.items[index]" v-model="form.items[index].discount_percentage" type="number" min="0" max="100" step="0.01" class="ui-input num-input-sm">
                             </td>
-                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ formatInr(roundMoney((Number(line.quantity) || 0) * (Number(form.items[index]?.rate ?? line.rate) || 0))) }}</td>
+                            <td class="num-cell border border-slate-200 px-3 py-2">{{ formatInr(roundMoney((Number(line.quantity) || 0) * (Number(form.items[index]?.rate ?? line.rate) || 0))) }}</td>
                         </tr>
                     </tbody>
                 </table>

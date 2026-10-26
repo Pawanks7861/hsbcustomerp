@@ -14,7 +14,7 @@ class DashboardController extends Controller
     {
         $projects = Project::query()
             ->visibleTo($request->user())
-            ->with(['boqs.items.budgets', 'boqs.items.children'])
+            ->with(['boqs.currentItems.budgets', 'boqs.currentItems.children'])
             ->orderBy('project_name')
             ->get()
             ->map(fn (Project $project) => BoqTotals::projectPayload($project));

@@ -16,6 +16,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DebitNoteController;
 use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\GoodsReceiptController;
 use App\Http\Controllers\ImportController;
 use App\Http\Controllers\InternalDeliveryController;
@@ -50,6 +51,8 @@ Route::get('/error/404', fn () => response()->view('errors.404', [], 404))->name
 
 Route::middleware(['auth', 'active', 'project.access', 'throttle.operation'])->group(function () {
     Route::get('/', [DashboardController::class, 'index'])->middleware('permission:dashboard.view')->name('dashboard');
+
+    Route::get('search', GlobalSearchController::class)->name('global-search');
 
     Route::post('assistant/ask', [ChatbotController::class, 'ask'])->name('assistant.ask');
     Route::get('assistant/suggestions', [ChatbotController::class, 'suggestions'])->name('assistant.suggestions');

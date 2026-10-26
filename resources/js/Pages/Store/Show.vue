@@ -55,11 +55,11 @@ function destroy() {
         </div>
         <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
             <button v-for="image in receipt.images" :key="image.id" type="button" class="overflow-hidden rounded-xl border" @click="preview = image.url">
-                <img :src="image.url" alt="" class="h-32 w-full object-cover">
+                <img :src="image.url" alt="" class="h-32 w-full object-cover" width="320" height="128" loading="lazy" decoding="async">
             </button>
         </div>
         <div v-if="preview" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-6" @click="preview = null">
-            <img :src="preview" alt="" class="max-h-full max-w-full rounded-xl">
+            <img :src="preview" alt="" class="max-h-full max-w-full rounded-xl" decoding="async">
         </div>
     </AdminLayout>
 </template>

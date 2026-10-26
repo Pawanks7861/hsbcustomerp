@@ -190,6 +190,7 @@ class InventoryController extends Controller
             ->pluck('material_id');
 
         $materials = Material::query()->whereIn('id', $materialIds)->orderBy('name')->get()->keyBy('id');
+        $balances = $this->stock->projectBalances($project->id, $locations);
         $rows = [];
 
         foreach ($materialIds as $materialId) {
@@ -199,14 +200,14 @@ class InventoryController extends Controller
                 continue;
             }
 
-            $available = $this->stock->balance($project->id, (int) $materialId);
-            $received = Money::scale((string) StockLedgerEntry::query()->where('project_id', $project->id)->where('material_id', $materialId)->where('transaction_type', StockLedgerEntry::RECEIPT)->sum('stock_in'), 3) ?? '0.000';
-            $issued = Money::scale((string) StockLedgerEntry::query()->where('project_id', $project->id)->where('material_id', $materialId)->where('transaction_type', StockLedgerEntry::ISSUE)->sum('stock_out'), 3) ?? '0.000';
+            $available = $balances['total'][(int) $materialId] ?? '0.000';
+            $received = $balances['received'][(int) $materialId] ?? '0.000';
+            $issued = $balances['issued'][(int) $materialId] ?? '0.000';
             $minimum = Money::scale($material->minimum_stock, 3) ?? '0.000';
             $status = $this->status($available, $minimum);
 
             foreach ($locations as $location) {
-                $atLocation = $this->stock->locationBalance($project->id, (int) $materialId, (int) $location->id);
+                $atLocation = $balances['at'][(int) $materialId][(int) $location->id] ?? '0.000';
 
                 if (bccomp($atLocation, '0', 3) === 0) {
                     continue;

@@ -195,10 +195,10 @@ function submit() {
                                 </td>
                                 <td class="px-3 py-3">{{ lineMeta(line)?.service_code || lineMeta(line)?.item_number || '—' }}</td>
                                 <td class="px-3 py-3">{{ lineMeta(line)?.unit || '—' }}</td>
-                                <td class="px-3 py-3 text-right tabular-nums">{{ lineMeta(line)?.quantity || '—' }}</td>
-                                <td class="px-3 py-3 text-right tabular-nums">{{ lineMeta(line)?.previously_allocated || '—' }}</td>
+                                <td class="num-cell px-3 py-3">{{ lineMeta(line)?.quantity || '—' }}</td>
+                                <td class="num-cell px-3 py-3">{{ lineMeta(line)?.previously_allocated || '—' }}</td>
                                 <td class="px-3 py-3">
-                                    <input v-model="line.quantity" type="number" min="0" step="0.001" class="ui-input w-28 text-right">
+                                    <input v-model="line.quantity" type="number" min="0" step="0.001" class="ui-input num-input">
                                 </td>
                                 <td class="px-3 py-3 text-right tabular-nums">
                                     <span v-if="remaining(line) === null">—</span>
@@ -208,9 +208,9 @@ function submit() {
                                     </p>
                                 </td>
                                 <td class="px-3 py-3">
-                                    <input v-model="line.rate" type="number" min="0" step="0.01" class="ui-input w-28 text-right">
+                                    <input v-model="line.rate" type="number" min="0" step="0.01" class="ui-input num-input">
                                 </td>
-                                <td class="px-3 py-3 text-right tabular-nums">{{ formatMoney(money(line.quantity, line.rate)) }}</td>
+                                <td class="num-cell px-3 py-3">{{ formatMoney(money(line.quantity, line.rate)) }}</td>
                                 <td class="px-3 py-3">
                                     <button type="button" class="text-sm text-red-600 hover:underline" @click="removeLine(index)">Remove</button>
                                 </td>

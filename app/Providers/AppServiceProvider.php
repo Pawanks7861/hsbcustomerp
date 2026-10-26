@@ -19,7 +19,6 @@ use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Throwable;
@@ -39,8 +38,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Vite::prefetch(concurrency: 3);
-
         Route::bind('transfer', function (string $value, \Illuminate\Routing\Route $route) {
             $note = InternalDeliveryNote::query()->findOrFail($value);
             $project = $route->parameter('project');

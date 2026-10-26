@@ -14,6 +14,7 @@ use App\Support\DocumentStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class ApprovalInbox
 {
@@ -86,24 +87,31 @@ class ApprovalInbox
 
     public function count(User $user): int
     {
-        $projects = $this->projectIds($user);
-
-        return array_sum(array_map(
-            fn (string $type) => $this->query($type, $projects)->count(),
-            $this->typesFor($user)
-        ));
+        return array_sum($this->counts($user));
     }
 
     /**
+     * Pending counts per document type, fetched in a single round trip.
+     *
      * @return array<string, int>
      */
     public function counts(User $user): array
     {
-        $projects = $this->projectIds($user);
-        $counts = [];
+        $types = $this->typesFor($user);
+        if ($types === []) {
+            return [];
+        }
 
-        foreach ($this->typesFor($user) as $type) {
-            $counts[$type] = $this->query($type, $projects)->count();
+        $projects = $this->projectIds($user);
+        $select = DB::query();
+        foreach ($types as $type) {
+            $select->selectSub($this->query($type, $projects)->toBase()->selectRaw('count(*)'), $type);
+        }
+        $row = (array) $select->first();
+
+        $counts = [];
+        foreach ($types as $type) {
+            $counts[$type] = (int) ($row[$type] ?? 0);
         }
 
         return $counts;

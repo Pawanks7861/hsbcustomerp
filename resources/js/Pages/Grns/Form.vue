@@ -108,12 +108,12 @@ function submit() {
                                 </select>
                             </td>
                             <td class="px-2 py-2">{{ row.unit || '—' }}</td>
-                            <td class="px-2 py-2 text-right tabular-nums">{{ row.ordered }}</td>
-                            <td class="px-2 py-2 text-right tabular-nums">{{ row.previously_received }}</td>
-                            <td class="px-2 py-2 text-right tabular-nums">{{ row.remaining }}</td>
-                            <td class="px-2 py-2"><input v-model="row.quantity_received" type="number" min="0" step="0.001" class="ui-input w-24 text-right"></td>
-                            <td class="px-2 py-2"><input v-model="row.quantity_accepted" type="number" min="0" step="0.001" class="ui-input w-24 text-right"></td>
-                            <td class="px-2 py-2"><input v-model="row.quantity_rejected" type="number" min="0" step="0.001" class="ui-input w-24 text-right"></td>
+                            <td class="num-cell px-2 py-2">{{ row.ordered }}</td>
+                            <td class="num-cell px-2 py-2">{{ row.previously_received }}</td>
+                            <td class="num-cell px-2 py-2">{{ row.remaining }}</td>
+                            <td class="px-2 py-2"><input v-model="row.quantity_received" type="number" min="0" step="0.001" class="ui-input num-input"></td>
+                            <td class="px-2 py-2"><input v-model="row.quantity_accepted" type="number" min="0" step="0.001" class="ui-input num-input"></td>
+                            <td class="px-2 py-2"><input v-model="row.quantity_rejected" type="number" min="0" step="0.001" class="ui-input num-input"></td>
                         </tr>
                     </tbody>
                 </table>

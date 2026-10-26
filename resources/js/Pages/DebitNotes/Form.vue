@@ -148,11 +148,11 @@ function submit() {
                                     <option v-for="item in selectedOrder?.items || []" :key="item.id" :value="item.id">{{ item.description }}</option>
                                 </select>
                             </td>
-                            <td class="border border-slate-200 p-1"><input v-model="line.description" class="ui-input w-full"></td>
-                            <td class="border border-slate-200 p-1"><input v-model="line.unit" class="ui-input w-20"></td>
-                            <td class="border border-slate-200 p-1"><input v-model="line.quantity" type="number" min="0" step="0.001" class="ui-input w-24 text-right"></td>
-                            <td class="border border-slate-200 p-1"><input v-model="line.rate" type="number" min="0" step="0.01" class="ui-input w-24 text-right"></td>
-                            <td class="border border-slate-200 p-1 text-right tabular-nums">{{ ((Number(line.quantity) || 0) * (Number(line.rate) || 0)).toFixed(2) }}</td>
+                            <td class="border border-slate-200 p-1"><input v-model="line.description" class="ui-input w-full min-w-[14rem]"></td>
+                            <td class="border border-slate-200 p-1"><input v-model="line.unit" class="ui-input unit-input"></td>
+                            <td class="border border-slate-200 p-1"><input v-model="line.quantity" type="number" min="0" step="0.001" class="ui-input num-input"></td>
+                            <td class="border border-slate-200 p-1"><input v-model="line.rate" type="number" min="0" step="0.01" class="ui-input num-input"></td>
+                            <td class="num-cell border border-slate-200 p-1">{{ ((Number(line.quantity) || 0) * (Number(line.rate) || 0)).toFixed(2) }}</td>
                             <td class="border border-slate-200 p-1"><button type="button" class="text-xs text-red-700" @click="removeLine(index)">Remove</button></td>
                         </tr>
                     </tbody>

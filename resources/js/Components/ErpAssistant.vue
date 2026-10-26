@@ -1,9 +1,28 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import { GripHorizontal, MessageCircle, Minimize2, Send, Trash2, X } from '@lucide/vue';
-import DOMPurify from 'dompurify';
-import { formatAssistantText, safeInternalHref } from '@/chatbot/formatAssistantText';
+import { applyAssistantMarkup, escapeHtml, formatAssistantText, safeInternalHref } from '@/chatbot/formatAssistantText';
+
+const purifier = shallowRef(null);
+let purifierLoading = null;
+
+/** DOMPurify is only needed once the chat is opened, so it is fetched on demand. */
+function loadPurifier() {
+    purifierLoading ??= import('dompurify')
+        .then((module) => {
+            purifier.value = module.default;
+
+            return module.default;
+        })
+        .catch(() => {
+            purifierLoading = null;
+
+            return null;
+        });
+
+    return purifierLoading;
+}
 
 const STORAGE_KEY = 'buildify360.assistant.position';
 const FAB_SIZE = 56;
@@ -115,6 +134,7 @@ function closeAssistant() {
 
 watch(open, async (isOpen) => {
     if (isOpen) {
+        loadPurifier();
         // Opening: keep button position, only clamp so the panel stays on-screen.
         pos.value = clampPosition(pos.value.x, pos.value.y);
         savePosition();
@@ -268,6 +288,7 @@ async function send(text = null) {
         }
 
         const data = await response.json();
+        await loadPurifier();
         pushAssistant(data.reply || { message: 'No response received.' });
     } catch (e) {
         error.value = e?.message || 'Could not reach the assistant. Please try again.';
@@ -305,7 +326,12 @@ function onKeydown(event) {
 }
 
 function formatText(text) {
-    return formatAssistantText(text, DOMPurify);
+    if (purifier.value) {
+        return formatAssistantText(text, purifier.value);
+    }
+
+    // Sanitizer not loaded yet: text is escaped first, so only <strong>/<br> from our own markup can appear.
+    return applyAssistantMarkup(escapeHtml(text));
 }
 
 function assistantItems(items) {

@@ -88,9 +88,9 @@ function submit() {
                     <thead><tr><th>Description</th><th>Unit</th><th>Quantity Received</th><th>Remarks</th></tr></thead>
                     <tbody>
                         <tr v-for="(line, index) in form.items" :key="index">
-                            <td><input v-model="line.description" class="cell-input" :readonly="!!line.purchase_order_item_id"></td>
-                            <td><input v-model="line.unit" class="cell-input" :readonly="!!line.purchase_order_item_id"></td>
-                            <td><input v-model="line.quantity_received" type="number" min="0" step="0.001" class="cell-input text-right"></td>
+                            <td><input v-model="line.description" class="cell-input min-w-[14rem]" :readonly="!!line.purchase_order_item_id"></td>
+                            <td><input v-model="line.unit" class="cell-input unit-input" :readonly="!!line.purchase_order_item_id"></td>
+                            <td><input v-model="line.quantity_received" type="number" min="0" step="0.001" class="cell-input num-input"></td>
                             <td><input v-model="line.remarks" class="cell-input"></td>
                         </tr>
                     </tbody>

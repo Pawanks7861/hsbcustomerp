@@ -21,7 +21,7 @@ class ProjectController extends Controller
         $filters = Listing::filters($request);
         $query = Project::query()
             ->visibleTo($request->user())
-            ->with(['boqs.items.budgets', 'boqs.items.children'])
+            ->with(['boqs.currentItems.budgets', 'boqs.currentItems.children'])
             ->orderBy('project_code')
             ->orderBy('id');
         Listing::applySearch($query, $filters['search'], ['project_code', 'project_name']);

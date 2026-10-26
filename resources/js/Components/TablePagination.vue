@@ -8,13 +8,14 @@ const props = defineProps({
     pageName: { type: String, default: 'page' },
     perPageParam: { type: String, default: 'per_page' },
     label: { type: String, default: 'records' },
+    only: { type: Array, default: () => [] },
 });
 
 const pages = computed(() => (props.paginator.links ?? []).slice(1, -1));
 const perPage = computed(() => Number(props.paginator.per_page) || 30);
 
 function changePerPage(event) {
-    visitListing({ [props.perPageParam]: event.target.value }, { pageName: props.pageName });
+    visitListing({ [props.perPageParam]: event.target.value }, { pageName: props.pageName, only: props.only });
 }
 </script>
 
@@ -40,6 +41,7 @@ function changePerPage(event) {
                     class="ui-btn-secondary h-9"
                     preserve-scroll
                     preserve-state
+                    :only="only"
                 >Previous</Link>
                 <span v-else class="ui-btn-secondary h-9 cursor-not-allowed opacity-50">Previous</span>
                 <template v-for="(link, index) in pages" :key="`${index}-${link.label}`">
@@ -52,6 +54,7 @@ function changePerPage(event) {
                         :aria-current="link.active ? 'page' : undefined"
                         preserve-scroll
                         preserve-state
+                        :only="only"
                     >{{ link.label }}</Link>
                 </template>
                 <Link
@@ -60,6 +63,7 @@ function changePerPage(event) {
                     class="ui-btn-secondary h-9"
                     preserve-scroll
                     preserve-state
+                    :only="only"
                 >Next</Link>
                 <span v-else class="ui-btn-secondary h-9 cursor-not-allowed opacity-50">Next</span>
                 <span class="ml-2 whitespace-nowrap">Page {{ paginator.current_page }} of {{ paginator.last_page }}</span>

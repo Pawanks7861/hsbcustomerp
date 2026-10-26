@@ -185,15 +185,15 @@ function submit() {
                                 <p v-if="row.service_code" class="text-xs text-slate-500">{{ row.service_code }}</p>
                             </td>
                             <td class="px-2 py-2">{{ row.unit || '—' }}</td>
-                            <td class="px-2 py-2 text-right tabular-nums">{{ formatQty(row.po_quantity) }}</td>
-                            <td class="px-2 py-2 text-right tabular-nums">{{ formatQty(row.previously_invoiced) }}</td>
+                            <td class="num-cell px-2 py-2">{{ formatQty(row.po_quantity) }}</td>
+                            <td class="num-cell px-2 py-2">{{ formatQty(row.previously_invoiced) }}</td>
                             <td class="px-2 py-2 text-right">
-                                <input v-model="form.items[index].quantity" type="number" min="0" :max="row.remaining" step="0.001" class="ui-input w-28 text-right">
+                                <input v-model="form.items[index].quantity" type="number" min="0" :max="row.remaining" step="0.001" class="ui-input num-input">
                                 <p v-if="form.errors[`items.${index}.quantity`]" class="mt-1 text-xs text-red-700">{{ form.errors[`items.${index}.quantity`] }}</p>
                             </td>
-                            <td class="px-2 py-2 text-right tabular-nums">{{ formatQty(row.balance) }}</td>
-                            <td class="px-2 py-2 text-right tabular-nums">{{ formatInr(row.rate) }}</td>
-                            <td class="px-2 py-2 text-right tabular-nums">{{ row.gross === null ? '—' : formatInr(row.gross) }}</td>
+                            <td class="num-cell px-2 py-2">{{ formatQty(row.balance) }}</td>
+                            <td class="num-cell px-2 py-2">{{ formatInr(row.rate) }}</td>
+                            <td class="num-cell px-2 py-2">{{ row.gross === null ? '—' : formatInr(row.gross) }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -211,7 +211,7 @@ function submit() {
                     </label>
                     <label v-if="canRoundOff && form.round_off_mode === 'manual'" class="flex items-center justify-between gap-3">
                         <span class="text-slate-500">Amount (±₹100)</span>
-                        <input v-model="form.round_off" type="number" step="0.01" min="-100" max="100" class="ui-input w-32 text-right">
+                        <input v-model="form.round_off" type="number" step="0.01" min="-100" max="100" class="ui-input num-input-sm w-32">
                     </label>
                     <div v-else class="flex justify-between"><span class="text-slate-500">Round off</span><span class="tabular-nums">{{ formatInr(totals.roundOff) }}</span></div>
                     <span v-if="form.errors.round_off" class="block text-red-700">{{ form.errors.round_off }}</span>

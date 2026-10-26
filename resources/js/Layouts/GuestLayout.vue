@@ -30,5 +30,15 @@ watch(() => company.value?.logo_url, () => {
             <SecurityNotice />
             <slot />
         </div>
+        <footer class="mt-6 text-center text-xs text-slate-400">
+            Powered by
+            <a
+                href="https://buildify360.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="font-semibold text-slate-600 hover:text-slate-900 hover:underline"
+                aria-label="Buildify360 (opens in a new tab)"
+            >Buildify360</a>
+        </footer>
     </div>
 </template>

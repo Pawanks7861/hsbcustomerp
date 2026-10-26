@@ -112,8 +112,8 @@ function submit() {
                                     </select>
                                 </td>
                                 <td class="px-2 py-2">{{ material(row.material_id)?.unit || '—' }}</td>
-                                <td class="px-2 py-2">{{ material(row.material_id)?.available || '—' }}</td>
-                                <td class="px-2 py-2"><input v-model="row.quantity" type="number" min="0.001" step="0.001" required class="ui-input w-28"></td>
+                                <td class="num-cell px-2 py-2">{{ material(row.material_id)?.available || '—' }}</td>
+                                <td class="px-2 py-2"><input v-model="row.quantity" type="number" min="0.001" step="0.001" required class="ui-input num-input"></td>
                                 <td class="px-2 py-2"><input v-model="row.remarks" class="ui-input w-full"></td>
                                 <td class="px-2 py-2"><button v-if="form.items.length > 1" type="button" class="text-red-700" @click="removeItem(index)">Remove</button></td>
                             </tr>

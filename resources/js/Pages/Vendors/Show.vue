@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
@@ -13,37 +13,55 @@ const props = defineProps({
     summary: { type: Object, required: true },
     tab: { type: String, required: true },
     filters: { type: Object, default: () => ({ search: '' }) },
-    projects: { type: Array, required: true },
-    purchaseOrders: { type: Object, required: true },
-    invoices: { type: Object, required: true },
-    payments: { type: Object, required: true },
-    advances: { type: Object, required: true },
-    refunds: { type: Object, required: true },
-    transactions: { type: Object, required: true },
+    projects: { type: Array, default: () => [] },
+    purchaseOrders: { type: Object, default: null },
+    invoices: { type: Object, default: null },
+    payments: { type: Object, default: null },
+    advances: { type: Object, default: null },
+    refunds: { type: Object, default: null },
+    transactions: { type: Object, default: null },
 });
 
 const tabs = ['overview', 'purchase-orders', 'invoices', 'payments', 'advances', 'refunds', 'transactions'];
 const listTabs = ['purchase-orders', 'invoices', 'payments', 'advances', 'transactions'];
+const tabProps = {
+    'purchase-orders': 'purchaseOrders',
+    invoices: 'invoices',
+    payments: 'payments',
+    advances: 'advances',
+    refunds: 'refunds',
+    transactions: 'transactions',
+};
 const refund = useForm({ project_id: '', amount_due: '', remarks: '' });
 const received = useForm({ recovery_id: '', refund_date: new Date().toISOString().slice(0, 10), amount: '', refund_mode: 'bank_transfer', reference_number: '', remarks: '' });
+const loadingTab = ref(null);
 
-const activeList = computed(() => ({
-    'purchase-orders': props.purchaseOrders,
-    invoices: props.invoices,
-    payments: props.payments,
-    advances: props.advances,
-    transactions: props.transactions,
-}[props.tab] ?? null));
+const tabProp = computed(() => tabProps[props.tab] ?? null);
+const tabData = computed(() => (tabProp.value ? props[tabProp.value] : null));
+const tabOnly = computed(() => (tabProp.value ? [tabProp.value, 'filters', 'tab'] : []));
+const activeList = computed(() => (listTabs.includes(props.tab) ? tabData.value : null));
+const tabMissing = computed(() => tabProp.value !== null && tabData.value === null);
 
 const emptyText = computed(() => (props.filters.search ? 'No matching records found.' : 'No records yet.'));
 
 function openTab(name) {
+    if (loadingTab.value === name || (name === props.tab && !tabMissing.value)) {
+        return;
+    }
+
     const params = { tab: name };
     const projectId = new URL(window.location.href).searchParams.get('project_id');
     if (projectId) {
         params.project_id = projectId;
     }
-    router.get(`/vendors/${props.vendor.id}`, params, { preserveState: true, preserveScroll: true });
+    const only = tabProps[name] ? [tabProps[name], 'filters', 'tab'] : ['filters', 'tab'];
+    router.get(`/vendors/${props.vendor.id}`, params, {
+        only,
+        preserveState: true,
+        preserveScroll: true,
+        onStart: () => { loadingTab.value = name; },
+        onFinish: () => { loadingTab.value = null; },
+    });
 }
 
 function confirmDelete() {
@@ -85,12 +103,20 @@ function recordRefund() {
         </div>
 
         <div class="mb-4 flex flex-wrap gap-2">
-            <button v-for="name in tabs" :key="name" type="button" class="rounded-full px-3 py-1 text-sm capitalize" :class="tab === name ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'" @click="openTab(name)">
+            <button
+                v-for="name in tabs"
+                :key="name"
+                type="button"
+                class="rounded-full px-3 py-1 text-sm capitalize"
+                :class="[tab === name ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600', loadingTab === name ? 'opacity-60' : '']"
+                :aria-busy="loadingTab === name ? 'true' : undefined"
+                @click="openTab(name)"
+            >
                 {{ name.replace('-', ' ') }}
             </button>
         </div>
 
-        <TableToolbar v-if="listTabs.includes(tab)" :search="filters.search" placeholder="Search records in this tab…" />
+        <TableToolbar v-if="listTabs.includes(tab)" :search="filters.search" :only="tabOnly" placeholder="Search records in this tab…" />
 
         <section v-if="tab === 'overview'" class="ui-card space-y-2 p-5 text-sm">
             <p>{{ vendor.address || 'No address' }}</p>
@@ -102,6 +128,15 @@ function recordRefund() {
                 <button type="button" class="ui-btn-secondary" @click="router.patch(`/vendors/${vendor.id}/status`)">{{ vendor.status === 'active' ? 'Deactivate' : 'Activate' }}</button>
                 <button type="button" class="text-sm text-red-700" @click="confirmDelete() && router.delete(`/vendors/${vendor.id}`)">Delete</button>
             </div>
+        </section>
+
+        <section v-else-if="tabMissing" class="ui-card space-y-3 p-5" aria-busy="true">
+            <div class="h-4 w-1/3 animate-pulse rounded bg-slate-100"></div>
+            <div v-for="n in 5" :key="n" class="h-9 animate-pulse rounded bg-slate-50"></div>
+            <p class="text-sm text-slate-500">
+                Loading…
+                <button type="button" class="ml-2 text-amber-700 hover:underline" @click="openTab(tab)">Retry</button>
+            </p>
         </section>
 
         <section v-else-if="tab === 'purchase-orders'" class="ui-table-wrap">
@@ -203,6 +238,6 @@ function recordRefund() {
             </table>
         </section>
 
-        <TablePagination v-if="activeList" :paginator="activeList" label="records" />
+        <TablePagination v-if="activeList" :paginator="activeList" :only="tabOnly" label="records" />
     </AdminLayout>
 </template>

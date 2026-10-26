@@ -171,16 +171,16 @@ function submit() {
                                 <input v-model="line.service_code" type="text" class="w-28 rounded border border-slate-300 px-2 py-1">
                             </td>
                             <td class="border border-slate-200 px-2 py-2">
-                                <input v-model="line.name" type="text" class="w-full rounded border border-slate-300 px-2 py-1">
+                                <input v-model="line.name" type="text" class="w-full min-w-[12rem] rounded border border-slate-300 px-2 py-1">
                             </td>
                             <td class="border border-slate-200 px-2 py-2">
-                                <input v-model="line.description" type="text" required class="w-full rounded border border-slate-300 px-2 py-1">
+                                <input v-model="line.description" type="text" required class="w-full min-w-[14rem] rounded border border-slate-300 px-2 py-1">
                             </td>
                             <td class="border border-slate-200 px-2 py-2">
-                                <input v-model="line.unit" type="text" class="w-24 rounded border border-slate-300 px-2 py-1">
+                                <input v-model="line.unit" type="text" class="unit-input w-24 rounded border border-slate-300 px-2 py-1">
                             </td>
                             <td class="border border-slate-200 px-2 py-2">
-                                <input v-model="line.quantity" type="number" min="0" step="0.001" required class="w-24 rounded border border-slate-300 px-2 py-1 text-right">
+                                <input v-model="line.quantity" type="number" min="0" step="0.001" required class="num-input w-full rounded border border-slate-300 px-2 py-1">
                             </td>
                             <td class="border border-slate-200 px-2 py-2">
                                 <input v-model="line.remarks" type="text" class="w-full rounded border border-slate-300 px-2 py-1">

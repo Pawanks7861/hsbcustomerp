@@ -1,11 +1,13 @@
 <script setup>
-import { computed, provide, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, provide, ref } from 'vue';
 import { Head, usePage } from '@inertiajs/vue3';
 import AppHeader from '../Components/AppHeader.vue';
 import AppSidebar from '../Components/AppSidebar.vue';
-import ErpAssistant from '../Components/ErpAssistant.vue';
-import MenuTutorial from '../Components/MenuTutorial.vue';
 import SecurityNotice from '../Components/SecurityNotice.vue';
+import { lazyComponent, whenIdle } from '../lib/lazyComponent';
+
+const ErpAssistant = lazyComponent(() => import('../Components/ErpAssistant.vue'), { skeleton: false, silent: true });
+const MenuTutorial = lazyComponent(() => import('../Components/MenuTutorial.vue'), { skeleton: false, silent: true });
 
 defineProps({
     project: {
@@ -22,6 +24,18 @@ const user = computed(() => page.props.auth?.user ?? null);
 const company = computed(() => page.props.company ?? null);
 const sidebarOpen = ref(false);
 provide('sidebarOpen', sidebarOpen);
+
+const tutorialPending = computed(() => Boolean(page.props.menu_tutorial));
+const assistantReady = ref(false);
+let cancelIdle = () => {};
+
+onMounted(() => {
+    cancelIdle = whenIdle(() => {
+        assistantReady.value = true;
+    });
+});
+
+onBeforeUnmount(() => cancelIdle());
 </script>
 
 <template>
@@ -52,9 +66,19 @@ provide('sidebarOpen', sidebarOpen);
                     </div>
                     <slot />
                 </main>
+                <footer class="border-t border-slate-100 px-4 py-3 text-center text-xs text-slate-400 sm:px-6 print:hidden">
+                    Powered by
+                    <a
+                        href="https://buildify360.com/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="font-semibold text-slate-600 hover:text-slate-900 hover:underline"
+                        aria-label="Buildify360 (opens in a new tab)"
+                    >Buildify360</a>
+                </footer>
             </div>
         </div>
-        <MenuTutorial />
-        <ErpAssistant />
+        <MenuTutorial v-if="tutorialPending" />
+        <ErpAssistant v-if="assistantReady" />
     </div>
 </template>

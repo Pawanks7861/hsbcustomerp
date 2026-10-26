@@ -6,8 +6,9 @@ export const DEFAULT_PER_PAGE = 30;
 /**
  * Re-visit the current listing URL with updated query parameters.
  * Other active filters stay in place; the page resets unless one is given.
+ * Pass `only` to reload just those props (e.g. one tab of a detail page).
  */
-export function visitListing(changes = {}, { pageName = 'page', keepPage = false } = {}) {
+export function visitListing(changes = {}, { pageName = 'page', keepPage = false, only = [] } = {}) {
     const url = new URL(window.location.href);
     const params = Object.fromEntries(url.searchParams.entries());
 
@@ -27,6 +28,7 @@ export function visitListing(changes = {}, { pageName = 'page', keepPage = false
         preserveState: true,
         preserveScroll: true,
         replace: true,
+        only,
     });
 }
 

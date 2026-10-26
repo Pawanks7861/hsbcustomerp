@@ -42,6 +42,75 @@ class InventoryStock
         return $this->sumBucket($query);
     }
 
+    /**
+     * All balances for a project from one grouped query, using the same rules as
+     * balance() and locationBalance(): the default store also holds entries
+     * without a location, and in-transit locations never count toward totals.
+     *
+     * @param  iterable<InventoryLocation>  $locations
+     * @return array{total: array<int, string>, received: array<int, string>, issued: array<int, string>, at: array<int, array<int, string>>}
+     */
+    public function projectBalances(int $projectId, iterable $locations): array
+    {
+        $rows = StockLedgerEntry::query()
+            ->where('project_id', $projectId)
+            ->groupBy('material_id', 'location_id', 'transaction_type')
+            ->get([
+                'material_id',
+                'location_id',
+                'transaction_type',
+                DB::raw('SUM(stock_in) as in_sum'),
+                DB::raw('SUM(stock_out) as out_sum'),
+            ]);
+
+        $locationIds = $rows->pluck('location_id')->filter()->unique()->values();
+        $countable = $locationIds->isEmpty()
+            ? []
+            : InventoryLocation::query()
+                ->whereIn('id', $locationIds)
+                ->where('location_type', '!=', InventoryLocation::IN_TRANSIT)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->flip()
+                ->all();
+
+        $net = [];
+        $result = ['total' => [], 'received' => [], 'issued' => [], 'at' => []];
+
+        foreach ($rows as $row) {
+            $materialId = (int) $row->material_id;
+            $locationKey = $row->location_id === null ? 0 : (int) $row->location_id;
+            $in = Money::scale((string) $row->in_sum, 3) ?? '0.000';
+            $out = Money::scale((string) $row->out_sum, 3) ?? '0.000';
+            $movement = Money::sub($in, $out, 3);
+
+            $net[$materialId][$locationKey] = Money::add($net[$materialId][$locationKey] ?? '0.000', $movement, 3);
+
+            if ($locationKey === 0 || isset($countable[$locationKey])) {
+                $result['total'][$materialId] = Money::add($result['total'][$materialId] ?? '0.000', $movement, 3);
+            }
+            if ($row->transaction_type === StockLedgerEntry::RECEIPT) {
+                $result['received'][$materialId] = Money::add($result['received'][$materialId] ?? '0.000', $in, 3);
+            }
+            if ($row->transaction_type === StockLedgerEntry::ISSUE) {
+                $result['issued'][$materialId] = Money::add($result['issued'][$materialId] ?? '0.000', $out, 3);
+            }
+        }
+
+        foreach ($net as $materialId => $byLocation) {
+            foreach ($locations as $location) {
+                $locationId = (int) $location->id;
+                $value = $byLocation[$locationId] ?? '0.000';
+                if ($location->is_default && ! $location->isInTransit()) {
+                    $value = Money::add($value, $byLocation[0] ?? '0.000', 3);
+                }
+                $result['at'][$materialId][$locationId] = $value;
+            }
+        }
+
+        return $result;
+    }
+
     private function sumBucket($query): string
     {
         $in = (clone $query)->sum('stock_in');

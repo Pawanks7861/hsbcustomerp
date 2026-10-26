@@ -9,6 +9,7 @@ const props = defineProps({
     param: { type: String, default: 'search' },
     pageName: { type: String, default: 'page' },
     label: { type: String, default: 'Search records' },
+    only: { type: Array, default: () => [] },
 });
 
 const term = ref(props.search ?? '');
@@ -31,7 +32,7 @@ function send() {
     }
 
     lastSent = value;
-    visitListing({ [props.param]: value }, { pageName: props.pageName });
+    visitListing({ [props.param]: value }, { pageName: props.pageName, only: props.only });
 }
 
 function onInput() {

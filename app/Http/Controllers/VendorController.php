@@ -93,58 +93,77 @@ class VendorController extends Controller
             return $query;
         };
 
-        $summary = $balances->summary($vendor, $projectId, null, null, $projectIds);
         $filters = Listing::filters($request);
         $search = $filters['search'];
-
-        $orders = $inVisibleProjects($vendor->purchaseOrders())->with('project')->latest('po_date')->orderByDesc('id');
-        Listing::applySearch($orders, $search, ['po_number', 'po_date', 'status', 'grand_total', 'project.project_name']);
-        $invoices = $inVisibleProjects($vendor->invoices())->with(['project', 'purchaseOrder'])->latest('invoice_date')->orderByDesc('id');
-        Listing::applySearch($invoices, $search, ['invoice_number', 'invoice_date', 'total_amount', 'status', 'project.project_name', 'purchaseOrder.po_number']);
+        $tab = $request->string('tab')->toString() ?: 'overview';
         $paymentColumns = ['payment_date', 'payment_type', 'payment_mode', 'amount', 'reference_number', 'remarks'];
-        $payments = $inVisibleProjects($vendor->payments())->with('project')->latest('payment_date')->orderByDesc('id');
-        Listing::applySearch($payments, $search, $paymentColumns);
-        $advances = $inVisibleProjects($vendor->payments()->where('payment_type', 'advance'))->latest('payment_date')->orderByDesc('id');
-        Listing::applySearch($advances, $search, $paymentColumns);
 
-        return Inertia::render('Vendors/Show', [
-            'vendor' => $this->payload($vendor),
-            'summary' => $summary,
-            'tab' => $request->string('tab')->toString() ?: 'overview',
-            'filters' => $filters,
-            'projects' => Project::query()->visibleTo($request->user())->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
-            'purchaseOrders' => Listing::paginate($orders, $request)->through(fn (PurchaseOrder $order) => [
-                'id' => $order->id,
-                'project_id' => $order->project_id,
-                'project_name' => $order->project?->project_name,
-                'po_number' => $order->po_number,
-                'po_date' => $order->po_date?->toDateString(),
-                'status' => $order->status,
-                'grand_total' => (string) $order->grand_total,
-            ]),
-            'invoices' => Listing::paginate($invoices, $request)->through(fn (PurchaseInvoice $invoice) => [
-                'id' => $invoice->id,
-                'project_id' => $invoice->project_id,
-                'project_name' => $invoice->project?->project_name,
-                'invoice_number' => $invoice->invoice_number,
-                'invoice_date' => $invoice->invoice_date?->toDateString(),
-                'po_number' => $invoice->purchaseOrder?->po_number,
-                'total_amount' => (string) $invoice->total_amount,
-                'outstanding' => $balances->invoiceOutstanding($invoice),
-                'status' => $invoice->status,
-            ]),
-            'payments' => Listing::paginate($payments, $request),
-            'advances' => Listing::paginate($advances, $request),
-            'refunds' => [
+        $tabs = [
+            'purchaseOrders' => ['purchase-orders', function () use ($vendor, $inVisibleProjects, $search, $request) {
+                $query = $inVisibleProjects($vendor->purchaseOrders())->with('project')->latest('po_date')->orderByDesc('id');
+                Listing::applySearch($query, $search, ['po_number', 'po_date', 'status', 'grand_total', 'project.project_name']);
+
+                return Listing::paginate($query, $request)->through(fn (PurchaseOrder $order) => [
+                    'id' => $order->id,
+                    'project_id' => $order->project_id,
+                    'project_name' => $order->project?->project_name,
+                    'po_number' => $order->po_number,
+                    'po_date' => $order->po_date?->toDateString(),
+                    'status' => $order->status,
+                    'grand_total' => (string) $order->grand_total,
+                ]);
+            }],
+            'invoices' => ['invoices', function () use ($vendor, $inVisibleProjects, $search, $request, $balances) {
+                $query = $inVisibleProjects($vendor->invoices())->with(['project', 'purchaseOrder'])->latest('invoice_date')->orderByDesc('id');
+                Listing::applySearch($query, $search, ['invoice_number', 'invoice_date', 'total_amount', 'status', 'project.project_name', 'purchaseOrder.po_number']);
+
+                return Listing::paginate($query, $request)->through(fn (PurchaseInvoice $invoice) => [
+                    'id' => $invoice->id,
+                    'project_id' => $invoice->project_id,
+                    'project_name' => $invoice->project?->project_name,
+                    'invoice_number' => $invoice->invoice_number,
+                    'invoice_date' => $invoice->invoice_date?->toDateString(),
+                    'po_number' => $invoice->purchaseOrder?->po_number,
+                    'total_amount' => (string) $invoice->total_amount,
+                    'outstanding' => $balances->invoiceOutstanding($invoice),
+                    'status' => $invoice->status,
+                ]);
+            }],
+            'payments' => ['payments', function () use ($vendor, $inVisibleProjects, $search, $request, $paymentColumns) {
+                $query = $inVisibleProjects($vendor->payments())->latest('payment_date')->orderByDesc('id');
+                Listing::applySearch($query, $search, $paymentColumns);
+
+                return Listing::paginate($query, $request);
+            }],
+            'advances' => ['advances', function () use ($vendor, $inVisibleProjects, $search, $request, $paymentColumns) {
+                $query = $inVisibleProjects($vendor->payments()->where('payment_type', 'advance'))->latest('payment_date')->orderByDesc('id');
+                Listing::applySearch($query, $search, $paymentColumns);
+
+                return Listing::paginate($query, $request);
+            }],
+            'refunds' => ['refunds', fn () => [
                 'recoveries' => $inVisibleProjects($vendor->recoveries())->latest()->get(),
                 'received' => $inVisibleProjects($vendor->refunds())->latest('refund_date')->get(),
-            ],
-            'transactions' => Listing::paginateRows(
+            ]],
+            'transactions' => ['transactions', fn () => Listing::paginateRows(
                 $balances->transactions($vendor, $projectIds ?? ($projectId !== null ? [$projectId] : null)),
                 $request,
                 ['date', 'type', 'project', 'reference', 'payment', 'refund', 'remarks'],
-            ),
-        ]);
+            )],
+        ];
+
+        $props = [
+            'vendor' => $this->payload($vendor),
+            'summary' => fn () => $balances->summary($vendor, $projectId, null, null, $projectIds),
+            'tab' => $tab,
+            'filters' => $filters,
+            'projects' => fn () => Project::query()->visibleTo($request->user())->orderBy('project_name')->get(['id', 'project_name', 'project_code']),
+        ];
+        foreach ($tabs as $prop => [$key, $resolver]) {
+            $props[$prop] = $key === $tab ? $resolver : Inertia::optional($resolver);
+        }
+
+        return Inertia::render('Vendors/Show', $props);
     }
 
     public function edit(Vendor $vendor): Response

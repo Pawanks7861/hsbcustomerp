@@ -139,54 +139,66 @@ const submit = () => {
             </div>
 
             <div class="form-panel">
-                <div class="login-card">
-                    <h1>Welcome Back</h1>
+                <div class="form-stack">
+                    <div class="login-card">
+                        <h1>Welcome Back</h1>
 
-                    <div v-if="status" class="mb-4 text-sm font-medium text-green-600">
-                        {{ status }}
+                        <div v-if="status" class="mb-4 text-sm font-medium text-green-600">
+                            {{ status }}
+                        </div>
+
+                        <SecurityNotice />
+
+                        <form @submit.prevent="submit">
+                            <div>
+                                <InputLabel for="email" value="Email" />
+                                <TextInput
+                                    id="email"
+                                    type="email"
+                                    class="mt-1 block w-full"
+                                    v-model="form.email"
+                                    required
+                                    autofocus
+                                    autocomplete="username"
+                                />
+                                <InputError class="mt-2" :message="form.errors.email" />
+                            </div>
+
+                            <div class="mt-4">
+                                <InputLabel for="password" value="Password" />
+                                <TextInput
+                                    id="password"
+                                    type="password"
+                                    class="mt-1 block w-full"
+                                    v-model="form.password"
+                                    required
+                                    autocomplete="current-password"
+                                />
+                                <InputError class="mt-2" :message="form.errors.password" />
+                            </div>
+
+                            <div class="mt-4 block">
+                                <label class="flex items-center">
+                                    <Checkbox name="remember" v-model:checked="form.remember" />
+                                    <span class="ms-2 text-sm text-slate-600">Remember me</span>
+                                </label>
+                            </div>
+
+                            <PrimaryButton class="sign-in" :disabled="form.processing">
+                                {{ form.processing ? 'Signing in…' : 'Sign in' }}
+                            </PrimaryButton>
+                        </form>
                     </div>
 
-                    <SecurityNotice />
-
-                    <form @submit.prevent="submit">
-                        <div>
-                            <InputLabel for="email" value="Email" />
-                            <TextInput
-                                id="email"
-                                type="email"
-                                class="mt-1 block w-full"
-                                v-model="form.email"
-                                required
-                                autofocus
-                                autocomplete="username"
-                            />
-                            <InputError class="mt-2" :message="form.errors.email" />
-                        </div>
-
-                        <div class="mt-4">
-                            <InputLabel for="password" value="Password" />
-                            <TextInput
-                                id="password"
-                                type="password"
-                                class="mt-1 block w-full"
-                                v-model="form.password"
-                                required
-                                autocomplete="current-password"
-                            />
-                            <InputError class="mt-2" :message="form.errors.password" />
-                        </div>
-
-                        <div class="mt-4 block">
-                            <label class="flex items-center">
-                                <Checkbox name="remember" v-model:checked="form.remember" />
-                                <span class="ms-2 text-sm text-slate-600">Remember me</span>
-                            </label>
-                        </div>
-
-                        <PrimaryButton class="sign-in" :disabled="form.processing">
-                            {{ form.processing ? 'Signing in…' : 'Sign in' }}
-                        </PrimaryButton>
-                    </form>
+                    <footer class="login-powered">
+                        Powered by
+                        <a
+                            href="https://buildify360.com/"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="Buildify360 (opens in a new tab)"
+                        >Buildify360</a>
+                    </footer>
                 </div>
             </div>
         </div>
@@ -268,6 +280,30 @@ const submit = () => {
     opacity: 0;
     transform: translateY(12px);
     pointer-events: none;
+}
+
+.form-stack {
+    width: 100%;
+    max-width: 460px;
+}
+
+.login-powered {
+    margin-top: 1.25rem;
+    text-align: center;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    color: #94a3b8;
+}
+
+.login-powered a {
+    font-weight: 600;
+    color: #475569;
+    text-decoration: none;
+}
+
+.login-powered a:hover {
+    color: #0f172a;
+    text-decoration: underline;
 }
 
 .login-card {

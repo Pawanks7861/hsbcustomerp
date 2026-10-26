@@ -232,6 +232,11 @@ final class Listing
             return null;
         }
 
+        // Single words cannot match the spaced formats, so skip Carbon's costly failures.
+        if (! str_contains($value, ' ') && preg_match('/^\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{4}$/', $value) !== 1) {
+            return null;
+        }
+
         foreach (self::DATE_FORMATS as $format) {
             try {
                 $date = Carbon::createFromFormat('!'.$format, $value);

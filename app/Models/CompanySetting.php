@@ -23,9 +23,29 @@ class CompanySetting extends Model
         'favicon_path',
     ];
 
+    protected static function booted(): void
+    {
+        $forget = function (): void {
+            if (app()->bound('request')) {
+                app('request')->attributes->remove('company_setting');
+            }
+        };
+
+        static::saved($forget);
+        static::deleted($forget);
+    }
+
     public static function current(): ?self
     {
-        return static::query()->first();
+        $request = app()->bound('request') ? app('request') : null;
+        if ($request?->attributes->has('company_setting')) {
+            return $request->attributes->get('company_setting');
+        }
+
+        $company = static::query()->first();
+        $request?->attributes->set('company_setting', $company);
+
+        return $company;
     }
 
     /**
