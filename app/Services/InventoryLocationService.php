@@ -22,6 +22,39 @@ class InventoryLocationService
         );
     }
 
+    public function ensureCentralStore(): InventoryLocation
+    {
+        $existing = InventoryLocation::query()
+            ->where('location_code', 'CENTRAL')
+            ->first();
+
+        if ($existing) {
+            $existing->fill([
+                'name' => $existing->name ?: 'Central Store',
+                'location_type' => InventoryLocation::CENTRAL_STORE,
+                'project_id' => null,
+                'is_active' => true,
+                'is_system' => false,
+            ]);
+
+            if ($existing->isDirty()) {
+                $existing->save();
+            }
+
+            return $existing;
+        }
+
+        return InventoryLocation::query()->create([
+            'location_code' => 'CENTRAL',
+            'name' => 'Central Store',
+            'location_type' => InventoryLocation::CENTRAL_STORE,
+            'project_id' => null,
+            'is_active' => true,
+            'is_default' => false,
+            'is_system' => false,
+        ]);
+    }
+
     public function ensureProjectStore(Project $project): InventoryLocation
     {
         $existing = InventoryLocation::query()

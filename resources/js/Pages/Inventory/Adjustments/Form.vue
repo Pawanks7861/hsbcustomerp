@@ -5,7 +5,9 @@ import AdminLayout from '../../../Layouts/AdminLayout.vue';
 import PageHeader from '../../../Components/PageHeader.vue';
 
 const props = defineProps({
-    project: { type: Object, required: true },
+    project: { type: Object, default: null },
+    central: { type: Boolean, default: false },
+    store: { type: Object, default: null },
     materials: { type: Array, required: true },
     locations: { type: Array, default: () => [] },
     defaults: { type: Object, default: () => ({}) },
@@ -27,7 +29,7 @@ const isOpening = computed(() => form.adjustment_type === 'opening');
 const title = computed(() => (isOpening.value ? 'Add Opening Stock' : 'New Stock Adjustment'));
 
 function submit() {
-    form.post(`/projects/${props.project.id}/inventory/adjustments`, { forceFormData: true });
+    form.post(props.central ? '/inventory/central/adjustments' : `/projects/${props.project.id}/inventory/adjustments`, { forceFormData: true });
 }
 </script>
 
@@ -35,7 +37,7 @@ function submit() {
     <Head :title="title" />
     <AdminLayout :project="project">
         <template #header>
-            <PageHeader :title="title" :eyebrow="project.project_name" />
+            <PageHeader :title="title" :eyebrow="central ? (store?.name || 'Central Store') : project?.project_name" />
         </template>
         <form class="ui-card grid gap-4 p-5 sm:grid-cols-2" @submit.prevent="submit">
             <label class="text-sm sm:col-span-2"><span class="mb-1 block font-medium">Item</span>

@@ -126,13 +126,7 @@ class InternalDeliveryService
             abort_unless($locked->status === InternalDeliveryNote::APPROVED, 403);
             $locked->load('items', 'sourceLocation');
             $transit = $this->locations->ensureInTransit();
-            $projectId = (int) ($locked->source_project_id ?: $locked->sourceLocation->project_id);
-
-            if (! $projectId) {
-                throw ValidationException::withMessages([
-                    'source_location_id' => 'The source location must belong to a project before stock can move.',
-                ]);
-            }
+            $projectId = $this->ledgerProjectId($locked->source_project_id, $locked->sourceLocation);
 
             $materialIds = $locked->items->pluck('material_id')->map(fn ($id) => (int) $id)->unique()->sort()->values();
 
@@ -201,16 +195,10 @@ class InternalDeliveryService
         return DB::transaction(function () use ($note, $rows, $user, $remarks) {
             $locked = $this->lock($note);
             abort_unless($locked->isOpenForReceipt(), 403);
-            $locked->load('items.material', 'destinationLocation');
+            $locked->load('items.material', 'destinationLocation', 'sourceLocation');
             $transit = $this->locations->ensureInTransit();
-            $sourceProjectId = (int) $locked->source_project_id;
-            $destinationProjectId = (int) ($locked->destination_project_id ?: $locked->destinationLocation->project_id);
-
-            if (! $destinationProjectId) {
-                throw ValidationException::withMessages([
-                    'destination_location_id' => 'The destination location must belong to a project before stock can be received.',
-                ]);
-            }
+            $sourceProjectId = $this->ledgerProjectId($locked->source_project_id, $locked->sourceLocation);
+            $destinationProjectId = $this->ledgerProjectId($locked->destination_project_id, $locked->destinationLocation);
 
             $byId = $locked->items->keyBy('id');
             $prepared = [];
@@ -363,7 +351,7 @@ class InternalDeliveryService
 
             foreach ($entries as $entry) {
                 $this->stock->move(
-                    (int) $entry->project_id,
+                    $entry->project_id !== null ? (int) $entry->project_id : null,
                     (int) $entry->material_id,
                     now()->toDateString(),
                     StockLedgerEntry::REVERSAL,
@@ -389,7 +377,16 @@ class InternalDeliveryService
         });
     }
 
-    private function clearTransit(InternalDeliveryNote $note, InternalDeliveryNoteItem $item, InventoryLocation $transit, int $projectId, string $quantity, string $sourceType, int $sourceItemId, User $user, string $remarks): void
+    private function ledgerProjectId(mixed $noteProjectId, ?InventoryLocation $location): ?int
+    {
+        if ($noteProjectId) {
+            return (int) $noteProjectId;
+        }
+
+        return $location?->project_id ? (int) $location->project_id : null;
+    }
+
+    private function clearTransit(InternalDeliveryNote $note, InternalDeliveryNoteItem $item, InventoryLocation $transit, ?int $projectId, string $quantity, string $sourceType, int $sourceItemId, User $user, string $remarks): void
     {
         $this->stock->move(
             $projectId,

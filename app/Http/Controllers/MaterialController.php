@@ -7,7 +7,9 @@ use App\Models\MaterialIssueItem;
 use App\Models\MaterialReceiptItem;
 use App\Models\Project;
 use App\Models\StockAdjustment;
-use App\Services\DocumentNumber;
+use App\Services\Access;
+use App\Services\InventoryLocationService;
+use App\Services\StockAdjustmentService;
 use App\Support\Listing;
 use App\Support\MaterialUnits;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -22,6 +24,50 @@ class MaterialController extends Controller
 {
     public function index(Request $request, Project $project): Response
     {
+        return $this->renderIndex($request, $project);
+    }
+
+    public function master(Request $request): Response
+    {
+        return $this->renderIndex($request, null);
+    }
+
+    public function store(Request $request, Project $project): RedirectResponse
+    {
+        return $this->persist($request, $project);
+    }
+
+    public function storeMaster(Request $request): RedirectResponse
+    {
+        return $this->persist($request, null);
+    }
+
+    public function update(Request $request, Project $project, Material $material): RedirectResponse
+    {
+        $material->update($this->validateMaterial($request));
+
+        return $this->backToIndex($project)->with('success', 'Material updated.');
+    }
+
+    public function updateMaster(Request $request, Material $material): RedirectResponse
+    {
+        $material->update($this->validateMaterial($request));
+
+        return $this->backToIndex(null)->with('success', 'Material updated.');
+    }
+
+    public function destroy(Project $project, Material $material): RedirectResponse
+    {
+        return $this->deleteMaterial($material, $project);
+    }
+
+    public function destroyMaster(Material $material): RedirectResponse
+    {
+        return $this->deleteMaterial($material, null);
+    }
+
+    private function renderIndex(Request $request, ?Project $project): Response
+    {
         $filters = Listing::filters($request);
         $status = $request->string('status')->toString();
 
@@ -30,33 +76,39 @@ class MaterialController extends Controller
             ->when($status === 'inactive', fn ($query) => $query->where('is_active', false))
             ->orderBy('name')
             ->orderBy('id');
-        Listing::applySearch($query, $filters['search'], ['material_code', 'name', 'category', 'unit', 'minimum_stock', 'description']);
+        Listing::applySearch($query, $filters['search'], ['material_code', 'name', 'category', 'unit', 'description']);
 
         return Inertia::render('Inventory/Materials/Index', [
-            'project' => $this->projectCard($project),
+            'project' => $project ? $this->projectCard($project) : null,
+            'central' => $project === null,
             'filters' => [...$filters, 'status' => in_array($status, ['active', 'inactive'], true) ? $status : ''],
             'units' => MaterialUnits::all(),
             'materials' => Listing::paginate($query, $request)->through(fn (Material $material) => $this->payload($material)),
+            'canCreateUnit' => $request->user()?->is_admin || app(Access::class)->allows($request->user(), 'inventory.create'),
         ]);
     }
 
-    public function store(Request $request, Project $project): RedirectResponse
+    private function persist(Request $request, ?Project $project): RedirectResponse
     {
         $validated = $this->validateMaterial($request);
-
+        $opening = $this->openingQuantity($request, $project);
         $exception = null;
 
         for ($attempt = 0; $attempt < 3; $attempt++) {
             try {
-                DB::transaction(function () use ($validated, $request): void {
-                    Material::query()->create([
+                DB::transaction(function () use ($validated, $request, $project, $opening): void {
+                    $material = Material::query()->create([
                         ...$validated,
                         'material_code' => $this->nextCode(),
                         'created_by' => $request->user()->id,
                     ]);
+
+                    if ($opening !== null) {
+                        $this->recordOpening($request, $material, $opening);
+                    }
                 });
 
-                return redirect()->route('projects.inventory.materials.index', $project)->with('success', 'Material created.');
+                return $this->backToIndex($project)->with('success', 'Material created.');
             } catch (UniqueConstraintViolationException $caught) {
                 $exception = $caught;
             }
@@ -65,14 +117,7 @@ class MaterialController extends Controller
         throw $exception;
     }
 
-    public function update(Request $request, Project $project, Material $material): RedirectResponse
-    {
-        $material->update($this->validateMaterial($request));
-
-        return redirect()->route('projects.inventory.materials.index', $project)->with('success', 'Material updated.');
-    }
-
-    public function destroy(Project $project, Material $material): RedirectResponse
+    private function deleteMaterial(Material $material, ?Project $project): RedirectResponse
     {
         $used = $material->ledgerEntries()->exists()
             || MaterialReceiptItem::query()->where('material_id', $material->id)->exists()
@@ -87,7 +132,7 @@ class MaterialController extends Controller
 
         $material->delete();
 
-        return redirect()->route('projects.inventory.materials.index', $project)->with('success', 'Material deleted.');
+        return $this->backToIndex($project)->with('success', 'Material deleted.');
     }
 
     /**
@@ -99,10 +144,42 @@ class MaterialController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:5000'],
-            'unit' => ['required', 'string', Rule::in(MaterialUnits::all())],
-            'minimum_stock' => ['required', 'numeric', 'gte:0'],
+            'unit' => ['required', 'string', 'max:50', Rule::in(MaterialUnits::all())],
             'is_active' => ['required', 'boolean'],
         ]);
+    }
+
+    private function openingQuantity(Request $request, ?Project $project): ?string
+    {
+        if ($project !== null || ! $request->filled('opening_quantity')) {
+            return null;
+        }
+
+        $request->validate([
+            'opening_quantity' => ['nullable', 'numeric', 'gt:0'],
+        ]);
+
+        abort_unless(
+            $request->user()->is_admin || app(Access::class)->allows($request->user(), 'inventory.adjust'),
+            403
+        );
+
+        return (string) $request->input('opening_quantity');
+    }
+
+    private function recordOpening(Request $request, Material $material, string $quantity): void
+    {
+        $location = app(InventoryLocationService::class)->ensureCentralStore();
+        $service = app(StockAdjustmentService::class);
+        $draft = $service->createDraft($request->user(), null, [
+            'material_id' => $material->id,
+            'location_id' => $location->id,
+            'adjustment_date' => now()->toDateString(),
+            'adjustment_type' => StockAdjustment::OPENING,
+            'quantity' => $quantity,
+            'reason' => 'Opening stock',
+        ]);
+        $service->post($request->user(), null, $draft);
     }
 
     private function nextCode(): string
@@ -129,9 +206,15 @@ class MaterialController extends Controller
             'category' => $material->category,
             'description' => $material->description,
             'unit' => $material->unit,
-            'minimum_stock' => (string) $material->minimum_stock,
             'is_active' => $material->is_active,
         ];
+    }
+
+    private function backToIndex(?Project $project): RedirectResponse
+    {
+        return $project
+            ? redirect()->route('projects.inventory.materials.index', $project)
+            : redirect()->route('inventory.materials.index');
     }
 
     /**

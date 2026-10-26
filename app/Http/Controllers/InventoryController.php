@@ -33,7 +33,6 @@ class InventoryController extends Controller
         $to = $request->string('to')->toString();
         $balances = $this->locationBalances($request, $project);
         $withStock = 0;
-        $low = 0;
         $out = 0;
         $seen = [];
 
@@ -46,10 +45,6 @@ class InventoryController extends Controller
 
             if (bccomp($row['total_available'], '0', 3) === 1) {
                 $withStock++;
-            }
-
-            if ($row['status'] === 'Low Stock') {
-                $low++;
             }
 
             if ($row['status'] === 'Out of Stock') {
@@ -81,7 +76,6 @@ class InventoryController extends Controller
             'stats' => [
                 'active_materials' => Material::query()->where('is_active', true)->count(),
                 'in_stock' => $withStock,
-                'low_stock' => $low,
                 'out_of_stock' => $out,
             ],
             'grns' => $grns->map(fn (MaterialReceipt $receipt) => [
@@ -114,7 +108,7 @@ class InventoryController extends Controller
             ],
             'rows' => Listing::paginateRows($this->locationBalances($request, $project), $request, [
                 'material_code', 'material_name', 'unit', 'location', 'location_code', 'available', 'total_available',
-                'total_received', 'total_issued', 'adjustments', 'minimum_stock', 'status',
+                'total_received', 'total_issued', 'adjustments', 'status',
             ]),
             'canAdjust' => $this->access->allows($user, 'inventory.adjust') || $user->is_admin,
             'canImport' => $this->access->allows($user, 'inventory.import') || $user->is_admin,
@@ -203,8 +197,7 @@ class InventoryController extends Controller
             $available = $balances['total'][(int) $materialId] ?? '0.000';
             $received = $balances['received'][(int) $materialId] ?? '0.000';
             $issued = $balances['issued'][(int) $materialId] ?? '0.000';
-            $minimum = Money::scale($material->minimum_stock, 3) ?? '0.000';
-            $status = $this->status($available, $minimum);
+            $status = $this->status($available);
 
             foreach ($locations as $location) {
                 $atLocation = $balances['at'][(int) $materialId][(int) $location->id] ?? '0.000';
@@ -227,7 +220,6 @@ class InventoryController extends Controller
                     'adjustments' => Money::sub(Money::add($available, $issued, 3), $received, 3),
                     'available' => $atLocation,
                     'total_available' => $available,
-                    'minimum_stock' => $minimum,
                     'status' => $status,
                 ];
             }
@@ -236,17 +228,9 @@ class InventoryController extends Controller
         return $rows;
     }
 
-    private function status(string $available, string $minimum): string
+    private function status(string $available): string
     {
-        if (bccomp($available, '0', 3) !== 1) {
-            return 'Out of Stock';
-        }
-
-        if (bccomp($minimum, '0', 3) === 1 && bccomp($available, $minimum, 3) === -1) {
-            return 'Low Stock';
-        }
-
-        return 'Available';
+        return bccomp($available, '0', 3) === 1 ? 'Available' : 'Out of Stock';
     }
 
     /**

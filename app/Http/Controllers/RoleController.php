@@ -22,8 +22,11 @@ class RoleController extends Controller
     public function index(Request $request): Response
     {
         $filters = Listing::filters($request);
-        $query = Role::query()->withCount('users')->orderBy('name')->orderBy('id');
-        Listing::applySearch($query, $filters['search'], ['name', 'slug', 'description']);
+        $query = Role::query()
+            ->with(['users' => fn ($users) => $users->orderBy('name')->select('users.id', 'users.name')])
+            ->orderBy('name')
+            ->orderBy('id');
+        Listing::applySearch($query, $filters['search'], ['name', 'slug', 'description', 'users.name']);
 
         return Inertia::render('Roles/Index', [
             'roles' => Listing::paginate($query, $request)->through(fn (Role $role) => [
@@ -33,7 +36,7 @@ class RoleController extends Controller
                 'description' => $role->description,
                 'is_system' => $role->is_system,
                 'is_active' => $role->is_active,
-                'users_count' => $role->users_count,
+                'users' => $role->users->pluck('name')->values()->all(),
             ]),
             'filters' => $filters,
             'canManage' => $this->access->allows(auth()->user(), 'roles.edit'),

@@ -8,7 +8,9 @@ import TableToolbar from '../../Components/TableToolbar.vue';
 import { visitListing } from '../../lib/listing';
 
 const props = defineProps({
-    project: { type: Object, required: true },
+    project: { type: Object, default: null },
+    central: { type: Boolean, default: false },
+    store: { type: Object, default: null },
     materials: { type: Array, required: true },
     locations: { type: Array, default: () => [] },
     filters: { type: Object, required: true },
@@ -27,7 +29,7 @@ function apply() {
     <Head title="Stock Ledger" />
     <AdminLayout :project="project">
         <template #header>
-            <PageHeader title="Stock Ledger" :eyebrow="project.project_name" />
+            <PageHeader title="Stock Ledger" :eyebrow="central ? (store?.name || 'Central Store') : project?.project_name" />
         </template>
         <TableToolbar :search="filters.search" placeholder="Search transaction, date, material, type, source, remarks…" />
         <form class="mb-4 flex flex-wrap items-end gap-3" @submit.prevent="apply">
@@ -37,7 +39,7 @@ function apply() {
                     <option v-for="material in materials" :key="material.id" :value="material.id">{{ material.material_code }} {{ material.name }}</option>
                 </select>
             </label>
-            <label class="text-sm"><span class="mb-1 block font-medium">Location</span>
+            <label v-if="!central" class="text-sm"><span class="mb-1 block font-medium">Location</span>
                 <select v-model="locationId" class="ui-input w-72">
                     <option value="">All locations</option>
                     <option v-for="location in locations" :key="location.id" :value="location.id">{{ location.name }}</option>

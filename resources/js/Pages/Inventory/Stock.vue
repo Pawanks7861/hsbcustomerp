@@ -9,7 +9,9 @@ import TableToolbar from '../../Components/TableToolbar.vue';
 import { visitListing } from '../../lib/listing';
 
 const props = defineProps({
-    project: { type: Object, required: true },
+    project: { type: Object, default: null },
+    central: { type: Boolean, default: false },
+    store: { type: Object, default: null },
     locations: { type: Array, default: () => [] },
     filters: { type: Object, default: () => ({}) },
     rows: { type: Object, required: true },
@@ -29,7 +31,9 @@ const can = (permission) => {
 const createUrl = computed(() => {
     const params = new URLSearchParams({ type: 'opening' });
     if (locationId.value) params.set('location_id', locationId.value);
-    return `/projects/${props.project.id}/inventory/adjustments/create?${params.toString()}`;
+    return props.central
+        ? `/inventory/central/adjustments/create?${params.toString()}`
+        : `/projects/${props.project.id}/inventory/adjustments/create?${params.toString()}`;
 });
 
 function apply() {
@@ -38,22 +42,22 @@ function apply() {
 
 function tone(status) {
     if (status === 'Out of Stock') return 'text-red-700';
-    if (status === 'Low Stock') return 'text-orange-700';
     return 'text-emerald-700';
 }
 </script>
 
 <template>
-    <Head title="Stock Overview" />
+    <Head :title="central ? 'Central Store' : 'Stock Overview'" />
     <AdminLayout :project="project">
         <template #header>
-            <PageHeader title="Stock Overview" :eyebrow="project.project_name">
+            <PageHeader :title="central ? 'Central Store' : 'Stock Overview'" :eyebrow="central ? (store?.name || 'Independent of projects') : project?.project_name">
+                <a v-if="central" href="/inventory/central/export" class="ui-btn-secondary">Export CSV</a>
                 <ImportButton
                     v-if="canImport || can('inventory.import')"
-                    module="stock_adjustments"
+                    :module="central ? 'central_store_stock' : 'stock_adjustments'"
                     permission="inventory.import"
-                    :return-url="`/projects/${project.id}/inventory/stock`"
-                    :project-id="project.id"
+                    :return-url="central ? '/inventory/central' : `/projects/${project.id}/inventory/stock`"
+                    :project-id="project?.id"
                     label="Import CSV/Excel"
                 />
                 <Link
@@ -65,7 +69,7 @@ function tone(status) {
         </template>
 
         <TableToolbar :search="filters.search" placeholder="Search material, code, location, status, quantity…" />
-        <form class="mb-4 flex flex-wrap items-end gap-3" @submit.prevent="apply">
+        <form v-if="!central" class="mb-4 flex flex-wrap items-end gap-3" @submit.prevent="apply">
             <label class="text-sm">
                 <span class="mb-1 block font-medium">Location</span>
                 <select v-model="locationId" class="ui-input w-72">
@@ -80,7 +84,7 @@ function tone(status) {
         </form>
 
         <div class="ui-table-wrap overflow-x-auto">
-            <table class="ui-table min-w-[1080px]">
+            <table class="ui-table min-w-[980px]">
                 <thead>
                     <tr>
                         <th>Material Code</th>
@@ -92,14 +96,14 @@ function tone(status) {
                         <th class="text-right">Total Received</th>
                         <th class="text-right">Total Issued</th>
                         <th class="text-right">Adjustments</th>
-                        <th class="text-right">Minimum Stock</th>
                         <th>Stock Status</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr v-if="rows.data.length === 0">
-                        <td colspan="11" class="py-8 text-center text-slate-400">
+                        <td colspan="10" class="py-8 text-center text-slate-400">
                             <template v-if="filters.search">No matching records found.</template>
+                            <template v-else-if="central">No stock has been posted to the Central Store.</template>
                             <template v-else>No stock has been posted for this project{{ locationId ? ' at the selected location' : '' }}.</template>
                         </td>
                     </tr>
@@ -113,7 +117,6 @@ function tone(status) {
                         <td class="text-right tabular-nums">{{ row.total_received }}</td>
                         <td class="text-right tabular-nums">{{ row.total_issued }}</td>
                         <td class="text-right tabular-nums">{{ row.adjustments }}</td>
-                        <td class="text-right tabular-nums">{{ row.minimum_stock }}</td>
                         <td :class="tone(row.status)">{{ row.status }}</td>
                     </tr>
                 </tbody>

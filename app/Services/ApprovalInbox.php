@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\InternalDeliveryNote;
 use App\Models\MaterialIssue;
 use App\Models\MaterialReceipt;
+use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseRequest;
 use App\Models\StockAdjustment;
@@ -40,6 +41,12 @@ class ApprovalInbox
                 'action' => 'Approve / reject',
                 'description' => 'Submitted purchase orders waiting for approval.',
                 'permissions' => ['purchase_orders.approve', 'purchase_orders.reject'],
+            ],
+            'purchase_invoices' => [
+                'label' => 'Purchase Invoices',
+                'action' => 'Approve / reject',
+                'description' => 'Submitted vendor invoices waiting for approval.',
+                'permissions' => ['invoices.approve', 'invoices.reject'],
             ],
             'work_orders' => [
                 'label' => 'Work Orders',
@@ -147,6 +154,7 @@ class ApprovalInbox
         return match ($type) {
             'purchase_requests' => $scoped(PurchaseRequest::query()->where('status', DocumentStatus::SUBMITTED)),
             'purchase_orders' => $scoped(PurchaseOrder::query()->where('status', DocumentStatus::SUBMITTED)),
+            'purchase_invoices' => $scoped(PurchaseInvoice::query()->where('approval_status', PurchaseInvoice::APPROVAL_SUBMITTED)),
             'work_orders' => $scoped(WorkOrder::query()->where('status', WorkOrder::SUBMITTED)),
             'grns' => $scoped(MaterialReceipt::query()
                 ->where('document_kind', MaterialReceipt::KIND_GRN)
@@ -169,6 +177,7 @@ class ApprovalInbox
         return match ($type) {
             'purchase_requests' => ['project', 'requestedBy', 'items'],
             'purchase_orders' => ['project', 'createdBy'],
+            'purchase_invoices' => ['project', 'vendor', 'createdBy'],
             'work_orders' => ['project', 'createdBy'],
             'grns' => ['project', 'purchaseOrder', 'submitter'],
             'material_issues' => ['project', 'creator', 'items.material'],
@@ -210,6 +219,16 @@ class ApprovalInbox
                 'flag' => null,
                 'waiting_since' => $this->stamp($record->submitted_at ?? $record->updated_at),
                 'url' => route('projects.purchase-orders.show', [$record->project_id, $record->id]),
+            ],
+            'purchase_invoices' => [
+                'number' => $record->invoice_number,
+                'date' => $record->invoice_date?->toDateString(),
+                'summary' => trim(($record->vendor?->name ?? 'Vendor').' bill'),
+                'amount' => (string) $record->total_amount,
+                'requested_by' => $record->createdBy?->name,
+                'flag' => null,
+                'waiting_since' => $this->stamp($record->submitted_at ?? $record->updated_at),
+                'url' => route('projects.purchase-invoices.show', [$record->project_id, $record->id]),
             ],
             'work_orders' => [
                 'number' => $record->work_order_number,

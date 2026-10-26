@@ -25,14 +25,21 @@ class StockAdjustmentService
     /**
      * @return Collection<int, InventoryLocation>
      */
-    public function selectableLocations(User $user, Project $project): Collection
+    public function selectableLocations(User $user, ?Project $project): Collection
     {
-        return InventoryLocation::query()
+        $query = InventoryLocation::query()
             ->with('project')
-            ->where('project_id', $project->id)
             ->where('is_active', true)
             ->where('is_system', false)
-            ->where('location_type', '!=', InventoryLocation::IN_TRANSIT)
+            ->where('location_type', '!=', InventoryLocation::IN_TRANSIT);
+
+        if ($project) {
+            $query->where('project_id', $project->id);
+        } else {
+            $query->whereNull('project_id')->where('location_code', 'CENTRAL');
+        }
+
+        return $query
             ->orderBy('name')
             ->get()
             ->filter(function (InventoryLocation $location) use ($user) {
@@ -50,7 +57,7 @@ class StockAdjustmentService
     /**
      * @return list<array{id: int, location_code: string, name: string, location_type: string, is_default: bool}>
      */
-    public function locationCards(User $user, Project $project): array
+    public function locationCards(User $user, ?Project $project): array
     {
         return $this->selectableLocations($user, $project)
             ->map(fn (InventoryLocation $location) => [
@@ -63,15 +70,17 @@ class StockAdjustmentService
             ->all();
     }
 
-    public function resolveLocation(User $user, Project $project, ?int $locationId): InventoryLocation
+    public function resolveLocation(User $user, ?Project $project, ?int $locationId): InventoryLocation
     {
         $location = $locationId
             ? InventoryLocation::query()->find($locationId)
-            : $this->locations->ensureProjectStore($project);
+            : ($project ? $this->locations->ensureProjectStore($project) : $this->locations->ensureCentralStore());
 
         if (! $location) {
             throw ValidationException::withMessages([
-                'location_id' => 'Choose a location that already exists in this project.',
+                'location_id' => $project
+                    ? 'Choose a location that already exists in this project.'
+                    : 'Choose the Central Store.',
             ]);
         }
 
@@ -80,7 +89,7 @@ class StockAdjustmentService
         return $location;
     }
 
-    public function matchLocation(User $user, Project $project, string $value): InventoryLocation
+    public function matchLocation(User $user, ?Project $project, string $value): InventoryLocation
     {
         $needle = trim($value);
 
@@ -118,7 +127,9 @@ class StockAdjustmentService
 
         throw ValidationException::withMessages([
             'location' => $existsElsewhere
-                ? 'This location is not available for the selected project.'
+                ? ($project
+                    ? 'This location is not available for the selected project.'
+                    : 'This import only accepts the Central Store.')
                 : 'Location was not found. Create it in Inventory → Locations before importing stock.',
         ]);
     }
@@ -126,14 +137,21 @@ class StockAdjustmentService
     /**
      * @param  array<string, mixed>  $data
      */
-    public function createDraft(User $user, Project $project, array $data): StockAdjustment
+    public function createDraft(User $user, ?Project $project, array $data): StockAdjustment
     {
         $location = $this->resolveLocation($user, $project, isset($data['location_id']) ? (int) $data['location_id'] : null);
         $material = Material::query()->findOrFail($data['material_id']);
         $this->assertActiveMaterial($material);
 
+        if (($data['adjustment_type'] ?? '') === StockAdjustment::OPENING
+            && $this->existingOpening($project?->id, $material->id, $location->id)) {
+            throw ValidationException::withMessages([
+                'quantity' => 'Opening stock already exists for this item at this location. Use an increase or decrease to correct it.',
+            ]);
+        }
+
         $payload = [
-            'project_id' => $project->id,
+            'project_id' => $project?->id,
             'material_id' => $material->id,
             'location_id' => $location->id,
             'adjustment_date' => $data['adjustment_date'],
@@ -149,11 +167,11 @@ class StockAdjustmentService
         return $this->insertWithNumber($payload);
     }
 
-    public function post(User $user, Project $project, StockAdjustment $adjustment): void
+    public function post(User $user, ?Project $project, StockAdjustment $adjustment): void
     {
         DB::transaction(function () use ($user, $project, $adjustment): void {
             $locked = StockAdjustment::query()->whereKey($adjustment->id)->lockForUpdate()->firstOrFail();
-            abort_unless((int) $locked->project_id === (int) $project->id, 404);
+            abort_unless((int) ($locked->project_id ?? 0) === (int) ($project?->id ?? 0), 404);
             abort_unless($locked->status === StockAdjustment::DRAFT, 403);
 
             $location = $this->resolveLocation($user, $project, $locked->location_id ? (int) $locked->location_id : null);
@@ -162,16 +180,21 @@ class StockAdjustmentService
                 $locked->location_id = $location->id;
             }
 
+            if ($locked->adjustment_type === StockAdjustment::OPENING
+                && $this->existingOpening($project?->id, (int) $locked->material_id, (int) $location->id)) {
+                throw ValidationException::withMessages([
+                    'quantity' => 'Opening stock already exists for this item at this location. Use an increase or decrease to correct it.',
+                ]);
+            }
+
             $this->postLocked($user, $project, $locked, $location);
         });
     }
 
     /**
-     * Create and immediately post an imported stock movement.
-     *
      * @param  array<string, mixed>  $data
      */
-    public function importPosted(User $user, Project $project, array $data, ?int $importBatchId = null): StockAdjustment
+    public function importPosted(User $user, ?Project $project, array $data, ?int $importBatchId = null): StockAdjustment
     {
         $location = $data['location'] instanceof InventoryLocation
             ? $data['location']
@@ -187,9 +210,9 @@ class StockAdjustmentService
         $quantity = Money::scale($data['quantity'], 3) ?? '0.000';
         $date = $data['adjustment_date'];
         $reference = $data['reference_number'] ?? null;
-        $fingerprint = $this->fingerprint($project->id, $material->id, $location->id, $type, $quantity, $date, $reference);
+        $fingerprint = $this->fingerprint($project?->id, $material->id, $location->id, $type, $quantity, $date, $reference);
 
-        if ($type === StockAdjustment::OPENING && $this->existingOpening($project->id, $material->id, $location->id)) {
+        if ($type === StockAdjustment::OPENING && $this->existingOpening($project?->id, $material->id, $location->id)) {
             throw ValidationException::withMessages([
                 'quantity' => 'Opening stock already exists for this item at this location.',
             ]);
@@ -202,7 +225,7 @@ class StockAdjustmentService
         }
 
         $adjustment = $this->insertWithNumber([
-            'project_id' => $project->id,
+            'project_id' => $project?->id,
             'material_id' => $material->id,
             'location_id' => $location->id,
             'adjustment_date' => $date,
@@ -221,10 +244,10 @@ class StockAdjustmentService
         return $adjustment->fresh();
     }
 
-    public function existingOpening(int $projectId, int $materialId, int $locationId): ?StockAdjustment
+    public function existingOpening(?int $projectId, int $materialId, int $locationId): ?StockAdjustment
     {
         return StockAdjustment::query()
-            ->where('project_id', $projectId)
+            ->when($projectId === null, fn ($query) => $query->whereNull('project_id'), fn ($query) => $query->where('project_id', $projectId))
             ->where('material_id', $materialId)
             ->where('location_id', $locationId)
             ->where('adjustment_type', StockAdjustment::OPENING)
@@ -241,7 +264,7 @@ class StockAdjustmentService
     }
 
     public function fingerprint(
-        int $projectId,
+        ?int $projectId,
         int $materialId,
         int $locationId,
         string $type,
@@ -250,7 +273,7 @@ class StockAdjustmentService
         ?string $reference,
     ): string {
         return hash('sha256', implode('|', [
-            $projectId,
+            $projectId === null ? 'central' : (string) $projectId,
             $materialId,
             $locationId,
             $type,
@@ -260,13 +283,13 @@ class StockAdjustmentService
         ]));
     }
 
-    private function postLocked(User $user, Project $project, StockAdjustment $locked, InventoryLocation $location): void
+    private function postLocked(User $user, ?Project $project, StockAdjustment $locked, InventoryLocation $location): void
     {
         $quantity = Money::scale($locked->quantity, 3) ?? '0.000';
         $in = $locked->increasesStock();
 
         $this->stock->move(
-            $project->id,
+            $project?->id,
             (int) $locked->material_id,
             $locked->adjustment_date->toDateString(),
             $in ? StockLedgerEntry::ADJUSTMENT_IN : StockLedgerEntry::ADJUSTMENT_OUT,
@@ -311,9 +334,15 @@ class StockAdjustmentService
         throw $exception;
     }
 
-    private function assertUsableLocation(User $user, Project $project, InventoryLocation $location): void
+    private function assertUsableLocation(User $user, ?Project $project, InventoryLocation $location): void
     {
-        if ((int) $location->project_id !== (int) $project->id) {
+        if ($project === null) {
+            if (! $location->isCentralStore()) {
+                throw ValidationException::withMessages([
+                    'location_id' => 'Central Store stock can only be recorded against the Central Store.',
+                ]);
+            }
+        } elseif ($location->isCentralStore() || (int) $location->project_id !== (int) $project->id) {
             throw ValidationException::withMessages([
                 'location_id' => 'Choose a location that belongs to this project.',
             ]);

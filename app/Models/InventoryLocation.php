@@ -59,4 +59,11 @@ class InventoryLocation extends Model
     {
         return $this->location_type === self::IN_TRANSIT;
     }
+
+    public function isCentralStore(): bool
+    {
+        return $this->project_id === null
+            && ! $this->is_system
+            && ($this->location_type === self::CENTRAL_STORE || $this->location_code === 'CENTRAL');
+    }
 }

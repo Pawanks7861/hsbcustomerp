@@ -147,8 +147,8 @@ class IntentRegistry
             new IntentDefinition(
                 id: 'inventory.low_stock',
                 name: 'Low stock items',
-                phrases: ['which items have low stock', 'low stock', 'below minimum'],
-                keywords: ['low', 'stock', 'minimum'],
+                phrases: ['which items have low stock', 'low stock', 'out of stock'],
+                keywords: ['low', 'stock', 'shortage'],
                 synonyms: ['shortage'],
                 permissions: ['inventory.view'],
                 handler: InventoryHandler::class,

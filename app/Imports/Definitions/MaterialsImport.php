@@ -10,6 +10,7 @@ use App\Imports\Support\RowOutcome;
 use App\Models\InventoryLocation;
 use App\Models\Material;
 use App\Models\StockAdjustment;
+use App\Services\MaterialUnitService;
 use App\Services\StockAdjustmentService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -43,8 +44,7 @@ class MaterialsImport extends AbstractImportDefinition
             new ColumnDefinition('name', 'Name', true, 'string', max: 255),
             new ColumnDefinition('category', 'Category', false, 'string', max: 100),
             new ColumnDefinition('description', 'Description', false, 'string', max: 2000),
-            new ColumnDefinition('unit', 'Unit', true, 'string', ['uom'], 30),
-            new ColumnDefinition('minimum_stock', 'Minimum Stock', false, 'decimal'),
+            new ColumnDefinition('unit', 'Unit', true, 'string', ['uom'], 50),
             new ColumnDefinition('is_active', 'Active', false, 'boolean'),
             new ColumnDefinition('location', 'Location', false, 'string', ['location name', 'store', 'store name'], 255, help: 'Required when Opening Quantity is provided. Must already exist.'),
             new ColumnDefinition('opening_quantity', 'Opening Quantity', false, 'decimal', ['quantity', 'existing quantity'], help: 'Adds opening stock at the location. Does not replace existing balances.'),
@@ -60,8 +60,7 @@ class MaterialsImport extends AbstractImportDefinition
             'material_code' => 'MAT-0001',
             'name' => 'Cement OPC 53',
             'category' => 'Cement',
-            'unit' => 'BAG',
-            'minimum_stock' => 50,
+            'unit' => 'Bag',
             'is_active' => 'yes',
             'location' => 'REPLACE_WITH_EXISTING_LOCATION',
             'opening_quantity' => 250,
@@ -100,36 +99,36 @@ class MaterialsImport extends AbstractImportDefinition
             return new RowOutcome($rowNumber, RowOutcome::INVALID, $cast['data'], $cast['errors']);
         }
 
-        if (($cast['data']['minimum_stock'] ?? 0) < 0) {
-            return new RowOutcome($rowNumber, RowOutcome::INVALID, $cast['data'], ['Minimum Stock cannot be negative.']);
-        }
-
         $existing = null;
         if (! empty($cast['data']['material_code'])) {
             $existing = Material::query()->where('material_code', $cast['data']['material_code'])->first();
         }
 
         $data = $cast['data'];
+        if (! empty($data['unit'])) {
+            $data['unit'] = app(MaterialUnitService::class)->create((string) $data['unit'])->name;
+        }
         $hasStock = $data['opening_quantity'] !== null && $data['opening_quantity'] !== '';
 
         if ($hasStock) {
             if ((float) $data['opening_quantity'] <= 0) {
                 $cast['errors'][] = 'Opening Quantity must be greater than zero.';
             }
-            if (empty($data['location'])) {
+            if (empty($data['location']) && $context->project) {
                 $cast['errors'][] = 'Location is required for a stock quantity entry.';
-            }
-            if (! $context->project) {
-                $cast['errors'][] = 'Select a project before importing opening stock.';
             }
             if ($context->mode === DuplicateMode::UPDATE_MATCHED) {
                 $cast['errors'][] = 'Update matched mode changes item details only. Use a stock import to record quantities.';
             }
         }
 
-        if ($hasStock && $context->project && ! empty($data['location']) && $cast['errors'] === []) {
+        if ($hasStock && $cast['errors'] === []) {
             try {
-                $location = app(StockAdjustmentService::class)->matchLocation($context->user, $context->project, (string) $data['location']);
+                $location = app(StockAdjustmentService::class)->matchLocation(
+                    $context->user,
+                    $context->project,
+                    (string) ($data['location'] ?: 'Central Store')
+                );
                 $data['_location_id'] = $location->id;
                 $itemKey = strtolower((string) ($data['material_code'] ?: $data['name'] ?: ''));
                 if ($itemKey !== '' && $context->seen('material-stock-rows', $itemKey.'@'.$location->id)) {
@@ -159,13 +158,12 @@ class MaterialsImport extends AbstractImportDefinition
     public function commit(RowOutcome $row, ImportContext $context): string
     {
         $data = $row->data;
-        $data['minimum_stock'] = $data['minimum_stock'] ?? 0;
         $data['is_active'] = $data['is_active'] ?? true;
         $data['created_by'] = $context->user->id;
 
         if ($row->action === 'update' && $row->existingId) {
             unset($data['material_code'], $data['created_by']);
-            $itemFields = array_intersect_key($data, array_flip(['name', 'category', 'description', 'unit', 'minimum_stock', 'is_active']));
+            $itemFields = array_intersect_key($data, array_flip(['name', 'category', 'description', 'unit', 'is_active']));
             Material::query()->whereKey($row->existingId)->update(array_filter($itemFields, fn ($v) => $v !== null));
             $this->importOpening($row, $context, (int) $row->existingId);
 
@@ -176,7 +174,7 @@ class MaterialsImport extends AbstractImportDefinition
             if (empty($data['material_code'])) {
                 $data['material_code'] = $this->nextCode();
             }
-            $itemFields = array_intersect_key($data, array_flip(['material_code', 'name', 'category', 'description', 'unit', 'minimum_stock', 'is_active', 'created_by']));
+            $itemFields = array_intersect_key($data, array_flip(['material_code', 'name', 'category', 'description', 'unit', 'is_active', 'created_by']));
             $material = Material::query()->create($itemFields);
             $this->importOpening($row, $context, (int) $material->id);
 
@@ -187,19 +185,20 @@ class MaterialsImport extends AbstractImportDefinition
     private function importOpening(RowOutcome $row, ImportContext $context, int $materialId): void
     {
         $data = $row->data;
-        if (($data['opening_quantity'] ?? null) === null || ($data['opening_quantity'] ?? '') === '' || empty($data['_location_id']) || ! $context->project) {
+        if (($data['opening_quantity'] ?? null) === null || ($data['opening_quantity'] ?? '') === '' || empty($data['_location_id'])) {
             return;
         }
 
         $service = app(StockAdjustmentService::class);
         $location = InventoryLocation::query()->findOrFail($data['_location_id']);
         $date = $data['entry_date'] ?: now()->toDateString();
+        $project = $location->isCentralStore() ? null : $context->project;
 
-        if ($service->existingOpening($context->project->id, $materialId, (int) $location->id)) {
+        if ($service->existingOpening($project?->id, $materialId, (int) $location->id)) {
             return;
         }
 
-        $service->importPosted($context->user, $context->project, [
+        $service->importPosted($context->user, $project, [
             'material_id' => $materialId,
             'location' => $location,
             'adjustment_type' => StockAdjustment::OPENING,

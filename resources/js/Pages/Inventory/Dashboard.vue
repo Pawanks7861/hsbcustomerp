@@ -25,7 +25,6 @@ function apply() {
 const cards = [
     ['Active materials', props.stats.active_materials],
     ['With available stock', props.stats.in_stock],
-    ['Low stock', props.stats.low_stock],
     ['Out of stock', props.stats.out_of_stock],
 ];
 </script>
@@ -43,7 +42,7 @@ const cards = [
             <button class="ui-btn-secondary" type="submit">Filter</button>
         </form>
 
-        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <article v-for="[label, value] in cards" :key="label" class="ui-card p-4">
                 <p class="text-sm text-slate-500">{{ label }}</p>
                 <p class="mt-1 text-2xl font-semibold tabular-nums">{{ value }}</p>

@@ -8,6 +8,7 @@ use App\Imports\Definitions\DebitNotesImport;
 use App\Imports\Definitions\ExpenseCategoriesImport;
 use App\Imports\Definitions\ExpensesImport;
 use App\Imports\Definitions\InventoryLocationsImport;
+use App\Imports\Definitions\CentralStoreStockImport;
 use App\Imports\Definitions\MaterialsImport;
 use App\Imports\Definitions\ProjectsImport;
 use App\Imports\Definitions\PurchaseOrdersImport;
@@ -25,6 +26,7 @@ class ImportRegistry
         'vendors' => VendorsImport::class,
         'projects' => ProjectsImport::class,
         'materials' => MaterialsImport::class,
+        'central_store_stock' => CentralStoreStockImport::class,
         'stock_adjustments' => StockAdjustmentsImport::class,
         'expense_categories' => ExpenseCategoriesImport::class,
         'inventory_locations' => InventoryLocationsImport::class,

@@ -28,6 +28,7 @@ class InventoryLocationController extends Controller
     public function index(Request $request): Response
     {
         abort_unless($this->access->allows($request->user(), 'inventory.view'), 403);
+        $this->locations->ensureCentralStore();
 
         $locations = InventoryLocation::query()
             ->with(['project', 'responsibleUser'])
@@ -35,6 +36,10 @@ class InventoryLocationController extends Controller
             ->orderBy('name')
             ->get()
             ->filter(function (InventoryLocation $location) use ($request) {
+                if ($location->isCentralStore()) {
+                    return $this->access->allows($request->user(), 'inventory.view') || $request->user()->is_admin;
+                }
+
                 if (! $location->project_id) {
                     return $this->access->seesAllProjects($request->user());
                 }
@@ -74,6 +79,10 @@ class InventoryLocationController extends Controller
         if (! empty($data['project_id'])) {
             $project = Project::query()->findOrFail($data['project_id']);
             abort_unless($this->access->canAccessProject($request->user(), $project), 404);
+        } elseif (($data['location_type'] ?? '') === InventoryLocation::CENTRAL_STORE) {
+            return back()->withErrors([
+                'location_type' => 'The organization already has one Central Store. Open it from Inventory → Central Store.',
+            ])->withInput();
         }
 
         $location = InventoryLocation::query()->create([
@@ -109,11 +118,11 @@ class InventoryLocationController extends Controller
         $rows = [];
 
         foreach ($materials as $material) {
-            if (! $location->project_id) {
-                continue;
-            }
-
-            $available = $this->stock->locationBalance((int) $location->project_id, (int) $material->id, (int) $location->id);
+            $available = $this->stock->locationBalance(
+                $location->project_id ? (int) $location->project_id : null,
+                (int) $material->id,
+                (int) $location->id
+            );
 
             if (bccomp($available, '0', 3) !== 1) {
                 continue;

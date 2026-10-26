@@ -6,16 +6,16 @@ use App\Models\InventoryLocation;
 use App\Models\Material;
 use App\Models\StockLedgerEntry;
 use App\Support\Money;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class InventoryStock
 {
-    public function balance(int $projectId, int $materialId): string
+    public function balance(?int $projectId, int $materialId): string
     {
         return $this->sumBucket(
-            StockLedgerEntry::query()
-                ->where('project_id', $projectId)
+            $this->forProject(StockLedgerEntry::query(), $projectId)
                 ->where('material_id', $materialId)
                 ->where(function ($query): void {
                     $query->whereNull('location_id')
@@ -24,11 +24,10 @@ class InventoryStock
         );
     }
 
-    public function locationBalance(int $projectId, int $materialId, int $locationId): string
+    public function locationBalance(?int $projectId, int $materialId, int $locationId): string
     {
         $location = InventoryLocation::query()->findOrFail($locationId);
-        $query = StockLedgerEntry::query()
-            ->where('project_id', $projectId)
+        $query = $this->forProject(StockLedgerEntry::query(), $projectId)
             ->where('material_id', $materialId);
 
         if ($location->is_default && ! $location->isInTransit()) {
@@ -43,17 +42,12 @@ class InventoryStock
     }
 
     /**
-     * All balances for a project from one grouped query, using the same rules as
-     * balance() and locationBalance(): the default store also holds entries
-     * without a location, and in-transit locations never count toward totals.
-     *
      * @param  iterable<InventoryLocation>  $locations
      * @return array{total: array<int, string>, received: array<int, string>, issued: array<int, string>, at: array<int, array<int, string>>}
      */
-    public function projectBalances(int $projectId, iterable $locations): array
+    public function projectBalances(?int $projectId, iterable $locations): array
     {
-        $rows = StockLedgerEntry::query()
-            ->where('project_id', $projectId)
+        $rows = $this->forProject(StockLedgerEntry::query(), $projectId)
             ->groupBy('material_id', 'location_id', 'transaction_type')
             ->get([
                 'material_id',
@@ -124,7 +118,7 @@ class InventoryStock
     }
 
     public function move(
-        int $projectId,
+        ?int $projectId,
         int $materialId,
         string $date,
         string $type,
@@ -140,8 +134,7 @@ class InventoryStock
     ): StockLedgerEntry {
         return DB::transaction(function () use ($projectId, $materialId, $date, $type, $sourceType, $sourceId, $sourceItemId, $sourceNumber, $stockIn, $stockOut, $userId, $remarks, $locationId) {
             Material::query()->whereKey($materialId)->lockForUpdate()->firstOrFail();
-            StockLedgerEntry::query()
-                ->where('project_id', $projectId)
+            $this->forProject(StockLedgerEntry::query(), $projectId)
                 ->where('material_id', $materialId)
                 ->lockForUpdate()
                 ->get(['id']);
@@ -189,5 +182,12 @@ class InventoryStock
                 'remarks' => $remarks,
             ]);
         });
+    }
+
+    private function forProject(Builder $query, ?int $projectId): Builder
+    {
+        return $projectId === null
+            ? $query->whereNull('project_id')
+            : $query->where('project_id', $projectId);
     }
 }

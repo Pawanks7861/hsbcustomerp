@@ -77,6 +77,11 @@ class PurchaseInvoice extends Model
         return $this->belongsTo(Vendor::class);
     }
 
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
     public function items(): HasMany
     {
         return $this->hasMany(PurchaseInvoiceItem::class)->orderBy('id');

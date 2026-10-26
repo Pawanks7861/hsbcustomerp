@@ -115,9 +115,9 @@ class KnowledgeBase
                 ],
                 'keywords' => ['inventory', 'material', 'materials', 'stock item', 'item master'],
                 'topics' => ['inventory', 'material', 'materials', 'stock item'],
-                'answer' => "To add inventory / material master items:\n1. Open a **Project**.\n2. Go to **Inventory** → **Materials** (Material Master).\n3. Enter Name, Unit, optional Category / Minimum stock.\n4. Save — a material code is generated.\n5. Or use **Import** on that page to bulk-upload materials.\n\nThis creates the item catalog. To record **existing quantity at a location**, open **Stock Overview** → **Add Opening Stock** (item, location, quantity). To receive new purchases, use a **GRN** from an approved PO. Do not use GRN to enter opening balances.",
+                'answer' => "To add inventory / material master items:\n1. Open **Inventory** → **Material Master** (or Central Store).\n2. Enter Name, Unit (you can add a custom unit), and optional Category.\n3. Save — a material code is generated. Creating a material does not add stock by itself.\n4. Or use **Import** on that page to bulk-upload materials.\n\nTo record quantity already in the **Central Store**, open Central Store → **Add Opening Stock**. Project stores still use **Stock Overview** → **Add Opening Stock**. To receive new purchases, use a **GRN** from an approved PO. Do not use GRN to enter opening balances.",
                 'module' => 'inventory',
-                'route' => '/projects',
+                'route' => '/inventory/materials',
                 'permission' => 'inventory.create',
             ],
             [

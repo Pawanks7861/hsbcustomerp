@@ -330,6 +330,8 @@ class InternalDeliveryController extends Controller
             if ($location->project_id) {
                 $project = Project::query()->findOrFail($location->project_id);
                 abort_unless($this->access->canAccessProject($user, $project), 404);
+            } elseif ($location->isCentralStore()) {
+                abort_unless($this->access->allows($user, 'inventory.view') || $user->is_admin, 404);
             } elseif (! $this->access->seesAllProjects($user)) {
                 abort(404);
             }
@@ -349,6 +351,10 @@ class InternalDeliveryController extends Controller
             ->orderBy('name')
             ->get()
             ->filter(function (InventoryLocation $location) use ($user) {
+                if ($location->isCentralStore()) {
+                    return $this->access->allows($user, 'inventory.view') || $user->is_admin;
+                }
+
                 if (! $location->project_id) {
                     return $this->access->seesAllProjects($user);
                 }
@@ -378,7 +384,14 @@ class InternalDeliveryController extends Controller
         $ids = $user->projects()->pluck('projects.id');
 
         return $query->where(function ($inner) use ($ids): void {
-            $inner->whereIn('source_project_id', $ids)->orWhereIn('destination_project_id', $ids);
+            $inner->whereIn('source_project_id', $ids)
+                ->orWhereIn('destination_project_id', $ids)
+                ->orWhere(function ($central) use ($ids): void {
+                    $central->whereNull('source_project_id')->whereIn('destination_project_id', $ids);
+                })
+                ->orWhere(function ($central) use ($ids): void {
+                    $central->whereNull('destination_project_id')->whereIn('source_project_id', $ids);
+                });
         });
     }
 
@@ -409,7 +422,7 @@ class InternalDeliveryController extends Controller
      */
     private function detail(InternalDeliveryNote $note): array
     {
-        $sourceProjectId = (int) ($note->source_project_id ?: 0);
+        $sourceProjectId = $note->source_project_id ? (int) $note->source_project_id : null;
 
         return [
             'id' => $note->id,
@@ -450,7 +463,7 @@ class InternalDeliveryController extends Controller
                     'damaged' => (string) $item->quantity_damaged,
                     'short' => (string) $item->quantity_short,
                     'remaining' => bccomp($remaining, '0', 3) === -1 ? '0.000' : $remaining,
-                    'available' => $note->isEditable() && $sourceProjectId
+                    'available' => $note->isEditable()
                         ? $this->stock->locationBalance($sourceProjectId, (int) $item->material_id, (int) $note->source_location_id)
                         : null,
                     'remarks' => $item->remarks,

@@ -715,8 +715,6 @@ class ReportQueryService
                 ->where('material_id', $materialId)
                 ->where('transaction_type', StockLedgerEntry::ISSUE)
                 ->sum('stock_out'), 3) ?? '0.000';
-            $minimum = Money::scale($material->minimum_stock, 3) ?? '0.000';
-
             $rows[] = [
                 'material_code' => $material->material_code,
                 'material_name' => $material->name,
@@ -724,7 +722,7 @@ class ReportQueryService
                 'total_received' => $received,
                 'total_issued' => $issued,
                 'available' => $available,
-                'status' => $this->stockStatus($available, $minimum),
+                'status' => $this->stockStatus($available),
             ];
 
             $totals['available'] = Money::add($totals['available'], $available, 3);
@@ -733,17 +731,9 @@ class ReportQueryService
         return ['rows' => $rows, 'totals' => $totals];
     }
 
-    private function stockStatus(string $available, string $minimum): string
+    private function stockStatus(string $available): string
     {
-        if (bccomp($available, '0', 3) !== 1) {
-            return 'Out of stock';
-        }
-
-        if (bccomp($minimum, '0', 3) === 1 && bccomp($available, $minimum, 3) !== 1) {
-            return 'Low stock';
-        }
-
-        return 'In stock';
+        return bccomp($available, '0', 3) === 1 ? 'In stock' : 'Out of stock';
     }
 
     private function projectOrFail(User $user, int $projectId): Project

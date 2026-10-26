@@ -20,7 +20,7 @@ defineProps({
                 <Link v-if="canManage" href="/roles/create" class="ui-btn-primary">New role</Link>
             </PageHeader>
         </template>
-        <TableToolbar :search="filters.search" placeholder="Search role name or description…" />
+        <TableToolbar :search="filters.search" placeholder="Search role, description, or user name…" />
         <div class="ui-table-wrap">
             <table class="ui-table">
                 <thead>
@@ -38,7 +38,7 @@ defineProps({
                             <div class="font-medium">{{ role.name }}</div>
                             <div class="text-xs text-slate-500">{{ role.description }}</div>
                         </td>
-                        <td>{{ role.users_count }}</td>
+                        <td class="max-w-xs whitespace-normal">{{ role.users.length ? role.users.join(', ') : '—' }}</td>
                         <td>{{ role.is_active ? 'Active' : 'Inactive' }}</td>
                         <td><Link v-if="canManage" :href="`/roles/${role.id}/edit`" class="text-sm">Edit</Link></td>
                     </tr>

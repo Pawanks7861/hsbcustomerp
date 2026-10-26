@@ -7,7 +7,6 @@ use App\Chatbot\Support\ChatResponse;
 use App\Chatbot\Support\ConversationContext;
 use App\Chatbot\Support\ListItem;
 use App\Chatbot\Support\MoneyFormat;
-use App\Models\Material;
 use App\Models\MaterialReceipt;
 use App\Models\User;
 use App\Services\Access;
@@ -86,34 +85,13 @@ class InventoryHandler implements IntentHandler
 
     private function lowStock(User $user): ChatResponse
     {
-        $materials = Material::query()
-            ->where('is_active', true)
-            ->where('minimum_stock', '>', 0)
-            ->orderBy('name')
-            ->limit(20)
-            ->get(['material_code', 'name', 'unit', 'minimum_stock']);
-
-        if ($materials->isEmpty()) {
-            return new ChatResponse(
-                message: 'No active materials have a minimum stock threshold set.',
-                intent: 'inventory.low_stock',
-            );
-        }
-
-        $items = $materials->take(8)->map(function (Material $m) {
-            return ListItem::make(
-                title: $m->material_code,
-                subtitle: $m->name,
-                amount: MoneyFormat::qty($m->minimum_stock, $m->unit),
-                meta: 'Minimum stock',
-            );
-        })->all();
-
         return new ChatResponse(
-            message: 'Materials with a configured minimum stock level. Compare against project stock on the stock balance report to see shortages.',
-            links: [['label' => 'Stock balance report', 'url' => '/reports/stock-balance']],
-            items: $items,
-            contextPatch: ['last_intent' => 'inventory.low_stock'],
+            message: 'Minimum stock thresholds are no longer used. Open the stock balance report or Central Store to review available quantities and out-of-stock items.',
+            links: [
+                ['label' => 'Stock balance report', 'url' => '/reports/stock-balance'],
+                ['label' => 'Central Store', 'url' => '/inventory/central'],
+            ],
+            suggestions: ['What is the current stock?', 'Show recent GRNs'],
             intent: 'inventory.low_stock',
         );
     }

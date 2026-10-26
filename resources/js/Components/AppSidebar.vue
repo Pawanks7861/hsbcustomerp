@@ -122,6 +122,21 @@ function itemClass(active) {
                 <FileSpreadsheet class="h-4 w-4 shrink-0" />
                 Reports
             </Link>
+            <template v-if="can('inventory.view')">
+                <p class="px-3 pb-2 pt-4 text-xs font-medium text-slate-400">Inventory</p>
+                <Link href="/inventory/central" data-tour="central-store" :class="itemClass(path.startsWith('/inventory/central'))" @click="emit('close')">
+                    <Warehouse class="h-4 w-4 shrink-0" />
+                    Central Store
+                </Link>
+                <Link href="/inventory/materials" :class="itemClass(path === '/inventory/materials' || path.startsWith('/inventory/materials'))" @click="emit('close')">
+                    <Package class="h-4 w-4 shrink-0" />
+                    Material Master
+                </Link>
+                <Link href="/inventory/locations" :class="itemClass(path.startsWith('/inventory/locations'))" @click="emit('close')">
+                    <Warehouse class="h-4 w-4 shrink-0" />
+                    Locations
+                </Link>
+            </template>
 
             <div v-if="project" class="pt-5">
                 <p class="px-3 pb-2 text-xs font-medium text-slate-400">{{ project.project_code }}</p>
@@ -205,9 +220,9 @@ function itemClass(active) {
                         <ClipboardList class="h-4 w-4 shrink-0" />
                         Internal Delivery Notes
                     </Link>
-                    <Link v-if="can('inventory.view')" href="/inventory/locations" :class="itemClass(path.startsWith('/inventory/locations'))" @click="emit('close')">
-                        <Warehouse class="h-4 w-4 shrink-0" />
-                        Locations
+                    <Link v-if="can('idn.view')" href="/inventory/transfers" :class="itemClass(!project && path.startsWith('/inventory/transfers'))" @click="emit('close')">
+                        <ClipboardList class="h-4 w-4 shrink-0" />
+                        All Transfers
                     </Link>
                 </div>
             </div>

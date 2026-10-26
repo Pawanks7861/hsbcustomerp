@@ -4,13 +4,17 @@ import AdminLayout from '../../../Layouts/AdminLayout.vue';
 import PageHeader from '../../../Components/PageHeader.vue';
 
 const props = defineProps({
-    project: { type: Object, required: true },
+    project: { type: Object, default: null },
+    central: { type: Boolean, default: false },
+    store: { type: Object, default: null },
     adjustment: { type: Object, required: true },
 });
 
 function post() {
     if (!confirm('Post this stock adjustment?')) return;
-    router.post(`/projects/${props.project.id}/inventory/adjustments/${props.adjustment.id}/post`);
+    router.post(props.central
+        ? `/inventory/central/adjustments/${props.adjustment.id}/post`
+        : `/projects/${props.project.id}/inventory/adjustments/${props.adjustment.id}/post`);
 }
 </script>
 
@@ -18,7 +22,7 @@ function post() {
     <Head :title="adjustment.adjustment_number" />
     <AdminLayout :project="project">
         <template #header>
-            <PageHeader :title="adjustment.adjustment_number" :eyebrow="project.project_name" />
+            <PageHeader :title="adjustment.adjustment_number" :eyebrow="central ? (store?.name || 'Central Store') : project?.project_name" />
         </template>
         <article class="ui-card space-y-3 p-5 text-sm">
             <dl class="grid gap-3 sm:grid-cols-2">
@@ -33,7 +37,7 @@ function post() {
                 <div class="sm:col-span-2"><dt class="text-slate-500">Reason</dt><dd>{{ adjustment.reason }}</dd></div>
                 <div v-if="adjustment.posted_by"><dt class="text-slate-500">Posted by</dt><dd>{{ adjustment.posted_by }} on {{ adjustment.posted_at }}</dd></div>
             </dl>
-            <a v-if="adjustment.has_attachment" :href="`/projects/${project.id}/inventory/adjustments/${adjustment.id}/attachment`" class="ui-btn-secondary inline-flex">View attachment</a>
+            <a v-if="adjustment.has_attachment" :href="central ? `/inventory/central/adjustments/${adjustment.id}/attachment` : `/projects/${project.id}/inventory/adjustments/${adjustment.id}/attachment`" class="ui-btn-secondary inline-flex">View attachment</a>
             <div>
                 <button v-if="adjustment.status === 'draft'" type="button" class="ui-btn-primary" @click="post">Post adjustment</button>
             </div>

@@ -203,17 +203,12 @@ class GlobalSearch
                 'label' => 'Inventory Materials',
                 'permission' => 'inventory.view',
                 'run' => function (string $q) {
-                    $projectId = $this->firstProjectId();
-                    if ($projectId === null) {
-                        return [];
-                    }
-
                     return $this->fetch(
                         Material::query()->select(['id', 'material_code', 'name', 'unit', 'category']),
                         $q,
                         ['material_code', 'name', 'category'],
                         'material_code',
-                        fn (Material $m) => $this->item('material', $m->name, $this->parts($m->material_code, $m->unit, $m->category), route('projects.inventory.materials.index', ['project' => $projectId, 'search' => $m->material_code], false)),
+                        fn (Material $m) => $this->item('material', $m->name, $this->parts($m->material_code, $m->unit, $m->category), route('inventory.materials.index', ['search' => $m->material_code], false)),
                     );
                 },
             ],
@@ -221,11 +216,18 @@ class GlobalSearch
                 'label' => 'Stock Adjustments',
                 'permission' => 'inventory.view',
                 'run' => fn (string $q) => $this->fetch(
-                    $this->inProjects(StockAdjustment::query())->with(['material:id,material_code,name'])->select(['id', 'project_id', 'material_id', 'adjustment_number', 'adjustment_type', 'status']),
+                    $this->inProjects(StockAdjustment::query(), true)->with(['material:id,material_code,name'])->select(['id', 'project_id', 'material_id', 'adjustment_number', 'adjustment_type', 'status']),
                     $q,
                     ['adjustment_number', 'adjustment_type', 'status', 'material.name', 'material.material_code'],
                     'adjustment_number',
-                    fn (StockAdjustment $a) => $this->item('stock_adjustment', $a->adjustment_number, $this->parts($a->material?->name, $this->status($a->adjustment_type), $this->status($a->status)), route('projects.inventory.adjustments.show', [$a->project_id, $a->id], false)),
+                    fn (StockAdjustment $a) => $this->item(
+                        'stock_adjustment',
+                        $a->adjustment_number,
+                        $this->parts($a->material?->name, $this->status($a->adjustment_type), $this->status($a->status)),
+                        $a->project_id
+                            ? route('projects.inventory.adjustments.show', [$a->project_id, $a->id], false)
+                            : route('inventory.central.adjustments.show', $a->id, false)
+                    ),
                 ),
             ],
             'material_issues' => [

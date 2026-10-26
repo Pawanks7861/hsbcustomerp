@@ -155,6 +155,12 @@ class Access
 
     public function abortUnlessCanAccessLocation(User $user, InventoryLocation $location): void
     {
+        if ($location->isCentralStore()) {
+            abort_unless($this->allows($user, 'inventory.view') || $user->is_admin, 404);
+
+            return;
+        }
+
         if ($location->project_id) {
             $project = $location->project ?? Project::query()->find($location->project_id);
             abort_unless($project instanceof Project && $this->canAccessProject($user, $project), 404);
@@ -173,7 +179,7 @@ class Access
         ])));
 
         if ($projectIds === []) {
-            abort_unless($this->seesAllProjects($user), 404);
+            abort_unless($this->allows($user, 'inventory.view') || $this->seesAllProjects($user) || $user->is_admin, 404);
 
             return;
         }

@@ -22,7 +22,9 @@ use App\Http\Controllers\ImportController;
 use App\Http\Controllers\InternalDeliveryController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\InventoryLocationController;
+use App\Http\Controllers\CentralStoreController;
 use App\Http\Controllers\MaterialController;
+use App\Http\Controllers\MaterialUnitController;
 use App\Http\Controllers\MaterialIssueController;
 use App\Http\Controllers\MaterialReceiptController;
 use App\Http\Controllers\MenuTutorialController;
@@ -444,6 +446,21 @@ Route::middleware(['auth', 'active', 'project.access', 'throttle.operation'])->g
         Route::post('projects/{project}/expenses/{expense}/approve', [ExpenseController::class, 'approve'])->middleware('permission:expenses.approve')->name('projects.expenses.approve');
         Route::post('projects/{project}/expenses/{expense}/reject', [ExpenseController::class, 'reject'])->middleware('permission:expenses.reject')->name('projects.expenses.reject');
     });
+
+    Route::get('inventory/central', [CentralStoreController::class, 'stock'])->middleware('permission:inventory.view')->name('inventory.central');
+    Route::get('inventory/central/export', [CentralStoreController::class, 'export'])->middleware('permission:inventory.view')->name('inventory.central.export');
+    Route::get('inventory/central/ledger', [CentralStoreController::class, 'ledger'])->middleware('permission:inventory.view')->name('inventory.central.ledger');
+    Route::get('inventory/central/adjustments', [CentralStoreController::class, 'adjustments'])->middleware('permission:inventory.view')->name('inventory.central.adjustments.index');
+    Route::get('inventory/central/adjustments/create', [CentralStoreController::class, 'createAdjustment'])->middleware('permission:inventory.adjust')->name('inventory.central.adjustments.create');
+    Route::post('inventory/central/adjustments', [CentralStoreController::class, 'storeAdjustment'])->middleware('permission:inventory.adjust')->name('inventory.central.adjustments.store');
+    Route::get('inventory/central/adjustments/{stock_adjustment}/attachment', [CentralStoreController::class, 'attachment'])->middleware('permission:inventory.view')->name('inventory.central.adjustments.attachment');
+    Route::get('inventory/central/adjustments/{stock_adjustment}', [CentralStoreController::class, 'showAdjustment'])->middleware('permission:inventory.view')->name('inventory.central.adjustments.show');
+    Route::post('inventory/central/adjustments/{stock_adjustment}/post', [CentralStoreController::class, 'postAdjustment'])->middleware('permission:inventory.adjust')->name('inventory.central.adjustments.post');
+    Route::get('inventory/materials', [MaterialController::class, 'master'])->middleware('permission:inventory.view')->name('inventory.materials.index');
+    Route::post('inventory/materials', [MaterialController::class, 'storeMaster'])->middleware('permission:inventory.create')->name('inventory.materials.store');
+    Route::put('inventory/materials/{material}', [MaterialController::class, 'updateMaster'])->middleware('permission:inventory.edit')->name('inventory.materials.update');
+    Route::delete('inventory/materials/{material}', [MaterialController::class, 'destroyMaster'])->middleware('permission:inventory.edit')->name('inventory.materials.destroy');
+    Route::post('inventory/units', [MaterialUnitController::class, 'store'])->middleware('permission:inventory.create')->name('inventory.units.store');
 
     Route::get('inventory/locations', [InventoryLocationController::class, 'index'])->middleware('permission:inventory.view')->name('inventory.locations.index');
     Route::post('inventory/locations', [InventoryLocationController::class, 'store'])->middleware('permission:inventory.create')->name('inventory.locations.store');
