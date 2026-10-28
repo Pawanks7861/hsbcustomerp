@@ -6,6 +6,7 @@ import PageHeader from '../../Components/PageHeader.vue';
 import TablePagination from '../../Components/TablePagination.vue';
 import TableToolbar from '../../Components/TableToolbar.vue';
 import { visitListing } from '../../lib/listing';
+import { formatInr } from '../../lib/money';
 
 const props = defineProps({
     project: { type: Object, default: null },
@@ -31,7 +32,7 @@ function apply() {
         <template #header>
             <PageHeader title="Stock Ledger" :eyebrow="central ? (store?.name || 'Central Store') : project?.project_name" />
         </template>
-        <TableToolbar :search="filters.search" placeholder="Search transaction, date, material, type, source, remarks…" />
+        <TableToolbar :search="filters.search" placeholder="Search transaction, date, material, type, source, cost, remarks…" />
         <form class="mb-4 flex flex-wrap items-end gap-3" @submit.prevent="apply">
             <label class="text-sm"><span class="mb-1 block font-medium">Material</span>
                 <select v-model="materialId" class="ui-input w-72">
@@ -48,15 +49,17 @@ function apply() {
             <button class="ui-btn-secondary" type="submit">Filter</button>
         </form>
         <div class="ui-table-wrap overflow-x-auto">
-            <table class="ui-table min-w-[980px]">
+            <table class="ui-table min-w-[1180px]">
                 <thead>
                     <tr>
                         <th>Transaction</th><th>Date</th><th>Material</th><th>Location</th><th>Type</th><th>Source</th>
-                        <th class="text-right">Stock In</th><th class="text-right">Stock Out</th><th class="text-right">Balance</th><th>Posted By</th><th>Remarks</th>
+                        <th class="text-right">Stock In</th><th class="text-right">Stock Out</th><th class="text-right">Balance</th>
+                        <th class="text-right">Unit cost</th><th class="text-right">Amount</th><th>Cost basis</th>
+                        <th>Posted By</th><th>Remarks</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-if="entries.data.length === 0"><td colspan="11" class="py-8 text-center text-slate-400">{{ filters.search ? 'No matching records found.' : 'No ledger entries.' }}</td></tr>
+                    <tr v-if="entries.data.length === 0"><td colspan="14" class="py-8 text-center text-slate-400">{{ filters.search ? 'No matching records found.' : 'No ledger entries.' }}</td></tr>
                     <tr v-for="entry in entries.data" :key="entry.id">
                         <td>{{ entry.transaction_number }}</td>
                         <td>{{ entry.transaction_date }}</td>
@@ -67,6 +70,9 @@ function apply() {
                         <td class="text-right tabular-nums">{{ entry.stock_in }}</td>
                         <td class="text-right tabular-nums">{{ entry.stock_out }}</td>
                         <td class="text-right tabular-nums">{{ entry.balance }}</td>
+                        <td class="text-right tabular-nums">{{ entry.unit_cost != null && entry.unit_cost !== '' ? formatInr(entry.unit_cost) : '—' }}</td>
+                        <td class="text-right tabular-nums">{{ entry.amount != null && entry.amount !== '' ? formatInr(entry.amount) : '—' }}</td>
+                        <td>{{ entry.is_estimated ? 'Estimated' : (entry.amount != null ? 'Actual' : '—') }}</td>
                         <td>{{ entry.posted_by || '—' }}</td>
                         <td>{{ entry.remarks || '—' }}</td>
                     </tr>

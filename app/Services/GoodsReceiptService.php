@@ -82,7 +82,7 @@ class GoodsReceiptService
             $locked = $this->lockReceipt($receipt);
             abort_unless($locked->status === MaterialReceipt::STATUS_SUBMITTED, 403);
             $this->assertFits($locked);
-            $locked->load('items.material', 'purchaseOrder');
+            $locked->load('items.material', 'items.purchaseOrderItem', 'purchaseOrder');
 
             foreach ($locked->items as $line) {
                 $accepted = Money::scale($line->quantity_accepted, 3) ?? '0.000';
@@ -100,6 +100,8 @@ class GoodsReceiptService
                 }
 
                 $this->assertUnit($material, (string) $line->unit);
+                $rate = $line->purchaseOrderItem?->rate;
+                $unitCost = $rate !== null && $rate !== '' ? Money::scale((string) $rate, 2) : null;
                 $this->stock->move(
                     (int) $locked->project_id,
                     (int) $material->id,
@@ -113,6 +115,9 @@ class GoodsReceiptService
                     '0',
                     $userId,
                     $line->description,
+                    null,
+                    $unitCost,
+                    $unitCost === null,
                 );
             }
 

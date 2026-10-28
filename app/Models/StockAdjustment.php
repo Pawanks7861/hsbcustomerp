@@ -27,6 +27,7 @@ class StockAdjustment extends Model
         'adjustment_date',
         'adjustment_type',
         'quantity',
+        'unit_cost',
         'reference_number',
         'reason',
         'import_fingerprint',
@@ -43,6 +44,7 @@ class StockAdjustment extends Model
     protected $casts = [
         'adjustment_date' => 'date',
         'quantity' => 'decimal:3',
+        'unit_cost' => 'decimal:2',
         'posted_at' => 'datetime',
         'cancelled_at' => 'datetime',
     ];

@@ -2,6 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import TablePagination from '../../Components/TablePagination.vue';
 import TableToolbar from '../../Components/TableToolbar.vue';
 
@@ -40,7 +41,7 @@ defineProps({
                         </td>
                         <td class="max-w-xs whitespace-normal">{{ role.users.length ? role.users.join(', ') : '—' }}</td>
                         <td>{{ role.is_active ? 'Active' : 'Inactive' }}</td>
-                        <td><Link v-if="canManage" :href="`/roles/${role.id}/edit`" class="text-sm">Edit</Link></td>
+                        <td class="text-right"><TableActionIcon v-if="canManage" action="edit" :href="`/roles/${role.id}/edit`" /></td>
                     </tr>
                 </tbody>
             </table>

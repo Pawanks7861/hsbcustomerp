@@ -5,6 +5,7 @@ import AdminLayout from '../../Layouts/AdminLayout.vue';
 import CompanyHeader from '../../Components/CompanyHeader.vue';
 import DocumentPdfActions from '../../Components/DocumentPdfActions.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 
 const props = defineProps({
     project: { type: Object, required: true },
@@ -94,7 +95,7 @@ function cancel() {
                 </table>
             </div>
             <div class="flex flex-wrap gap-2">
-                <a v-if="canEdit" :href="`/projects/${project.id}/grns/${receipt.id}/edit`" class="ui-btn-secondary">Edit</a>
+                <TableActionIcon v-if="canEdit" action="edit" :href="`/projects/${project.id}/grns/${receipt.id}/edit`" />
                 <button v-if="canSubmit" type="button" class="ui-btn-primary" @click="submit">Submit for approval</button>
                 <button v-if="canDecide" type="button" class="ui-btn-primary" @click="post">Approve and post</button>
                 <button v-if="canDecide" type="button" class="ui-btn-secondary" @click="rejecting = !rejecting">Reject</button>

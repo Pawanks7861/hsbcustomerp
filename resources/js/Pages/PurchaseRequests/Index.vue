@@ -4,6 +4,7 @@ import AdminLayout from '../../Layouts/AdminLayout.vue';
 import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import TablePagination from '../../Components/TablePagination.vue';
 import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatQty } from '../../lib/money';
@@ -73,7 +74,7 @@ defineProps({
                             <span v-else class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">No BOQ qty</span>
                         </td>
                         <td class="px-4 py-3.5">
-                            <Link :href="`/projects/${project.id}/purchase-requests/${record.id}`" class="font-medium text-amber-700 hover:underline">View</Link>
+                            <TableActionIcon action="view" :href="`/projects/${project.id}/purchase-requests/${record.id}`" />
                         </td>
                     </tr>
                 </tbody>

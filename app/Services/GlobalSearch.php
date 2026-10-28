@@ -204,11 +204,11 @@ class GlobalSearch
                 'permission' => 'inventory.view',
                 'run' => function (string $q) {
                     return $this->fetch(
-                        Material::query()->select(['id', 'material_code', 'name', 'unit', 'category']),
+                        Material::query()->select(['id', 'material_code', 'name', 'unit', 'category', 'classification', 'default_unit_price']),
                         $q,
-                        ['material_code', 'name', 'category'],
+                        ['material_code', 'name', 'category', 'classification'],
                         'material_code',
-                        fn (Material $m) => $this->item('material', $m->name, $this->parts($m->material_code, $m->unit, $m->category), route('inventory.materials.index', ['search' => $m->material_code], false)),
+                        fn (Material $m) => $this->item('material', $m->name, $this->parts($m->material_code, $m->unit, $m->category, $m->classification), route('inventory.materials.index', ['search' => $m->material_code], false)),
                     );
                 },
             ],

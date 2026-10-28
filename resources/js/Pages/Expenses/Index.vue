@@ -5,6 +5,7 @@ import AdminLayout from '../../Layouts/AdminLayout.vue';
 import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import TablePagination from '../../Components/TablePagination.vue';
 import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
@@ -88,7 +89,7 @@ function applyFilters() {
                         <td>{{ expense.payee || '—' }}</td>
                         <td class="text-right">{{ formatInr(expense.total_amount) }}</td>
                         <td><StatusBadge :status="expense.status" /></td>
-                        <td class="text-right"><Link :href="`${base}/${expense.id}`" class="hover:underline">View</Link></td>
+                        <td class="text-right"><TableActionIcon action="view" :href="`${base}/${expense.id}`" /></td>
                     </tr>
                 </tbody>
             </table>

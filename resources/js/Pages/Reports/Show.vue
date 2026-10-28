@@ -101,9 +101,9 @@ function formatTotal(key, value) {
                 name="project_id"
                 class="ui-input"
                 :value="filters.project_id || ''"
-                :required="['boq-quantity-consumption', 'stock-balance'].includes(report.id)"
+                :required="['boq-quantity-consumption', 'stock-balance', 'project-material-consumption'].includes(report.id)"
             >
-                <option value="">Select project</option>
+                <option value="">{{ report.id === 'stock-valuation' ? 'Central Store' : 'Select project' }}</option>
                 <option v-for="project in projects" :key="project.id" :value="project.id">
                     {{ project.project_code }} — {{ project.project_name }}
                 </option>

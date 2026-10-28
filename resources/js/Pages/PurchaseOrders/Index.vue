@@ -1,9 +1,10 @@
 <script setup>
-import { Head, Link } from '@inertiajs/vue3';
+import { Head } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import TablePagination from '../../Components/TablePagination.vue';
 import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
@@ -67,7 +68,7 @@ defineProps({
                         <td class="px-4 py-3.5 text-right tabular-nums">{{ formatInr(record.grand_total) }}</td>
                         <td class="px-4 py-3.5"><StatusBadge :status="record.status" /></td>
                         <td class="px-4 py-3.5">
-                            <Link :href="`/projects/${project.id}/purchase-orders/${record.id}`" class="font-medium text-amber-700 hover:underline">View</Link>
+                            <TableActionIcon action="view" :href="`/projects/${project.id}/purchase-orders/${record.id}`" />
                         </td>
                     </tr>
                 </tbody>

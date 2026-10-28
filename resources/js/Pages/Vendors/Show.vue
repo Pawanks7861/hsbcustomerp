@@ -4,6 +4,7 @@ import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import StatCard from '../../Components/StatCard.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import TablePagination from '../../Components/TablePagination.vue';
 import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
@@ -86,7 +87,7 @@ function recordRefund() {
     <AdminLayout>
         <template #header>
             <PageHeader :title="vendor.name" :eyebrow="vendor.vendor_code">
-                <Link :href="`/vendors/${vendor.id}/edit`" class="ui-btn-secondary">Edit</Link>
+                <TableActionIcon action="edit" :href="`/vendors/${vendor.id}/edit`" />
                 <Link :href="`/vendors/${vendor.id}/payments/create?payment_type=advance`" class="ui-btn-primary">Record Advance</Link>
             </PageHeader>
         </template>
@@ -126,7 +127,7 @@ function recordRefund() {
             <p>Marked for refund {{ formatInr(summary.marked_for_refund) }} · Refund received {{ formatInr(summary.refund_received) }}</p>
             <div class="flex gap-3 pt-3">
                 <button type="button" class="ui-btn-secondary" @click="router.patch(`/vendors/${vendor.id}/status`)">{{ vendor.status === 'active' ? 'Deactivate' : 'Activate' }}</button>
-                <button type="button" class="text-sm text-red-700" @click="confirmDelete() && router.delete(`/vendors/${vendor.id}`)">Delete</button>
+                <TableActionIcon action="delete" @click="confirmDelete() && router.delete(`/vendors/${vendor.id}`)" />
             </div>
         </section>
 

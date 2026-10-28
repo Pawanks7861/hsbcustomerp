@@ -2,6 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import TablePagination from '../../Components/TablePagination.vue';
 import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
@@ -20,7 +21,7 @@ defineProps({
     <AdminLayout>
         <template #header>
             <PageHeader :title="client.name" :eyebrow="client.client_code">
-                <Link v-if="abilities.edit" :href="`/clients/${client.id}/edit`" class="ui-btn-secondary">Edit</Link>
+                <TableActionIcon v-if="abilities.edit" action="edit" :href="`/clients/${client.id}/edit`" />
                 <Link v-if="abilities.ledger" :href="`/clients/${client.id}/ledger`" class="ui-btn-primary">Ledger</Link>
             </PageHeader>
         </template>

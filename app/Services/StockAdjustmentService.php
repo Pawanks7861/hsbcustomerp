@@ -8,6 +8,7 @@ use App\Models\Project;
 use App\Models\StockAdjustment;
 use App\Models\StockLedgerEntry;
 use App\Models\User;
+use App\Support\MaterialAttributes;
 use App\Support\Money;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
@@ -157,6 +158,7 @@ class StockAdjustmentService
             'adjustment_date' => $data['adjustment_date'],
             'adjustment_type' => $data['adjustment_type'],
             'quantity' => Money::scale($data['quantity'], 3),
+            'unit_cost' => MaterialAttributes::normalizeUnitCost($data['unit_cost'] ?? null),
             'reference_number' => $data['reference_number'] ?? null,
             'reason' => $data['reason'] ?? $this->defaultReason($data['adjustment_type']),
             'attachment_path' => $data['attachment_path'] ?? null,
@@ -231,6 +233,7 @@ class StockAdjustmentService
             'adjustment_date' => $date,
             'adjustment_type' => $type,
             'quantity' => $quantity,
+            'unit_cost' => MaterialAttributes::normalizeUnitCost($data['unit_cost'] ?? null),
             'reference_number' => $reference,
             'reason' => $data['reason'] ?? $this->defaultReason($type),
             'import_fingerprint' => $fingerprint,
@@ -287,6 +290,9 @@ class StockAdjustmentService
     {
         $quantity = Money::scale($locked->quantity, 3) ?? '0.000';
         $in = $locked->increasesStock();
+        $unitCost = $locked->unit_cost !== null && $locked->unit_cost !== ''
+            ? Money::scale((string) $locked->unit_cost, 2)
+            : null;
 
         $this->stock->move(
             $project?->id,
@@ -302,6 +308,8 @@ class StockAdjustmentService
             $user->id,
             $locked->reason,
             (int) $location->id,
+            $in ? $unitCost : null,
+            $in && $unitCost === null,
         );
 
         $locked->update([

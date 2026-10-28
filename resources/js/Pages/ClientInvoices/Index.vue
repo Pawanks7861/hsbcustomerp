@@ -2,6 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import TablePagination from '../../Components/TablePagination.vue';
 import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
@@ -92,7 +93,7 @@ function invoiceHref(invoice) {
                             <span class="capitalize">{{ invoice.approval_status }}</span>
                             <span v-if="invoice.approval_status === 'approved'" class="block text-xs capitalize text-slate-500">{{ invoice.payment_status.replaceAll('_', ' ') }}{{ invoice.overdue ? ' · overdue' : '' }}</span>
                         </td>
-                        <td class="text-right"><Link :href="invoiceHref(invoice)" class="hover:underline">View</Link></td>
+                        <td class="text-right"><TableActionIcon action="view" :href="invoiceHref(invoice)" /></td>
                     </tr>
                 </tbody>
             </table>

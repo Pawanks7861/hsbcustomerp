@@ -12,11 +12,17 @@ class MaterialIssueItem extends Model
         'material_id',
         'unit',
         'quantity',
+        'unit_cost',
+        'amount',
+        'is_estimated',
         'remarks',
     ];
 
     protected $casts = [
         'quantity' => 'decimal:3',
+        'unit_cost' => 'decimal:2',
+        'amount' => 'decimal:2',
+        'is_estimated' => 'boolean',
     ];
 
     public function issue(): BelongsTo

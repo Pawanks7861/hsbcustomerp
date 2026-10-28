@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Services\InventoryLocationService;
 use App\Services\MaterialUnitService;
 use App\Services\StockAdjustmentService;
+use App\Support\MaterialAttributes;
 use App\Support\MaterialUnits;
 use App\Support\Money;
 use Illuminate\Support\Facades\DB;
@@ -64,8 +65,12 @@ class CentralStoreStockImport extends AbstractImportDefinition
             new ColumnDefinition('name', 'Material Name', true, 'string', ['item name', 'name'], 255),
             new ColumnDefinition('category', 'Category', false, 'string', max: 100),
             new ColumnDefinition('unit', 'Unit', true, 'string', ['uom'], 50),
+            new ColumnDefinition('default_unit_price', 'Default Unit Price', false, 'decimal', ['unit price', 'price']),
+            new ColumnDefinition('classification', 'Classification', false, 'string', ['class', 'type'], 40, help: 'Asset or Consumable.'),
+            new ColumnDefinition('useful_life_years', 'Useful Life Years', false, 'decimal', ['useful life', 'life years']),
             new ColumnDefinition('description', 'Description', false, 'string', max: 2000),
             new ColumnDefinition('opening_quantity', 'Opening Quantity', true, 'decimal', ['quantity', 'opening qty']),
+            new ColumnDefinition('unit_cost', 'Opening Unit Cost', false, 'decimal', ['opening cost', 'stock unit cost']),
             new ColumnDefinition('store', 'Store', false, 'string', ['location', 'location name'], 255, help: 'Leave blank or enter Central Store.'),
             new ColumnDefinition('entry_date', 'Entry Date', false, 'date', ['date']),
             new ColumnDefinition('reference_number', 'Reference Number', false, 'string', ['reference'], 80),
@@ -80,6 +85,8 @@ class CentralStoreStockImport extends AbstractImportDefinition
             'name' => 'Example material',
             'category' => 'Masonry',
             'unit' => 'Nos',
+            'default_unit_price' => 10,
+            'classification' => 'Consumable',
             'opening_quantity' => 5000,
             'store' => 'Central Store',
             'entry_date' => now()->toDateString(),
@@ -119,8 +126,9 @@ class CentralStoreStockImport extends AbstractImportDefinition
     public function validateRow(int $rowNumber, array $raw, ImportContext $context): RowOutcome
     {
         $cast = $this->castRow($raw);
-        $data = $cast['data'];
-        $errors = $cast['errors'];
+        $parsed = MaterialAttributes::parseImport($cast['data']);
+        $data = $parsed['data'];
+        $errors = array_merge($cast['errors'], $parsed['errors']);
         $store = app(InventoryLocationService::class)->ensureCentralStore();
 
         if (! empty($data['store']) && ! $this->matchesCentral((string) $data['store'], $store)) {
@@ -196,6 +204,7 @@ class CentralStoreStockImport extends AbstractImportDefinition
                 'adjustment_date' => $data['_entry_date'],
                 'reference_number' => $data['reference_number'] ?? null,
                 'reason' => $data['remarks'] ?: 'Imported Central Store opening stock',
+                'unit_cost' => $data['unit_cost'] ?? $data['default_unit_price'] ?? null,
             ], $context->importBatchId);
         } catch (ValidationException $e) {
             $messages = collect($e->errors())->flatten()->implode(' ');
@@ -249,15 +258,16 @@ class CentralStoreStockImport extends AbstractImportDefinition
                 $sequence = ((int) $m[1]) + 1;
             }
 
-            return Material::query()->create([
+            return Material::query()->create(array_merge([
                 'material_code' => $data['material_code'] ?: sprintf('MAT-%06d', $sequence),
                 'name' => $data['name'],
                 'category' => $data['category'] ?? null,
                 'description' => $data['description'] ?? null,
                 'unit' => $data['unit'],
+                'classification' => MaterialAttributes::CONSUMABLE,
                 'is_active' => true,
                 'created_by' => $context->user->id,
-            ]);
+            ], MaterialAttributes::masterFields($data)));
         });
     }
 

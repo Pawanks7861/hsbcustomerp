@@ -25,7 +25,7 @@ class StockAdjustmentController extends Controller
         $filters = Listing::filters($request);
         $query = $project->stockAdjustments()->with(['material', 'location'])->latest('adjustment_date')->orderByDesc('id');
         Listing::applySearch($query, $filters['search'], [
-            'adjustment_number', 'adjustment_date', 'adjustment_type', 'quantity', 'status',
+            'adjustment_number', 'adjustment_date', 'adjustment_type', 'quantity', 'unit_cost', 'status',
             'material.name', 'material.material_code', 'location.name',
         ]);
 
@@ -40,6 +40,7 @@ class StockAdjustmentController extends Controller
                 'location' => $adjustment->location?->name,
                 'adjustment_type' => $adjustment->adjustment_type,
                 'quantity' => (string) $adjustment->quantity,
+                'unit_cost' => $adjustment->unit_cost !== null ? (string) $adjustment->unit_cost : null,
                 'status' => $adjustment->status,
             ]),
         ]);
@@ -53,7 +54,7 @@ class StockAdjustmentController extends Controller
 
         return Inertia::render('Inventory/Adjustments/Form', [
             'project' => $this->projectCard($project),
-            'materials' => Material::query()->where('is_active', true)->orderBy('name')->get(['id', 'material_code', 'name', 'unit']),
+            'materials' => Material::query()->where('is_active', true)->orderBy('name')->get(['id', 'material_code', 'name', 'unit', 'default_unit_price']),
             'locations' => $locations,
             'defaults' => [
                 'location_id' => $request->integer('location_id') ?: $defaultLocationId,
@@ -71,6 +72,7 @@ class StockAdjustmentController extends Controller
             'adjustment_date' => ['required', 'date'],
             'adjustment_type' => ['required', Rule::in([StockAdjustment::OPENING, StockAdjustment::INCREASE, StockAdjustment::DECREASE])],
             'quantity' => ['required', 'numeric', 'gt:0'],
+            'unit_cost' => ['nullable', 'numeric', 'min:0'],
             'reference_number' => ['nullable', 'string', 'max:80'],
             'reason' => ['nullable', 'string', 'max:5000'],
             'attachment' => array_merge(['nullable'], StoredUpload::rules(StoredUpload::DOCUMENTS, 5120)),
@@ -109,6 +111,7 @@ class StockAdjustmentController extends Controller
                 'location_code' => $stockAdjustment->location?->location_code,
                 'adjustment_type' => $stockAdjustment->adjustment_type,
                 'quantity' => (string) $stockAdjustment->quantity,
+                'unit_cost' => $stockAdjustment->unit_cost !== null ? (string) $stockAdjustment->unit_cost : null,
                 'reference_number' => $stockAdjustment->reference_number,
                 'reason' => $stockAdjustment->reason,
                 'status' => $stockAdjustment->status,

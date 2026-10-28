@@ -10,6 +10,7 @@ import PageHeader from '../../Components/PageHeader.vue';
 import TablePagination from '../../Components/TablePagination.vue';
 import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
+import { Eye, Trash2 } from '@lucide/vue';
 
 const props = defineProps({
     project: { type: Object, required: true },
@@ -64,8 +65,8 @@ function destroy() {
                         <td class="text-right tabular-nums">{{ formatInr(boq.budget_total) }}</td>
                         <td class="text-right">
                             <ActionMenu>
-                                <Link :href="`/projects/${project.id}/boqs/${boq.id}`" class="menu-item">Open</Link>
-                                <button type="button" class="menu-item-danger" @click="pending = boq">Delete</button>
+                                <Link :href="`/projects/${project.id}/boqs/${boq.id}`" class="menu-item"><Eye class="h-4 w-4" /> Open</Link>
+                                <button type="button" class="menu-item-danger" @click="pending = boq"><Trash2 class="h-4 w-4" /> Delete</button>
                             </ActionMenu>
                         </td>
                     </tr>

@@ -32,6 +32,7 @@ function post() {
                 <div><dt class="text-slate-500">Location</dt><dd>{{ adjustment.location || '—' }} <span v-if="adjustment.location_code" class="text-slate-400">({{ adjustment.location_code }})</span></dd></div>
                 <div><dt class="text-slate-500">Type</dt><dd class="capitalize">{{ adjustment.adjustment_type }}</dd></div>
                 <div><dt class="text-slate-500">Quantity</dt><dd class="tabular-nums">{{ adjustment.quantity }} {{ adjustment.unit }}</dd></div>
+                <div><dt class="text-slate-500">Unit cost</dt><dd class="tabular-nums">{{ adjustment.unit_cost != null && adjustment.unit_cost !== '' ? `₹${Number(adjustment.unit_cost).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—' }}</dd></div>
                 <div><dt class="text-slate-500">Reference</dt><dd>{{ adjustment.reference_number || '—' }}</dd></div>
                 <div><dt class="text-slate-500">Created by</dt><dd>{{ adjustment.created_by || '—' }}</dd></div>
                 <div class="sm:col-span-2"><dt class="text-slate-500">Reason</dt><dd>{{ adjustment.reason }}</dd></div>

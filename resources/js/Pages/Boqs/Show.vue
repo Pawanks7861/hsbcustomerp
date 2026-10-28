@@ -7,6 +7,7 @@ import BudgetEditor from '../../Components/BudgetEditor.vue';
 import FormField from '../../Components/FormField.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import { formatInr, formatQty, lineAmount } from '../../lib/money';
+import { Trash2 } from '@lucide/vue';
 
 const props = defineProps({
     project: {
@@ -360,7 +361,7 @@ const budgetTotal = computed(() => items.value.reduce((sum, row) => sum + (Numbe
                                     class="menu-item"
                                 >Procurement</Link>
                                 <button v-if="boq.editable && !row.parent_key" type="button" class="menu-item" @click="addSubItem(row)">Add Sub Item</button>
-                                <button v-if="boq.editable" type="button" class="menu-item-danger" @click="removeItem(row)">Delete</button>
+                                <button v-if="boq.editable" type="button" class="menu-item-danger" @click="removeItem(row)"><Trash2 class="h-4 w-4" /> Delete</button>
                             </ActionMenu>
                         </td>
                     </tr>

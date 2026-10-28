@@ -1,10 +1,11 @@
 <script setup>
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import CompanyHeader from '../../Components/CompanyHeader.vue';
 import DocumentPdfActions from '../../Components/DocumentPdfActions.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import { formatInr, formatQty } from '../../lib/money';
 
 const props = defineProps({
@@ -64,7 +65,7 @@ const actionLabels = {
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <DocumentPdfActions v-if="abilities.print" :view-url="`${base}/pdf`" :download-url="`${base}/pdf/download`" />
-                    <Link v-if="abilities.edit" :href="`${base}/edit`" class="ui-btn-secondary">Edit</Link>
+                    <TableActionIcon v-if="abilities.edit" action="edit" :href="`${base}/edit`" />
                     <button v-if="abilities.submit" type="button" class="ui-btn-primary" @click="post('submit')">Submit</button>
                     <button v-if="abilities.amend" type="button" class="ui-btn-secondary" @click="post('amend')">Amend</button>
                 </div>

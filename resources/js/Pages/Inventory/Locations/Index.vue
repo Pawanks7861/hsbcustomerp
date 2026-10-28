@@ -4,6 +4,7 @@ import { ref } from 'vue';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
 import ImportButton from '../../../Components/ImportButton.vue';
 import PageHeader from '../../../Components/PageHeader.vue';
+import TableActionIcon from '../../../Components/TableActionIcon.vue';
 import TablePagination from '../../../Components/TablePagination.vue';
 import TableToolbar from '../../../Components/TableToolbar.vue';
 
@@ -100,7 +101,7 @@ function reset() {
                             <td>{{ location.location_type }}</td>
                             <td>{{ location.project || '—' }}</td>
                             <td>{{ location.is_active ? 'Active' : 'Inactive' }}</td>
-                            <td><button v-if="canManage" type="button" class="text-sm text-slate-700" @click="edit(location)">Edit</button></td>
+                            <td class="text-right"><TableActionIcon v-if="canManage" action="edit" @click="edit(location)" /></td>
                         </tr>
                     </tbody>
                 </table>

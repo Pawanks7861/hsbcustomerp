@@ -11,6 +11,9 @@ class InternalDeliveryNoteItem extends Model
         'internal_delivery_note_id',
         'material_id',
         'quantity',
+        'unit_cost',
+        'amount',
+        'is_estimated',
         'unit',
         'remarks',
         'quantity_accepted',
@@ -20,6 +23,9 @@ class InternalDeliveryNoteItem extends Model
 
     protected $casts = [
         'quantity' => 'decimal:3',
+        'unit_cost' => 'decimal:2',
+        'amount' => 'decimal:2',
+        'is_estimated' => 'boolean',
         'quantity_accepted' => 'decimal:3',
         'quantity_damaged' => 'decimal:3',
         'quantity_short' => 'decimal:3',

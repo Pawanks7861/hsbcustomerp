@@ -1,9 +1,10 @@
 <script setup>
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, useForm } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import DocumentPdfActions from '../../Components/DocumentPdfActions.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import { formatInr } from '../../lib/money';
 
 const props = defineProps({
@@ -28,7 +29,7 @@ function post(action) {
         <template #header>
             <PageHeader :title="note.number" eyebrow="Debit Note">
                 <DocumentPdfActions v-if="abilities.print" :view-url="`/projects/${project.id}/debit-notes/${note.id}/pdf`" :download-url="`/projects/${project.id}/debit-notes/${note.id}/pdf/download`" />
-                <Link v-if="abilities.edit" :href="`/projects/${project.id}/debit-notes/${note.id}/edit`" class="ui-btn-secondary">Edit</Link>
+                <TableActionIcon v-if="abilities.edit" action="edit" :href="`/projects/${project.id}/debit-notes/${note.id}/edit`" />
                 <StatusBadge :status="note.status" />
             </PageHeader>
         </template>

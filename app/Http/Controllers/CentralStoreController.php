@@ -9,7 +9,9 @@ use App\Models\StockLedgerEntry;
 use App\Services\Access;
 use App\Services\InventoryLocationService;
 use App\Services\InventoryStock;
+use App\Services\InventoryValuation;
 use App\Services\StockAdjustmentService;
+use App\Support\MaterialAttributes;
 use App\Support\Listing;
 use App\Support\Money;
 use App\Support\StoredUpload;
@@ -27,6 +29,7 @@ class CentralStoreController extends Controller
         private InventoryStock $stock,
         private StockAdjustmentService $adjustments,
         private InventoryLocationService $locations,
+        private InventoryValuation $valuation,
         private Access $access,
     ) {}
 
@@ -44,8 +47,8 @@ class CentralStoreController extends Controller
             'locations' => $this->adjustments->locationCards($user, null),
             'filters' => Listing::filters($request),
             'rows' => Listing::paginateRows($this->balances($request, $store), $request, [
-                'material_code', 'material_name', 'unit', 'location', 'location_code', 'available', 'total_available',
-                'total_received', 'total_issued', 'adjustments', 'status',
+                'material_code', 'material_name', 'unit', 'classification', 'location', 'location_code', 'available', 'total_available',
+                'total_received', 'total_issued', 'adjustments', 'default_unit_price', 'unit_cost', 'stock_value', 'cost_basis', 'status',
             ]),
             'canAdjust' => $this->access->allows($user, 'inventory.adjust') || $user->is_admin,
             'canImport' => $this->access->allows($user, 'inventory.import') || $user->is_admin,
@@ -62,13 +65,17 @@ class CentralStoreController extends Controller
 
         return response()->streamDownload(function () use ($rows, $store): void {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['Material code', 'Material name', 'Unit', 'Quantity', 'Store']);
+            fputcsv($handle, ['Material code', 'Material name', 'Classification', 'Unit', 'Quantity', 'Valuation unit cost', 'Stock value', 'Cost basis', 'Store']);
             foreach ($rows as $row) {
                 fputcsv($handle, [
                     $row['material_code'],
                     $row['material_name'],
+                    $row['classification'] ?? '',
                     $row['unit'],
                     $row['available'],
+                    $row['unit_cost'] ?? '',
+                    $row['stock_value'] ?? '',
+                    $row['cost_basis'] ?? '',
                     $store->name,
                 ]);
             }
@@ -94,7 +101,7 @@ class CentralStoreController extends Controller
             ->orderBy('id');
         Listing::applySearch($query, $filters['search'], [
             'transaction_number', 'transaction_date', 'transaction_type', 'source_type', 'source_number',
-            'stock_in', 'stock_out', 'balance', 'remarks',
+            'stock_in', 'stock_out', 'balance', 'unit_cost', 'amount', 'remarks',
             'material.name', 'material.material_code', 'location.name', 'postedBy.name',
         ]);
 
@@ -117,6 +124,9 @@ class CentralStoreController extends Controller
                 'stock_in' => (string) $entry->stock_in,
                 'stock_out' => (string) $entry->stock_out,
                 'balance' => (string) $entry->balance,
+                'unit_cost' => $entry->unit_cost !== null ? (string) $entry->unit_cost : null,
+                'amount' => $entry->amount !== null ? (string) $entry->amount : null,
+                'is_estimated' => (bool) $entry->is_estimated,
                 'posted_by' => $entry->postedBy?->name,
                 'remarks' => $entry->remarks,
             ]),
@@ -135,7 +145,7 @@ class CentralStoreController extends Controller
             ->latest('adjustment_date')
             ->orderByDesc('id');
         Listing::applySearch($query, $filters['search'], [
-            'adjustment_number', 'adjustment_date', 'adjustment_type', 'quantity', 'status',
+            'adjustment_number', 'adjustment_date', 'adjustment_type', 'quantity', 'unit_cost', 'status',
             'material.name', 'material.material_code', 'location.name',
         ]);
 
@@ -152,6 +162,7 @@ class CentralStoreController extends Controller
                 'location' => $adjustment->location?->name,
                 'adjustment_type' => $adjustment->adjustment_type,
                 'quantity' => (string) $adjustment->quantity,
+                'unit_cost' => $adjustment->unit_cost !== null ? (string) $adjustment->unit_cost : null,
                 'status' => $adjustment->status,
             ]),
         ]);
@@ -167,7 +178,7 @@ class CentralStoreController extends Controller
             'project' => null,
             'central' => true,
             'store' => $this->storeCard($store),
-            'materials' => Material::query()->where('is_active', true)->orderBy('name')->get(['id', 'material_code', 'name', 'unit']),
+            'materials' => Material::query()->where('is_active', true)->orderBy('name')->get(['id', 'material_code', 'name', 'unit', 'default_unit_price']),
             'locations' => $locations,
             'defaults' => [
                 'location_id' => $store->id,
@@ -187,6 +198,7 @@ class CentralStoreController extends Controller
             'adjustment_date' => ['required', 'date'],
             'adjustment_type' => ['required', Rule::in([StockAdjustment::OPENING, StockAdjustment::INCREASE, StockAdjustment::DECREASE])],
             'quantity' => ['required', 'numeric', 'gt:0'],
+            'unit_cost' => ['nullable', 'numeric', 'min:0'],
             'reference_number' => ['nullable', 'string', 'max:80'],
             'reason' => ['nullable', 'string', 'max:5000'],
             'attachment' => array_merge(['nullable'], StoredUpload::rules(StoredUpload::DOCUMENTS, 5120)),
@@ -228,6 +240,7 @@ class CentralStoreController extends Controller
                 'location_code' => $stockAdjustment->location?->location_code,
                 'adjustment_type' => $stockAdjustment->adjustment_type,
                 'quantity' => (string) $stockAdjustment->quantity,
+                'unit_cost' => $stockAdjustment->unit_cost !== null ? (string) $stockAdjustment->unit_cost : null,
                 'reference_number' => $stockAdjustment->reference_number,
                 'reason' => $stockAdjustment->reason,
                 'status' => $stockAdjustment->status,
@@ -275,6 +288,7 @@ class CentralStoreController extends Controller
 
         $materials = Material::query()->whereIn('id', $materialIds)->orderBy('name')->get()->keyBy('id');
         $balances = $this->stock->projectBalances(null, $locations);
+        $layersByMaterial = $this->valuation->remainingLayers(null, $materialIds->map(fn ($id) => (int) $id)->all());
         $rows = [];
 
         foreach ($materialIds as $materialId) {
@@ -292,11 +306,17 @@ class CentralStoreController extends Controller
                 continue;
             }
 
+            $valued = $this->valuation->summarize(
+                $this->valuation->layersAt($layersByMaterial->get((int) $material->id, collect()), $store),
+                $material,
+                $atLocation,
+            );
             $rows[] = [
                 'material_id' => $material->id,
                 'material_code' => $material->material_code,
                 'material_name' => $material->name,
                 'unit' => $material->unit,
+                'classification' => $material->classification ?: MaterialAttributes::CONSUMABLE,
                 'location_id' => $store->id,
                 'location' => $store->name,
                 'location_code' => $store->location_code,
@@ -306,6 +326,10 @@ class CentralStoreController extends Controller
                 'adjustments' => Money::sub(Money::add($available, $issued, 3), $received, 3),
                 'available' => $atLocation,
                 'total_available' => $available,
+                'default_unit_price' => $material->default_unit_price !== null ? Money::scale((string) $material->default_unit_price, 2) : null,
+                'unit_cost' => $valued['unit_cost'],
+                'stock_value' => $valued['value'],
+                'cost_basis' => $valued['cost_basis'],
                 'status' => bccomp($available, '0', 3) === 1 ? 'Available' : 'Out of Stock',
             ];
         }

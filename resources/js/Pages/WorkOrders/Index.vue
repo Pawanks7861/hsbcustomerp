@@ -4,6 +4,7 @@ import AdminLayout from '../../Layouts/AdminLayout.vue';
 import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import TablePagination from '../../Components/TablePagination.vue';
 import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
@@ -75,9 +76,11 @@ defineProps({
                         <td class="px-4 py-3.5"><StatusBadge :status="record.status" :label="record.approval_label" /></td>
                         <td class="px-4 py-3.5"><StatusBadge :status="record.work_status" :label="record.work_label" /></td>
                         <td class="px-4 py-3.5">
-                            <Link :href="`/projects/${project.id}/work-orders/${record.id}`" class="font-medium text-amber-700 hover:underline">View</Link>
-                            <Link v-if="abilities.edit && record.status === 'draft'" :href="`/projects/${project.id}/work-orders/${record.id}/edit`" class="ml-3 font-medium text-slate-700 hover:underline">Edit</Link>
-                            <a v-if="abilities.print" :href="`/projects/${project.id}/work-orders/${record.id}/pdf`" target="_blank" rel="noopener" class="ml-3 font-medium text-slate-700 hover:underline">Print</a>
+                            <div class="flex items-center gap-1">
+                                <TableActionIcon action="view" :href="`/projects/${project.id}/work-orders/${record.id}`" />
+                                <TableActionIcon v-if="abilities.edit && record.status === 'draft'" action="edit" :href="`/projects/${project.id}/work-orders/${record.id}/edit`" />
+                                <a v-if="abilities.print" :href="`/projects/${project.id}/work-orders/${record.id}/pdf`" target="_blank" rel="noopener" class="font-medium text-slate-700 hover:underline">Print</a>
+                            </div>
                         </td>
                     </tr>
                 </tbody>

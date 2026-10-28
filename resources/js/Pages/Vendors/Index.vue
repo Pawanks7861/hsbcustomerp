@@ -6,8 +6,10 @@ import ActionMenu from '../../Components/ActionMenu.vue';
 import ConfirmDialog from '../../Components/ConfirmDialog.vue';
 import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import TablePagination from '../../Components/TablePagination.vue';
 import TableToolbar from '../../Components/TableToolbar.vue';
+import { Pencil } from '@lucide/vue';
 import { visitListing } from '../../lib/listing';
 
 const props = defineProps({
@@ -125,16 +127,11 @@ function filterStatus(event) {
                             <span v-else class="text-xs text-amber-700">Incomplete</span>
                         </td>
                         <td class="text-right">
-                            <div class="inline-flex items-center gap-3">
-                                <Link :href="`/vendors/${vendor.id}`" class="text-sm font-medium hover:underline">View</Link>
-                                <button
-                                    v-if="can.delete"
-                                    type="button"
-                                    class="text-sm font-medium text-red-600 hover:underline"
-                                    @click="pending = vendor"
-                                >Delete</button>
+                            <div class="inline-flex items-center gap-1">
+                                <TableActionIcon action="view" :href="`/vendors/${vendor.id}`" />
+                                <TableActionIcon v-if="can.delete" action="delete" @click="pending = vendor" />
                                 <ActionMenu v-if="can.edit">
-                                    <Link :href="`/vendors/${vendor.id}/edit`" class="menu-item">Edit</Link>
+                                    <Link :href="`/vendors/${vendor.id}/edit`" class="menu-item"><Pencil class="h-4 w-4" /> Edit</Link>
                                     <Link :href="`/vendors/${vendor.id}/status`" method="patch" as="button" class="menu-item" preserve-scroll>
                                         {{ vendor.status === 'active' ? 'Mark inactive' : 'Mark active' }}
                                     </Link>

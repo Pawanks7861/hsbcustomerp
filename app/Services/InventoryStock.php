@@ -131,8 +131,10 @@ class InventoryStock
         ?int $userId,
         ?string $remarks,
         ?int $locationId = null,
+        ?string $unitCost = null,
+        bool $estimated = false,
     ): StockLedgerEntry {
-        return DB::transaction(function () use ($projectId, $materialId, $date, $type, $sourceType, $sourceId, $sourceItemId, $sourceNumber, $stockIn, $stockOut, $userId, $remarks, $locationId) {
+        return DB::transaction(function () use ($projectId, $materialId, $date, $type, $sourceType, $sourceId, $sourceItemId, $sourceNumber, $stockIn, $stockOut, $userId, $remarks, $locationId, $unitCost, $estimated) {
             Material::query()->whereKey($materialId)->lockForUpdate()->firstOrFail();
             $this->forProject(StockLedgerEntry::query(), $projectId)
                 ->where('material_id', $materialId)
@@ -164,7 +166,7 @@ class InventoryStock
                 ]);
             }
 
-            return StockLedgerEntry::query()->create([
+            $entry = StockLedgerEntry::query()->create([
                 'project_id' => $projectId,
                 'material_id' => $materialId,
                 'location_id' => $locationId,
@@ -181,6 +183,10 @@ class InventoryStock
                 'posted_by' => $userId,
                 'remarks' => $remarks,
             ]);
+
+            app(InventoryValuation::class)->apply($entry, $unitCost, $estimated);
+
+            return $entry->fresh();
         });
     }
 

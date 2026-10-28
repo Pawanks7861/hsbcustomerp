@@ -11,6 +11,7 @@ use App\Models\StockLedgerEntry;
 use App\Services\Access;
 use App\Services\InventoryLocationService;
 use App\Services\InventoryStock;
+use App\Services\InventoryValuation;
 use App\Services\StockAdjustmentService;
 use App\Support\Listing;
 use App\Support\Money;
@@ -24,6 +25,7 @@ class InventoryController extends Controller
         private InventoryStock $stock,
         private StockAdjustmentService $adjustments,
         private InventoryLocationService $locations,
+        private InventoryValuation $valuation,
         private Access $access,
     ) {}
 
@@ -107,8 +109,8 @@ class InventoryController extends Controller
                 'location_id' => $request->integer('location_id') ?: null,
             ],
             'rows' => Listing::paginateRows($this->locationBalances($request, $project), $request, [
-                'material_code', 'material_name', 'unit', 'location', 'location_code', 'available', 'total_available',
-                'total_received', 'total_issued', 'adjustments', 'status',
+                'material_code', 'material_name', 'unit', 'classification', 'location', 'location_code', 'available', 'total_available',
+                'total_received', 'total_issued', 'adjustments', 'default_unit_price', 'unit_cost', 'stock_value', 'cost_basis', 'status',
             ]),
             'canAdjust' => $this->access->allows($user, 'inventory.adjust') || $user->is_admin,
             'canImport' => $this->access->allows($user, 'inventory.import') || $user->is_admin,
@@ -138,7 +140,7 @@ class InventoryController extends Controller
             ->orderBy('id');
         Listing::applySearch($query, $filters['search'], [
             'transaction_number', 'transaction_date', 'transaction_type', 'source_type', 'source_number',
-            'stock_in', 'stock_out', 'balance', 'remarks',
+            'stock_in', 'stock_out', 'balance', 'unit_cost', 'amount', 'remarks',
             'material.name', 'material.material_code', 'location.name', 'postedBy.name',
         ]);
 
@@ -159,6 +161,9 @@ class InventoryController extends Controller
                 'stock_in' => (string) $entry->stock_in,
                 'stock_out' => (string) $entry->stock_out,
                 'balance' => (string) $entry->balance,
+                'unit_cost' => $entry->unit_cost !== null ? (string) $entry->unit_cost : null,
+                'amount' => $entry->amount !== null ? (string) $entry->amount : null,
+                'is_estimated' => (bool) $entry->is_estimated,
                 'posted_by' => $entry->postedBy?->name,
                 'remarks' => $entry->remarks,
             ]),
@@ -185,6 +190,7 @@ class InventoryController extends Controller
 
         $materials = Material::query()->whereIn('id', $materialIds)->orderBy('name')->get()->keyBy('id');
         $balances = $this->stock->projectBalances($project->id, $locations);
+        $layersByMaterial = $this->valuation->remainingLayers($project->id, $materialIds->map(fn ($id) => (int) $id)->all());
         $rows = [];
 
         foreach ($materialIds as $materialId) {
@@ -206,11 +212,17 @@ class InventoryController extends Controller
                     continue;
                 }
 
+                $valued = $this->valuation->summarize(
+                    $this->valuation->layersAt($layersByMaterial->get((int) $material->id, collect()), $location),
+                    $material,
+                    $atLocation,
+                );
                 $rows[] = [
                     'material_id' => $material->id,
                     'material_code' => $material->material_code,
                     'material_name' => $material->name,
                     'unit' => $material->unit,
+                    'classification' => $material->classification,
                     'location_id' => $location->id,
                     'location' => $location->name,
                     'location_code' => $location->location_code,
@@ -220,6 +232,10 @@ class InventoryController extends Controller
                     'adjustments' => Money::sub(Money::add($available, $issued, 3), $received, 3),
                     'available' => $atLocation,
                     'total_available' => $available,
+                    'default_unit_price' => $material->default_unit_price !== null ? Money::scale((string) $material->default_unit_price, 2) : null,
+                    'unit_cost' => $valued['unit_cost'],
+                    'stock_value' => $valued['value'],
+                    'cost_basis' => $valued['cost_basis'],
                     'status' => $status,
                 ];
             }

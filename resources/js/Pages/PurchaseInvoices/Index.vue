@@ -3,6 +3,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import TablePagination from '../../Components/TablePagination.vue';
 import TableToolbar from '../../Components/TableToolbar.vue';
 import { formatInr } from '../../lib/money';
@@ -50,7 +51,7 @@ defineProps({
                         <td class="text-right">{{ formatInr(invoice.paid) }}</td>
                         <td class="text-right">{{ formatInr(invoice.outstanding) }}</td>
                         <td class="capitalize">{{ (invoice.approval_status && invoice.approval_status !== 'approved' ? invoice.approval_status : invoice.status).replaceAll('_', ' ') }}</td>
-                        <td class="text-right"><Link :href="`/projects/${project.id}/purchase-invoices/${invoice.id}`" class="hover:underline">View</Link></td>
+                        <td class="text-right"><TableActionIcon action="view" :href="`/projects/${project.id}/purchase-invoices/${invoice.id}`" /></td>
                     </tr>
                 </tbody>
             </table>

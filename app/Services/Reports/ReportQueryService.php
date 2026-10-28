@@ -25,7 +25,9 @@ use App\Models\Vendor;
 use App\Models\WorkOrder;
 use App\Services\Access;
 use App\Services\InventoryStock;
+use App\Services\InventoryValuation;
 use App\Services\VendorBalanceService;
+use App\Support\MaterialAttributes;
 use App\Support\DocumentStatus;
 use App\Support\Money;
 use Illuminate\Database\Eloquent\Builder;
@@ -38,6 +40,7 @@ class ReportQueryService
         private Access $access,
         private VendorBalanceService $balances,
         private InventoryStock $stock,
+        private InventoryValuation $valuation,
     ) {}
 
     /**
@@ -64,6 +67,8 @@ class ReportQueryService
             'client-outstanding' => $this->clientOutstanding($user, $filters),
             'client-payment-register' => $this->clientPaymentRegister($user, $filters),
             'stock-balance' => $this->stockBalance($user, (int) ($filters['project_id'] ?? 0)),
+            'stock-valuation' => $this->stockValuation($user, isset($filters['project_id']) && $filters['project_id'] !== '' ? (int) $filters['project_id'] : null),
+            'project-material-consumption' => $this->projectMaterialConsumption($user, (int) ($filters['project_id'] ?? 0)),
             default => throw ValidationException::withMessages(['report' => 'Unknown report.']),
         };
     }
@@ -696,7 +701,7 @@ class ReportQueryService
 
         $materials = Material::query()->whereIn('id', $materialIds)->orderBy('name')->get()->keyBy('id');
         $rows = [];
-        $totals = ['available' => '0.000'];
+        $totals = ['available' => '0.000', 'stock_value' => '0.00'];
 
         foreach ($materialIds as $materialId) {
             $material = $materials->get($materialId);
@@ -705,6 +710,7 @@ class ReportQueryService
             }
 
             $available = $this->stock->balance($project->id, (int) $materialId);
+            $valued = $this->valuation->onHand($project->id, (int) $materialId, $available);
             $received = Money::scale((string) StockLedgerEntry::query()
                 ->where('project_id', $project->id)
                 ->where('material_id', $materialId)
@@ -718,14 +724,128 @@ class ReportQueryService
             $rows[] = [
                 'material_code' => $material->material_code,
                 'material_name' => $material->name,
+                'classification' => $material->classification ?: MaterialAttributes::CONSUMABLE,
                 'unit' => $material->unit,
                 'total_received' => $received,
                 'total_issued' => $issued,
                 'available' => $available,
+                'unit_cost' => $valued['unit_cost'],
+                'stock_value' => $valued['value'],
+                'cost_basis' => $valued['cost_basis'],
                 'status' => $this->stockStatus($available),
             ];
 
             $totals['available'] = Money::add($totals['available'], $available, 3);
+            $totals['stock_value'] = Money::add($totals['stock_value'], $valued['value'], 2);
+        }
+
+        return ['rows' => $rows, 'totals' => $totals];
+    }
+
+    /**
+     * @return array{rows: list<array<string, mixed>>, totals: array<string, string>}
+     */
+    public function stockValuation(User $user, ?int $projectId): array
+    {
+        if ($projectId) {
+            $project = $this->projectOrFail($user, $projectId);
+            $store = $project->project_name;
+            $materialIds = StockLedgerEntry::query()->where('project_id', $project->id)->distinct()->pluck('material_id');
+            $scopeId = $project->id;
+        } else {
+            abort_unless($user->is_admin || $this->access->allows($user, 'inventory.view') || $this->access->allows($user, 'reports.view'), 403);
+            $store = 'Central Store';
+            $materialIds = StockLedgerEntry::query()->whereNull('project_id')->distinct()->pluck('material_id');
+            $scopeId = null;
+        }
+
+        $materials = Material::query()->whereIn('id', $materialIds)->orderBy('name')->get()->keyBy('id');
+        $rows = [];
+        $totals = ['available' => '0.000', 'stock_value' => '0.00'];
+
+        foreach ($materialIds as $materialId) {
+            $material = $materials->get($materialId);
+            if (! $material) {
+                continue;
+            }
+
+            $available = $this->stock->balance($scopeId, (int) $materialId);
+            if (bccomp($available, '0', 3) !== 1) {
+                continue;
+            }
+
+            $valued = $this->valuation->onHand($scopeId, (int) $materialId, $available);
+            $rows[] = [
+                'store' => $store,
+                'material_code' => $material->material_code,
+                'material_name' => $material->name,
+                'classification' => $material->classification ?: MaterialAttributes::CONSUMABLE,
+                'unit' => $material->unit,
+                'available' => $available,
+                'unit_cost' => $valued['unit_cost'],
+                'stock_value' => $valued['value'],
+                'cost_basis' => $valued['cost_basis'],
+            ];
+            $totals['available'] = Money::add($totals['available'], $available, 3);
+            $totals['stock_value'] = Money::add($totals['stock_value'], $valued['value'], 2);
+        }
+
+        return ['rows' => $rows, 'totals' => $totals];
+    }
+
+    /**
+     * @return array{rows: list<array<string, mixed>>, totals: array<string, string>}
+     */
+    public function projectMaterialConsumption(User $user, int $projectId): array
+    {
+        $project = $this->projectOrFail($user, $projectId);
+        $entries = StockLedgerEntry::query()
+            ->where('project_id', $project->id)
+            ->where('transaction_type', StockLedgerEntry::ISSUE)
+            ->with('material')
+            ->orderBy('material_id')
+            ->get();
+
+        $grouped = [];
+        foreach ($entries as $entry) {
+            $material = $entry->material;
+            if (! $material || $material->classification === MaterialAttributes::ASSET) {
+                continue;
+            }
+
+            $id = (int) $entry->material_id;
+            $grouped[$id] ??= [
+                'material_code' => $material->material_code,
+                'material_name' => $material->name,
+                'classification' => $material->classification ?: MaterialAttributes::CONSUMABLE,
+                'unit' => $material->unit,
+                'quantity' => '0.000',
+                'amount' => '0.00',
+                'estimated' => false,
+            ];
+            $grouped[$id]['quantity'] = Money::add($grouped[$id]['quantity'], Money::scale((string) $entry->stock_out, 3) ?? '0.000', 3);
+            $grouped[$id]['amount'] = Money::add($grouped[$id]['amount'], Money::scale((string) ($entry->amount ?? '0'), 2) ?? '0.00', 2);
+            $grouped[$id]['estimated'] = $grouped[$id]['estimated'] || (bool) $entry->is_estimated;
+        }
+
+        $rows = [];
+        $totals = ['quantity' => '0.000', 'amount' => '0.00'];
+        foreach ($grouped as $row) {
+            $unitCost = bccomp($row['quantity'], '0', 3) === 1
+                ? Money::round(bcdiv($row['amount'], $row['quantity'], 8), 2)
+                : '0.00';
+            $rows[] = [
+                'material_code' => $row['material_code'],
+                'material_name' => $row['material_name'],
+                'classification' => $row['classification'],
+                'unit' => $row['unit'],
+                'quantity' => $row['quantity'],
+                'unit_cost' => $unitCost,
+                'amount' => $row['amount'],
+                'cost_basis' => $row['estimated'] ? 'Estimated' : 'Actual',
+            ];
+            $totals['quantity'] = Money::add($totals['quantity'], $row['quantity'], 3);
+            $totals['amount'] = Money::add($totals['amount'], $row['amount'], 2);
         }
 
         return ['rows' => $rows, 'totals' => $totals];

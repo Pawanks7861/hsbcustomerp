@@ -19,6 +19,7 @@ const form = useForm({
     adjustment_date: new Date().toISOString().slice(0, 10),
     adjustment_type: props.defaults.adjustment_type || 'opening',
     quantity: '',
+    unit_cost: '',
     reference_number: '',
     reason: '',
     attachment: null,
@@ -65,6 +66,10 @@ function submit() {
                 </select>
             </label>
             <label class="text-sm"><span class="mb-1 block font-medium">Quantity</span><input v-model="form.quantity" type="number" min="0.001" step="0.001" required class="ui-input w-full"></label>
+            <label v-if="form.adjustment_type !== 'decrease'" class="text-sm"><span class="mb-1 block font-medium">Unit cost</span>
+                <input v-model="form.unit_cost" type="number" min="0" step="0.01" class="ui-input w-full" :placeholder="selectedMaterial?.default_unit_price || 'Optional'">
+                <span class="mt-1 block text-xs text-slate-500">Actual cost for this receipt. Blank uses the material default price as an estimate.</span>
+            </label>
             <label class="text-sm"><span class="mb-1 block font-medium">Reference Number</span><input v-model="form.reference_number" maxlength="80" class="ui-input w-full"></label>
             <label class="text-sm"><span class="mb-1 block font-medium">Attachment</span><input type="file" class="ui-input w-full" @change="form.attachment = $event.target.files[0]"></label>
             <label class="text-sm sm:col-span-2"><span class="mb-1 block font-medium">Remarks</span>

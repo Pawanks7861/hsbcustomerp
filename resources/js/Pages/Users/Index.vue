@@ -9,6 +9,7 @@ import PageHeader from '../../Components/PageHeader.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
 import TablePagination from '../../Components/TablePagination.vue';
 import TableToolbar from '../../Components/TableToolbar.vue';
+import { Pencil, Trash2 } from '@lucide/vue';
 
 defineProps({
     users: {
@@ -99,11 +100,11 @@ function initials(name) {
                         <td><StatusBadge :status="user.status" /></td>
                         <td class="text-right">
                             <ActionMenu>
-                                <Link :href="`/users/${user.id}/edit`" class="menu-item">Edit</Link>
+                                <Link :href="`/users/${user.id}/edit`" class="menu-item"><Pencil class="h-4 w-4" /> Edit</Link>
                                 <button v-if="!user.is_self" type="button" class="menu-item" @click="setStatus(user, user.status === 'active' ? 'inactive' : 'active')">
                                     {{ user.status === 'active' ? 'Deactivate' : 'Activate' }}
                                 </button>
-                                <button v-if="!user.is_self" type="button" class="menu-item-danger" @click="pending = user">Delete</button>
+                                <button v-if="!user.is_self" type="button" class="menu-item-danger" @click="pending = user"><Trash2 class="h-4 w-4" /> Delete</button>
                             </ActionMenu>
                         </td>
                     </tr>

@@ -1,5 +1,6 @@
 <script setup>
 import { Head, router } from '@inertiajs/vue3';
+import { formatInr } from '../../../lib/money';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
 import PageHeader from '../../../Components/PageHeader.vue';
 
@@ -38,12 +39,15 @@ function cancel() {
             </dl>
             <div class="overflow-x-auto">
                 <table class="ui-table">
-                    <thead><tr><th>Material</th><th>Unit</th><th class="text-right">Quantity</th><th>Remarks</th></tr></thead>
+                    <thead><tr><th>Material</th><th>Class</th><th>Unit</th><th class="text-right">Quantity</th><th class="text-right">Unit cost</th><th class="text-right">Amount</th><th>Remarks</th></tr></thead>
                     <tbody>
                         <tr v-for="(line, index) in issue.items" :key="index">
                             <td>{{ line.material }}</td>
+                            <td class="capitalize">{{ line.classification || '—' }}</td>
                             <td>{{ line.unit }}</td>
                             <td class="text-right tabular-nums">{{ line.quantity }}</td>
+                            <td class="text-right tabular-nums">{{ line.unit_cost != null && line.unit_cost !== '' ? formatInr(line.unit_cost) : '—' }}</td>
+                            <td class="text-right tabular-nums">{{ line.amount != null && line.amount !== '' ? formatInr(line.amount) : '—' }}</td>
                             <td>{{ line.remarks || '—' }}</td>
                         </tr>
                     </tbody>

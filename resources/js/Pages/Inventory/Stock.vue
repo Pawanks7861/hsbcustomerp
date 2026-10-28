@@ -7,6 +7,7 @@ import PageHeader from '../../Components/PageHeader.vue';
 import TablePagination from '../../Components/TablePagination.vue';
 import TableToolbar from '../../Components/TableToolbar.vue';
 import { visitListing } from '../../lib/listing';
+import { formatInr } from '../../lib/money';
 
 const props = defineProps({
     project: { type: Object, default: null },
@@ -89,10 +90,15 @@ function tone(status) {
                     <tr>
                         <th>Material Code</th>
                         <th>Material Name</th>
+                        <th>Class</th>
                         <th>Unit</th>
                         <th>Location</th>
                         <th class="text-right">Location Qty</th>
                         <th class="text-right">Total Qty</th>
+                        <th class="text-right">Default price</th>
+                        <th class="text-right">Valuation unit cost</th>
+                        <th class="text-right">Stock value</th>
+                        <th>Cost basis</th>
                         <th class="text-right">Total Received</th>
                         <th class="text-right">Total Issued</th>
                         <th class="text-right">Adjustments</th>
@@ -101,7 +107,7 @@ function tone(status) {
                 </thead>
                 <tbody>
                     <tr v-if="rows.data.length === 0">
-                        <td colspan="10" class="py-8 text-center text-slate-400">
+                        <td colspan="15" class="py-8 text-center text-slate-400">
                             <template v-if="filters.search">No matching records found.</template>
                             <template v-else-if="central">No stock has been posted to the Central Store.</template>
                             <template v-else>No stock has been posted for this project{{ locationId ? ' at the selected location' : '' }}.</template>
@@ -110,10 +116,15 @@ function tone(status) {
                     <tr v-for="row in rows.data" :key="`${row.material_id}-${row.location_id}`">
                         <td>{{ row.material_code }}</td>
                         <td>{{ row.material_name }}</td>
+                        <td class="capitalize">{{ row.classification || 'consumable' }}</td>
                         <td>{{ row.unit }}</td>
                         <td>{{ row.location }}</td>
                         <td class="text-right tabular-nums">{{ row.available }}</td>
                         <td class="text-right tabular-nums">{{ row.total_available }}</td>
+                        <td class="text-right tabular-nums">{{ row.default_unit_price != null && row.default_unit_price !== '' ? formatInr(row.default_unit_price) : '—' }}</td>
+                        <td class="text-right tabular-nums">{{ row.unit_cost != null && row.unit_cost !== '' ? formatInr(row.unit_cost) : '—' }}</td>
+                        <td class="text-right tabular-nums">{{ row.stock_value != null && row.stock_value !== '' ? formatInr(row.stock_value) : '—' }}</td>
+                        <td>{{ row.cost_basis || '—' }}</td>
                         <td class="text-right tabular-nums">{{ row.total_received }}</td>
                         <td class="text-right tabular-nums">{{ row.total_issued }}</td>
                         <td class="text-right tabular-nums">{{ row.adjustments }}</td>

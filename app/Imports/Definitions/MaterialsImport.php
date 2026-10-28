@@ -10,8 +10,10 @@ use App\Imports\Support\RowOutcome;
 use App\Models\InventoryLocation;
 use App\Models\Material;
 use App\Models\StockAdjustment;
+use App\Services\Access;
 use App\Services\MaterialUnitService;
 use App\Services\StockAdjustmentService;
+use App\Support\MaterialAttributes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -45,9 +47,13 @@ class MaterialsImport extends AbstractImportDefinition
             new ColumnDefinition('category', 'Category', false, 'string', max: 100),
             new ColumnDefinition('description', 'Description', false, 'string', max: 2000),
             new ColumnDefinition('unit', 'Unit', true, 'string', ['uom'], 50),
+            new ColumnDefinition('default_unit_price', 'Default Unit Price', false, 'decimal', ['unit price', 'price', 'rate']),
+            new ColumnDefinition('classification', 'Classification', false, 'string', ['class', 'type', 'asset or consumable'], 40, help: 'Asset or Consumable. Defaults to Consumable.'),
+            new ColumnDefinition('useful_life_years', 'Useful Life Years', false, 'decimal', ['useful life', 'life years'], help: 'Required for assets.'),
             new ColumnDefinition('is_active', 'Active', false, 'boolean'),
             new ColumnDefinition('location', 'Location', false, 'string', ['location name', 'store', 'store name'], 255, help: 'Required when Opening Quantity is provided. Must already exist.'),
             new ColumnDefinition('opening_quantity', 'Opening Quantity', false, 'decimal', ['quantity', 'existing quantity'], help: 'Adds opening stock at the location. Does not replace existing balances.'),
+            new ColumnDefinition('unit_cost', 'Opening Unit Cost', false, 'decimal', ['opening cost', 'stock unit cost'], help: 'Actual opening unit cost. Leave blank to use the default unit price as an estimate.'),
             new ColumnDefinition('entry_date', 'Entry Date', false, 'date', ['date']),
             new ColumnDefinition('reference_number', 'Reference Number', false, 'string', ['reference'], 80),
             new ColumnDefinition('remarks', 'Remarks', false, 'string', max: 5000),
@@ -61,6 +67,8 @@ class MaterialsImport extends AbstractImportDefinition
             'name' => 'Cement OPC 53',
             'category' => 'Cement',
             'unit' => 'Bag',
+            'default_unit_price' => 380,
+            'classification' => 'Consumable',
             'is_active' => 'yes',
             'location' => 'REPLACE_WITH_EXISTING_LOCATION',
             'opening_quantity' => 250,
@@ -108,6 +116,10 @@ class MaterialsImport extends AbstractImportDefinition
         if (! empty($data['unit'])) {
             $data['unit'] = app(MaterialUnitService::class)->create((string) $data['unit'])->name;
         }
+        $parsed = MaterialAttributes::parseImport($data);
+        $data = $parsed['data'];
+        $cast['errors'] = array_merge($cast['errors'], $parsed['errors']);
+
         $hasStock = $data['opening_quantity'] !== null && $data['opening_quantity'] !== '';
 
         if ($hasStock) {
@@ -164,6 +176,9 @@ class MaterialsImport extends AbstractImportDefinition
         if ($row->action === 'update' && $row->existingId) {
             unset($data['material_code'], $data['created_by']);
             $itemFields = array_intersect_key($data, array_flip(['name', 'category', 'description', 'unit', 'is_active']));
+            if ($this->canEditMaster($context)) {
+                $itemFields = array_merge($itemFields, MaterialAttributes::masterFields($data));
+            }
             Material::query()->whereKey($row->existingId)->update(array_filter($itemFields, fn ($v) => $v !== null));
             $this->importOpening($row, $context, (int) $row->existingId);
 
@@ -175,6 +190,10 @@ class MaterialsImport extends AbstractImportDefinition
                 $data['material_code'] = $this->nextCode();
             }
             $itemFields = array_intersect_key($data, array_flip(['material_code', 'name', 'category', 'description', 'unit', 'is_active', 'created_by']));
+            $itemFields = array_merge($itemFields, MaterialAttributes::masterFields($data));
+            if (! isset($itemFields['classification'])) {
+                $itemFields['classification'] = MaterialAttributes::CONSUMABLE;
+            }
             $material = Material::query()->create($itemFields);
             $this->importOpening($row, $context, (int) $material->id);
 
@@ -206,7 +225,13 @@ class MaterialsImport extends AbstractImportDefinition
             'adjustment_date' => $date,
             'reference_number' => $data['reference_number'] ?? null,
             'reason' => $data['remarks'] ?? 'Imported opening stock',
+            'unit_cost' => $data['unit_cost'] ?? $data['default_unit_price'] ?? null,
         ], $context->importBatchId);
+    }
+
+    private function canEditMaster(ImportContext $context): bool
+    {
+        return $context->user->is_admin || app(Access::class)->allows($context->user, 'inventory.edit');
     }
 
     private function nextCode(): string

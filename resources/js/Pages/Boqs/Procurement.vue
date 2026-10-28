@@ -2,6 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import { formatInr, formatQty } from '../../lib/money';
 
 const props = defineProps({
@@ -139,7 +140,7 @@ const props = defineProps({
                             <td class="border border-slate-200 px-4 py-3">{{ record.requested_by }}</td>
                             <td class="border border-slate-200 px-4 py-3 text-right tabular-nums">{{ formatInr(record.estimated_total) }}</td>
                             <td class="border border-slate-200 px-4 py-3">
-                                <Link :href="`/projects/${project.id}/purchase-requests/${record.id}`" class="font-medium text-amber-700 hover:underline">View</Link>
+                                <TableActionIcon action="view" :href="`/projects/${project.id}/purchase-requests/${record.id}`" />
                             </td>
                         </tr>
                     </tbody>
@@ -174,7 +175,7 @@ const props = defineProps({
                             <td class="border border-slate-200 px-4 py-3"><StatusBadge :status="record.status" /></td>
                             <td class="border border-slate-200 px-4 py-3 text-right tabular-nums">{{ formatInr(record.grand_total) }}</td>
                             <td class="border border-slate-200 px-4 py-3">
-                                <Link :href="`/projects/${project.id}/purchase-orders/${record.id}`" class="font-medium text-amber-700 hover:underline">View</Link>
+                                <TableActionIcon action="view" :href="`/projects/${project.id}/purchase-orders/${record.id}`" />
                             </td>
                         </tr>
                     </tbody>

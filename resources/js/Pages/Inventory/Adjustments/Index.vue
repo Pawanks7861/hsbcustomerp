@@ -27,9 +27,9 @@ const props = defineProps({
         <TableToolbar :search="filters.search" placeholder="Search number, date, material, location, type…" />
         <div class="ui-table-wrap overflow-x-auto">
             <table class="ui-table">
-                <thead><tr><th>Number</th><th>Date</th><th>Material</th><th>Location</th><th>Type</th><th class="text-right">Quantity</th><th>Status</th></tr></thead>
+                <thead><tr><th>Number</th><th>Date</th><th>Material</th><th>Location</th><th>Type</th><th class="text-right">Quantity</th><th class="text-right">Unit cost</th><th>Status</th></tr></thead>
                 <tbody>
-                    <tr v-if="adjustments.data.length === 0"><td colspan="7" class="py-8 text-center text-slate-400">{{ filters.search ? 'No matching records found.' : 'No stock adjustments.' }}</td></tr>
+                    <tr v-if="adjustments.data.length === 0"><td colspan="8" class="py-8 text-center text-slate-400">{{ filters.search ? 'No matching records found.' : 'No stock adjustments.' }}</td></tr>
                     <tr v-for="row in adjustments.data" :key="row.id">
                         <td><Link :href="central ? `/inventory/central/adjustments/${row.id}` : `/projects/${project.id}/inventory/adjustments/${row.id}`" class="text-amber-700 hover:underline">{{ row.adjustment_number }}</Link></td>
                         <td>{{ row.adjustment_date }}</td>
@@ -37,6 +37,7 @@ const props = defineProps({
                         <td>{{ row.location || '—' }}</td>
                         <td class="capitalize">{{ row.adjustment_type }}</td>
                         <td class="text-right tabular-nums">{{ row.quantity }}</td>
+                        <td class="text-right tabular-nums">{{ row.unit_cost != null && row.unit_cost !== '' ? row.unit_cost : '—' }}</td>
                         <td class="capitalize">{{ row.status }}</td>
                     </tr>
                 </tbody>

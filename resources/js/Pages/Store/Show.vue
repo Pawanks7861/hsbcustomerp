@@ -4,6 +4,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import DocumentPdfActions from '../../Components/DocumentPdfActions.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 
 const props = defineProps({
     project: { type: Object, required: true },
@@ -29,8 +30,8 @@ function destroy() {
                     :download-url="`/projects/${project.id}/store/${receipt.id}/pdf/download`"
                 />
                 <Link v-if="receipt.is_grn" :href="`/projects/${project.id}/grns/${receipt.id}`" class="ui-btn-secondary">Open GRN</Link>
-                <Link v-if="receipt.can_edit" :href="`/projects/${project.id}/store/${receipt.id}/edit`" class="ui-btn-secondary">Edit</Link>
-                <button v-if="receipt.can_delete" type="button" class="text-sm text-red-700" @click="destroy">Delete</button>
+                <TableActionIcon v-if="receipt.can_edit" action="edit" :href="`/projects/${project.id}/store/${receipt.id}/edit`" />
+                <TableActionIcon v-if="receipt.can_delete" action="delete" @click="destroy" />
             </PageHeader>
         </template>
         <div class="ui-card mb-4 grid gap-3 p-5 text-sm md:grid-cols-3">

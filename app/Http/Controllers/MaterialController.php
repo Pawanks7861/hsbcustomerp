@@ -10,8 +10,11 @@ use App\Models\StockAdjustment;
 use App\Services\Access;
 use App\Services\InventoryLocationService;
 use App\Services\StockAdjustmentService;
+use App\Services\ActivityLogger;
 use App\Support\Listing;
+use App\Support\MaterialAttributes;
 use App\Support\MaterialUnits;
+use App\Support\Money;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -44,14 +47,14 @@ class MaterialController extends Controller
 
     public function update(Request $request, Project $project, Material $material): RedirectResponse
     {
-        $material->update($this->validateMaterial($request));
+        $this->updateMaterial($request, $material);
 
         return $this->backToIndex($project)->with('success', 'Material updated.');
     }
 
     public function updateMaster(Request $request, Material $material): RedirectResponse
     {
-        $material->update($this->validateMaterial($request));
+        $this->updateMaterial($request, $material);
 
         return $this->backToIndex(null)->with('success', 'Material updated.');
     }
@@ -76,12 +79,24 @@ class MaterialController extends Controller
             ->when($status === 'inactive', fn ($query) => $query->where('is_active', false))
             ->orderBy('name')
             ->orderBy('id');
-        Listing::applySearch($query, $filters['search'], ['material_code', 'name', 'category', 'unit', 'description']);
+        $classification = MaterialAttributes::normalizeClassification($request->string('classification')->toString());
+        $query->when(
+            in_array($classification, MaterialAttributes::classifications(), true),
+            fn ($query) => $query->where('classification', $classification)
+        );
+        Listing::applySearch($query, $filters['search'], [
+            'material_code', 'name', 'category', 'unit', 'description', 'classification', 'default_unit_price', 'useful_life_years',
+        ]);
 
         return Inertia::render('Inventory/Materials/Index', [
             'project' => $project ? $this->projectCard($project) : null,
             'central' => $project === null,
-            'filters' => [...$filters, 'status' => in_array($status, ['active', 'inactive'], true) ? $status : ''],
+            'filters' => [
+                ...$filters,
+                'status' => in_array($status, ['active', 'inactive'], true) ? $status : '',
+                'classification' => in_array($classification, MaterialAttributes::classifications(), true) ? $classification : '',
+            ],
+            'canEditPrice' => $request->user()?->is_admin || app(Access::class)->allows($request->user(), 'inventory.edit'),
             'units' => MaterialUnits::all(),
             'materials' => Listing::paginate($query, $request)->through(fn (Material $material) => $this->payload($material)),
             'canCreateUnit' => $request->user()?->is_admin || app(Access::class)->allows($request->user(), 'inventory.create'),
@@ -90,7 +105,7 @@ class MaterialController extends Controller
 
     private function persist(Request $request, ?Project $project): RedirectResponse
     {
-        $validated = $this->validateMaterial($request);
+        $validated = $this->validateMaterial($request, null);
         $opening = $this->openingQuantity($request, $project);
         $exception = null;
 
@@ -104,7 +119,7 @@ class MaterialController extends Controller
                     ]);
 
                     if ($opening !== null) {
-                        $this->recordOpening($request, $material, $opening);
+                        $this->recordOpening($request, $material, $opening, $this->openingUnitCost($request));
                     }
                 });
 
@@ -135,18 +150,66 @@ class MaterialController extends Controller
         return $this->backToIndex($project)->with('success', 'Material deleted.');
     }
 
+    private function updateMaterial(Request $request, Material $material): void
+    {
+        $previous = [
+            'default_unit_price' => $material->default_unit_price,
+            'classification' => $material->classification,
+            'useful_life_years' => $material->useful_life_years,
+        ];
+        $material->update($this->validateMaterial($request, $material));
+        $this->auditMaterialChanges($request, $material, $previous);
+    }
+
     /**
      * @return array<string, mixed>
      */
-    private function validateMaterial(Request $request): array
+    private function validateMaterial(Request $request, ?Material $existing): array
     {
-        return $request->validate([
+        $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:5000'],
             'unit' => ['required', 'string', 'max:50', Rule::in(MaterialUnits::all())],
+            'default_unit_price' => ['nullable', 'numeric', 'min:0'],
+            'classification' => ['nullable', 'string', 'max:40'],
+            'useful_life_years' => ['nullable', 'integer', 'min:1', 'max:100'],
             'is_active' => ['required', 'boolean'],
         ]);
+
+        $validated['classification'] = MaterialAttributes::assertClassification($validated['classification'] ?? null);
+        $validated['default_unit_price'] = MaterialAttributes::normalizePrice($validated['default_unit_price'] ?? null);
+        $validated['useful_life_years'] = MaterialAttributes::normalizeUsefulLife(
+            $validated['useful_life_years'] ?? null,
+            $validated['classification']
+        );
+
+        if ($existing && $validated['classification'] !== Material::CLASS_ASSET) {
+            $validated['useful_life_years'] = $existing->useful_life_years;
+        }
+
+        return $validated;
+    }
+
+    /**
+     * @param  array{default_unit_price: mixed, classification: mixed, useful_life_years: mixed}  $previous
+     */
+    private function auditMaterialChanges(Request $request, Material $material, array $previous): void
+    {
+        $changes = [];
+        foreach (['default_unit_price', 'classification', 'useful_life_years'] as $field) {
+            $from = $previous[$field] === null ? null : (string) $previous[$field];
+            $to = $material->{$field} === null ? null : (string) $material->{$field};
+            if ($from !== $to) {
+                $changes[$field] = ['from' => $from, 'to' => $to];
+            }
+        }
+
+        if ($changes === []) {
+            return;
+        }
+
+        app(ActivityLogger::class)->log($request->user()?->id, 'material.attributes_changed', $material, $changes);
     }
 
     private function openingQuantity(Request $request, ?Project $project): ?string
@@ -167,7 +230,20 @@ class MaterialController extends Controller
         return (string) $request->input('opening_quantity');
     }
 
-    private function recordOpening(Request $request, Material $material, string $quantity): void
+    private function openingUnitCost(Request $request): ?string
+    {
+        if (! $request->filled('opening_unit_cost')) {
+            return null;
+        }
+
+        $request->validate([
+            'opening_unit_cost' => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        return MaterialAttributes::normalizeUnitCost($request->input('opening_unit_cost'), 'opening_unit_cost');
+    }
+
+    private function recordOpening(Request $request, Material $material, string $quantity, ?string $unitCost): void
     {
         $location = app(InventoryLocationService::class)->ensureCentralStore();
         $service = app(StockAdjustmentService::class);
@@ -177,6 +253,7 @@ class MaterialController extends Controller
             'adjustment_date' => now()->toDateString(),
             'adjustment_type' => StockAdjustment::OPENING,
             'quantity' => $quantity,
+            'unit_cost' => $unitCost,
             'reason' => 'Opening stock',
         ]);
         $service->post($request->user(), null, $draft);
@@ -206,6 +283,9 @@ class MaterialController extends Controller
             'category' => $material->category,
             'description' => $material->description,
             'unit' => $material->unit,
+            'default_unit_price' => $material->default_unit_price !== null ? Money::scale((string) $material->default_unit_price, 2) : null,
+            'classification' => $material->classification ?: MaterialAttributes::CONSUMABLE,
+            'useful_life_years' => $material->useful_life_years,
             'is_active' => $material->is_active,
         ];
     }

@@ -21,6 +21,8 @@ class ReportHandler implements IntentHandler
             'invoice-outstanding' => ['invoice outstanding', 'outstanding invoice report'],
             'vendor-outstanding' => ['vendor outstanding', 'vendor outstanding report'],
             'stock-balance' => ['stock balance', 'stock report'],
+            'stock-valuation' => ['stock valuation', 'stock value'],
+            'project-material-consumption' => ['material consumption', 'project material cost', 'consumption cost'],
             'expense-summary' => ['expense summary', 'expense report'],
             'boq-quantity-consumption' => ['boq quantity', 'quantity consumption', 'boq consumption'],
             'project-summary' => ['project summary'],

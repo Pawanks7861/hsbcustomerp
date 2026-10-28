@@ -83,6 +83,10 @@ class MaterialIssueController extends Controller
                     'material' => trim($item->material?->material_code.' '.$item->material?->name),
                     'unit' => $item->unit,
                     'quantity' => (string) $item->quantity,
+                    'unit_cost' => $item->unit_cost !== null ? (string) $item->unit_cost : null,
+                    'amount' => $item->amount !== null ? (string) $item->amount : null,
+                    'is_estimated' => (bool) $item->is_estimated,
+                    'classification' => $item->material?->classification,
                     'remarks' => $item->remarks,
                 ]),
             ],
@@ -119,7 +123,7 @@ class MaterialIssueController extends Controller
                     ]);
                 }
 
-                $this->stock->move(
+                $entry = $this->stock->move(
                     $project->id,
                     (int) $item->material_id,
                     $locked->issue_date->toDateString(),
@@ -133,6 +137,11 @@ class MaterialIssueController extends Controller
                     $request->user()->id,
                     $locked->purpose,
                 );
+                $item->update([
+                    'unit_cost' => $entry->unit_cost,
+                    'amount' => $entry->amount,
+                    'is_estimated' => (bool) $entry->is_estimated,
+                ]);
             }
 
             $locked->update([

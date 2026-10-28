@@ -1,9 +1,11 @@
 <script setup>
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, useForm } from '@inertiajs/vue3';
 import AdminLayout from '../../../Layouts/AdminLayout.vue';
 import DocumentPdfActions from '../../../Components/DocumentPdfActions.vue';
 import PageHeader from '../../../Components/PageHeader.vue';
 import StatusBadge from '../../../Components/StatusBadge.vue';
+import TableActionIcon from '../../../Components/TableActionIcon.vue';
+import { formatInr } from '../../../lib/money';
 
 const props = defineProps({
     transfer: { type: Object, required: true },
@@ -38,7 +40,7 @@ function receive() {
         <template #header>
             <PageHeader :title="transfer.idn_number" eyebrow="Internal Delivery Note">
                 <DocumentPdfActions v-if="abilities.print" :view-url="`/inventory/transfers/${transfer.id}/pdf`" :download-url="`/inventory/transfers/${transfer.id}/pdf/download`" />
-                <Link v-if="abilities.edit" :href="`/inventory/transfers/${transfer.id}/edit`" class="ui-btn-secondary">Edit draft</Link>
+                <TableActionIcon v-if="abilities.edit" action="edit" label="Edit draft" :href="`/inventory/transfers/${transfer.id}/edit`" />
                 <StatusBadge :status="transfer.status" />
             </PageHeader>
         </template>
@@ -62,6 +64,8 @@ function receive() {
                         <th>Material</th>
                         <th>Unit</th>
                         <th>Dispatched</th>
+                        <th class="text-right">Unit cost</th>
+                        <th class="text-right">Amount</th>
                         <th>Accepted</th>
                         <th>Damaged</th>
                         <th>Short</th>
@@ -74,6 +78,8 @@ function receive() {
                         <td>{{ item.name }}</td>
                         <td>{{ item.unit }}</td>
                         <td>{{ item.quantity }}</td>
+                        <td class="text-right tabular-nums">{{ item.unit_cost != null && item.unit_cost !== '' ? formatInr(item.unit_cost) : '—' }}</td>
+                        <td class="text-right tabular-nums">{{ item.amount != null && item.amount !== '' ? formatInr(item.amount) : '—' }}</td>
                         <td>{{ item.accepted }}</td>
                         <td>{{ item.damaged }}</td>
                         <td>{{ item.short }}</td>

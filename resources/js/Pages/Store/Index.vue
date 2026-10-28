@@ -3,6 +3,7 @@ import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import ImportButton from '../../Components/ImportButton.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import TablePagination from '../../Components/TablePagination.vue';
 import TableToolbar from '../../Components/TableToolbar.vue';
 
@@ -48,7 +49,7 @@ defineProps({
                         <td>{{ receipt.items }}</td>
                         <td>{{ receipt.received_by }}</td>
                         <td>{{ receipt.images }}</td>
-                        <td class="text-right"><Link :href="`/projects/${project.id}/store/${receipt.id}`" class="hover:underline">View</Link></td>
+                        <td class="text-right"><TableActionIcon action="view" :href="`/projects/${project.id}/store/${receipt.id}`" /></td>
                     </tr>
                 </tbody>
             </table>

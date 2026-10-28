@@ -2,6 +2,7 @@
 import { Head, Link } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import TablePagination from '../../Components/TablePagination.vue';
 import TableToolbar from '../../Components/TableToolbar.vue';
 
@@ -46,7 +47,7 @@ defineProps({
                         <td>{{ client.email || '—' }}</td>
                         <td>{{ client.gst_number || '—' }}</td>
                         <td class="capitalize">{{ client.status }}</td>
-                        <td class="text-right"><Link :href="`/clients/${client.id}`" class="text-sm font-medium hover:underline">View</Link></td>
+                        <td class="text-right"><TableActionIcon action="view" :href="`/clients/${client.id}`" /></td>
                     </tr>
                 </tbody>
             </table>

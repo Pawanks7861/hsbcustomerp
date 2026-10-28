@@ -146,7 +146,7 @@ class InternalDeliveryService
 
             foreach ($locked->items as $item) {
                 $quantity = Money::scale((string) $item->quantity, 3) ?? '0.000';
-                $this->stock->move(
+                $outbound = $this->stock->move(
                     $projectId,
                     (int) $item->material_id,
                     $locked->transfer_date->toDateString(),
@@ -161,6 +161,11 @@ class InternalDeliveryService
                     'Dispatch '.$locked->idn_number,
                     (int) $locked->source_location_id,
                 );
+                $item->update([
+                    'unit_cost' => $outbound->unit_cost,
+                    'amount' => $outbound->amount,
+                    'is_estimated' => (bool) $outbound->is_estimated,
+                ]);
                 $this->stock->move(
                     $projectId,
                     (int) $item->material_id,

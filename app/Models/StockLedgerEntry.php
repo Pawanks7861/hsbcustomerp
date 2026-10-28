@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class StockLedgerEntry extends Model
 {
@@ -39,6 +40,9 @@ class StockLedgerEntry extends Model
         'stock_in',
         'stock_out',
         'balance',
+        'unit_cost',
+        'amount',
+        'is_estimated',
         'posted_by',
         'remarks',
     ];
@@ -48,6 +52,9 @@ class StockLedgerEntry extends Model
         'stock_in' => 'decimal:3',
         'stock_out' => 'decimal:3',
         'balance' => 'decimal:3',
+        'unit_cost' => 'decimal:2',
+        'amount' => 'decimal:2',
+        'is_estimated' => 'boolean',
     ];
 
     public function project(): BelongsTo
@@ -68,5 +75,10 @@ class StockLedgerEntry extends Model
     public function postedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'posted_by');
+    }
+
+    public function costMovements(): HasMany
+    {
+        return $this->hasMany(StockCostMovement::class);
     }
 }

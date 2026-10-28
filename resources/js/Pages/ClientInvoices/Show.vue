@@ -1,8 +1,9 @@
 <script setup>
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, router, useForm } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import DocumentPdfActions from '../../Components/DocumentPdfActions.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import { formatInr, formatQty } from '../../lib/money';
 
 const props = defineProps({
@@ -53,8 +54,8 @@ function destroy() {
                     :view-url="`/projects/${project.id}/client-invoices/${invoice.id}/pdf`"
                     :download-url="`/projects/${project.id}/client-invoices/${invoice.id}/pdf/download`"
                 />
-                <Link v-if="abilities.edit" :href="`/projects/${project.id}/client-invoices/${invoice.id}/edit`" class="ui-btn-secondary">Edit</Link>
-                <button v-if="abilities.delete" type="button" class="ui-btn-secondary" @click="destroy">Delete</button>
+                <TableActionIcon v-if="abilities.edit" action="edit" :href="`/projects/${project.id}/client-invoices/${invoice.id}/edit`" />
+                <TableActionIcon v-if="abilities.delete" action="delete" @click="destroy" />
             </PageHeader>
         </template>
         <div class="ui-card mb-4 grid gap-3 p-5 text-sm md:grid-cols-3">

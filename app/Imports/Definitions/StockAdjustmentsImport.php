@@ -12,7 +12,9 @@ use App\Models\Material;
 use App\Models\Project;
 use App\Models\StockAdjustment;
 use App\Models\User;
+use App\Services\Access;
 use App\Services\StockAdjustmentService;
+use App\Support\MaterialAttributes;
 use App\Support\Money;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -67,8 +69,12 @@ class StockAdjustmentsImport extends AbstractImportDefinition
             new ColumnDefinition('name', 'Item Name', false, 'string', ['material name', 'name'], 255, help: 'Required to create a new item.'),
             new ColumnDefinition('description', 'Description', false, 'string', max: 2000),
             new ColumnDefinition('unit', 'Unit', false, 'string', ['uom'], 30, help: 'Required to create a new item. Must match the item master when the item exists.'),
+            new ColumnDefinition('default_unit_price', 'Default Unit Price', false, 'decimal', ['unit price', 'price']),
+            new ColumnDefinition('classification', 'Classification', false, 'string', ['class', 'type'], 40, help: 'Asset or Consumable.'),
+            new ColumnDefinition('useful_life_years', 'Useful Life Years', false, 'decimal', ['useful life', 'life years']),
             new ColumnDefinition('location', 'Location', false, 'string', ['location name', 'store', 'store name'], 255, help: 'Must match an existing location name or code. Required for stock entries.'),
             new ColumnDefinition('opening_quantity', 'Opening Quantity', false, 'decimal', ['quantity', 'existing quantity', 'stock quantity'], help: 'Required for opening stock and adjustments. Not a replacement balance.'),
+            new ColumnDefinition('unit_cost', 'Unit Cost', false, 'decimal', ['opening unit cost', 'stock unit cost'], help: 'Actual unit cost for this stock entry. Leave blank to use the default unit price as an estimate.'),
             new ColumnDefinition('adjustment_type', 'Adjustment Type', false, 'string', ['stock operation', 'type'], 20, help: 'opening, increase, or decrease. Default is opening.'),
             new ColumnDefinition('entry_date', 'Entry Date', false, 'date', ['date', 'adjustment date']),
             new ColumnDefinition('reference_number', 'Reference Number', false, 'string', ['reference'], 80),
@@ -88,6 +94,8 @@ class StockAdjustmentsImport extends AbstractImportDefinition
             'name' => 'Cement OPC 53',
             'description' => 'Replace this example row',
             'unit' => 'Bag',
+            'default_unit_price' => 380,
+            'classification' => 'Consumable',
             'location' => 'REPLACE_WITH_EXISTING_LOCATION',
             'opening_quantity' => 250,
             'adjustment_type' => 'opening',
@@ -159,8 +167,9 @@ class StockAdjustmentsImport extends AbstractImportDefinition
     public function validateRow(int $rowNumber, array $raw, ImportContext $context): RowOutcome
     {
         $cast = $this->castRow($raw);
-        $data = $cast['data'];
-        $errors = $cast['errors'];
+        $parsed = MaterialAttributes::parseImport($cast['data']);
+        $data = $parsed['data'];
+        $errors = array_merge($cast['errors'], $parsed['errors']);
 
         if (! $context->project) {
             $errors[] = 'Select a project before importing location stock.';
@@ -314,6 +323,7 @@ class StockAdjustmentsImport extends AbstractImportDefinition
             'adjustment_date' => $data['_entry_date'],
             'reference_number' => $data['reference_number'] ?? null,
             'reason' => $data['remarks'] ?: null,
+            'unit_cost' => $data['unit_cost'] ?? $data['default_unit_price'] ?? null,
         ], $context->importBatchId);
 
         return 'created';
@@ -354,6 +364,9 @@ class StockAdjustmentsImport extends AbstractImportDefinition
                 'description' => $data['description'] ?? null,
                 'unit' => $data['unit'] ?? null,
             ], fn ($value) => $value !== null && $value !== '');
+            if ($context->user->is_admin || app(Access::class)->allows($context->user, 'inventory.edit')) {
+                $payload = array_merge($payload, MaterialAttributes::masterFields($data));
+            }
 
             if ($payload !== []) {
                 Material::query()->whereKey($existingId)->update($payload);
@@ -365,15 +378,16 @@ class StockAdjustmentsImport extends AbstractImportDefinition
         return DB::transaction(function () use ($data, $context) {
             $code = $data['material_code'] ?: $this->nextCode();
 
-            return Material::query()->create([
+            return Material::query()->create(array_merge([
                 'material_code' => $code,
                 'name' => $data['name'],
                 'description' => $data['description'] ?? null,
                 'unit' => $data['unit'],
+                'classification' => MaterialAttributes::CONSUMABLE,
                 'minimum_stock' => 0,
                 'is_active' => true,
                 'created_by' => $context->user->id,
-            ]);
+            ], MaterialAttributes::masterFields($data)));
         });
     }
 

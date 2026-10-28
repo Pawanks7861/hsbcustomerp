@@ -5,6 +5,7 @@ import AdminLayout from '../../Layouts/AdminLayout.vue';
 import CompanyHeader from '../../Components/CompanyHeader.vue';
 import DocumentPdfActions from '../../Components/DocumentPdfActions.vue';
 import StatusBadge from '../../Components/StatusBadge.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import { formatQty } from '../../lib/money';
 
 const props = defineProps({
@@ -197,8 +198,8 @@ function destroy() {
             </div>
 
             <div class="flex flex-wrap gap-3 print:hidden">
-                <Link v-if="abilities.update" :href="`/projects/${project.id}/purchase-requests/${purchaseRequest.id}/edit`" class="ui-btn-secondary">Edit</Link>
-                <button v-if="abilities.delete" type="button" class="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700" @click="destroy">Delete</button>
+                <TableActionIcon v-if="abilities.update" action="edit" :href="`/projects/${project.id}/purchase-requests/${purchaseRequest.id}/edit`" />
+                <TableActionIcon v-if="abilities.delete" action="delete" @click="destroy" />
                 <button v-if="abilities.submit" type="button" class="ui-btn-primary" @click="submit">Submit</button>
                 <button v-if="abilities.approve" type="button" class="ui-btn bg-emerald-600 text-white hover:bg-emerald-700" @click="approve">Approve</button>
                 <button v-if="abilities.reject" type="button" class="ui-btn bg-red-600 text-white hover:bg-red-700" @click="rejecting = !rejecting">Reject</button>

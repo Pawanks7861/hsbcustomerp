@@ -22,6 +22,8 @@
                 <th>Description</th>
                 <th class="center">Unit</th>
                 <th class="num">Dispatched</th>
+                <th class="num">Unit cost</th>
+                <th class="num">Amount</th>
                 <th class="num">Accepted</th>
                 <th class="num">Damaged / Short</th>
                 <th>Remarks</th>
@@ -35,6 +37,8 @@
                     <td class="wrap">{{ $line->material?->name }}</td>
                     <td class="center">{{ $line->unit }}</td>
                     <td class="num">{{ \App\Support\PdfFormat::qty($line->quantity) }}</td>
+                    <td class="num">{{ $line->unit_cost !== null ? \App\Support\PdfFormat::money($line->unit_cost) : '—' }}</td>
+                    <td class="num">{{ $line->amount !== null ? \App\Support\PdfFormat::money($line->amount) : '—' }}</td>
                     <td class="num">{{ \App\Support\PdfFormat::qty($line->quantity_accepted) }}</td>
                     <td class="num">{{ \App\Support\PdfFormat::qty((float) $line->quantity_damaged + (float) $line->quantity_short) }}</td>
                     <td class="wrap">{{ $line->remarks }}</td>

@@ -4,6 +4,7 @@ import { Download, FileText } from '@lucide/vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import DocumentPdfActions from '../../Components/DocumentPdfActions.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import TableActionIcon from '../../Components/TableActionIcon.vue';
 import { formatInr, formatQty } from '../../lib/money';
 
 const props = defineProps({
@@ -105,7 +106,7 @@ function applyAdvance() {
                 <p class="truncate text-sm font-medium text-slate-900">Invoice attachment</p>
                 <p class="text-xs text-slate-500">{{ invoice.invoice_number }}</p>
             </div>
-            <a :href="`/projects/${project.id}/purchase-invoices/${invoice.id}/attachment`" target="_blank" class="ui-btn-secondary">View</a>
+            <TableActionIcon action="view" label="View attachment" :href="`/projects/${project.id}/purchase-invoices/${invoice.id}/attachment`" target="_blank" />
             <a :href="`/projects/${project.id}/purchase-invoices/${invoice.id}/attachment`" download class="ui-btn-secondary">
                 <Download class="h-4 w-4" />
                 Download

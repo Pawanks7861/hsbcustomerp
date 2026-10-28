@@ -4,6 +4,7 @@ import { IndianRupee, Wallet } from '@lucide/vue';
 import AdminLayout from '../Layouts/AdminLayout.vue';
 import EmptyState from '../Components/EmptyState.vue';
 import PageHeader from '../Components/PageHeader.vue';
+import TableActionIcon from '../Components/TableActionIcon.vue';
 import StatCard from '../Components/StatCard.vue';
 import { formatInr } from '../lib/money';
 
@@ -33,7 +34,7 @@ defineProps({
                         <h2 class="text-base font-semibold text-slate-900">{{ project.project_name }}</h2>
                         <p class="text-xs text-slate-400">{{ project.project_code }}</p>
                     </div>
-                    <Link :href="`/projects/${project.id}`" class="text-sm font-medium text-slate-600 hover:text-slate-900">Open</Link>
+                    <TableActionIcon action="view" label="Open" :href="`/projects/${project.id}`" />
                 </div>
                 <div class="grid gap-4 sm:grid-cols-2">
                     <StatCard label="BOQ Total" :value="formatInr(project.boq_total)" tone="mint">
