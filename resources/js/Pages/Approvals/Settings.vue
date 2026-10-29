@@ -15,7 +15,7 @@ const form = useForm({
     types: props.types.map((type) => ({ key: type.key, users: [...type.users] })),
 });
 
-const editable = computed(() => props.staff.filter((person) => !person.super_admin));
+const staffIds = computed(() => props.staff.map((person) => person.id));
 
 const visibleStaff = computed(() => {
     const term = search.value.trim().toLowerCase();
@@ -34,7 +34,7 @@ function row(type) {
 }
 
 function isApprover(type, person) {
-    return person.super_admin || row(type).users.includes(person.id);
+    return row(type).users.includes(person.id);
 }
 
 function toggle(type, person) {
@@ -45,7 +45,7 @@ function toggle(type, person) {
 }
 
 function columnState(type) {
-    const ids = editable.value.map((person) => person.id);
+    const ids = staffIds.value;
 
     if (!ids.length) {
         return 'all';
@@ -58,7 +58,7 @@ function columnState(type) {
 
 function toggleColumn(type) {
     const item = row(type);
-    const ids = editable.value.map((person) => person.id);
+    const ids = staffIds.value;
     item.users = columnState(type) === 'all'
         ? item.users.filter((id) => !ids.includes(id))
         : [...new Set([...item.users, ...ids])];
@@ -109,7 +109,6 @@ function submit() {
             <p class="max-w-3xl text-sm text-slate-500">
                 Tick the staff who can approve each document. Approvers see pending documents in the
                 <span class="font-medium text-slate-700">Approvals</span> menu and get the approve / post buttons.
-                Super admins are always approvers.
             </p>
             <input v-model="search" type="search" class="ui-input w-64" placeholder="Search staff">
         </div>
@@ -133,7 +132,7 @@ function submit() {
                                 class="rounded border-slate-300"
                                 :checked="columnState(type) === 'all'"
                                 :indeterminate="columnState(type) === 'some'"
-                                :disabled="!editable.length"
+                                :disabled="!staffIds.length"
                                 @change="toggleColumn(type)"
                             >
                             <div class="text-[11px] font-normal normal-case text-slate-400">{{ approverCount(type) }} approver(s)</div>
@@ -148,20 +147,18 @@ function submit() {
                             <div class="text-xs text-slate-500">
                                 {{ [person.designation, person.role, person.email].filter(Boolean).join(' · ') }}
                             </div>
-                            <span v-if="person.super_admin" class="mt-1 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Super admin - always approver</span>
+                            <span v-if="person.super_admin" class="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">Super admin</span>
                         </td>
                         <td v-for="type in types" :key="`${person.id}-${type.key}`" class="text-center">
                             <input
                                 type="checkbox"
                                 class="h-4 w-4 rounded border-slate-300"
                                 :checked="isApprover(type, person)"
-                                :disabled="person.super_admin"
                                 @change="toggle(type, person)"
                             >
                         </td>
                         <td class="text-center">
                             <input
-                                v-if="!person.super_admin"
                                 type="checkbox"
                                 class="h-4 w-4 rounded border-slate-300"
                                 :checked="rowState(person) === 'all'"

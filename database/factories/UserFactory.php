@@ -4,6 +4,8 @@ namespace Database\Factories;
 
 use App\Models\Role;
 use App\Models\User;
+use App\Models\UserPermissionOverride;
+use App\Services\ApprovalInbox;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -43,7 +45,26 @@ class UserFactory extends Factory
         return $this->state(fn (array $attributes) => [
             'is_admin' => true,
             'status' => 'active',
-        ]);
+        ])->approver();
+    }
+
+    /**
+     * @param  list<string>|null  $types
+     */
+    public function approver(?array $types = null): static
+    {
+        return $this->afterCreating(function (User $user) use ($types): void {
+            $selected = $types ?? array_keys(ApprovalInbox::types());
+
+            foreach ($selected as $type) {
+                foreach (ApprovalInbox::types()[$type]['permissions'] as $permission) {
+                    UserPermissionOverride::query()->updateOrCreate(
+                        ['user_id' => $user->id, 'permission' => $permission],
+                        ['effect' => UserPermissionOverride::ALLOW],
+                    );
+                }
+            }
+        });
     }
 
     /**

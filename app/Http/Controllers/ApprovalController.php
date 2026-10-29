@@ -86,7 +86,7 @@ class ApprovalController extends Controller
         ]);
 
         DB::transaction(function () use ($data): void {
-            $staff = $this->staff()->reject(fn (User $user) => $this->access->isSuperAdmin($user));
+            $staff = $this->staff();
 
             foreach ($data['types'] as $row) {
                 $approvers = array_map('intval', $row['users']);

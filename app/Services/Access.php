@@ -38,10 +38,6 @@ class Access
     {
         $user->loadMissing('roles.permissions', 'permissionOverrides');
 
-        if ($this->isSuperAdmin($user)) {
-            return ['effective' => true, 'source' => 'Granted by Role', 'mode' => 'inherit'];
-        }
-
         $override = $user->permissionOverrides->firstWhere('permission', $permission);
 
         if (Permissions::isApproval($permission)) {
@@ -52,6 +48,10 @@ class Access
                 'source' => $approver ? 'Approval Settings' : 'Not an approver',
                 'mode' => $approver ? 'allow' : 'inherit',
             ];
+        }
+
+        if ($this->isSuperAdmin($user)) {
+            return ['effective' => true, 'source' => 'Granted by Role', 'mode' => 'inherit'];
         }
 
         if ($override?->effect === UserPermissionOverride::DENY) {
