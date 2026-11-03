@@ -11,6 +11,8 @@ const props = defineProps({
     item: { type: Object, default: null },
     purchaseOrder: { type: Object, required: true },
     vendors: { type: Array, default: () => [] },
+    gstRates: { type: Array, default: () => ['0.00', '5.00', '12.00', '18.00', '28.00'] },
+    companyState: { type: String, default: '' },
 });
 
 const lines = computed(() => props.purchaseOrder.items ?? []);
@@ -20,9 +22,7 @@ const form = useForm({
     vendor_id: props.purchaseOrder.vendor_id || '',
     delivery_date: props.purchaseOrder.delivery_date ?? '',
     delivery_address: props.purchaseOrder.delivery_address ?? '',
-    place_of_supply: props.purchaseOrder.place_of_supply ?? '',
-    cgst_percentage: props.purchaseOrder.cgst_percentage ?? '0',
-    sgst_percentage: props.purchaseOrder.sgst_percentage ?? '0',
+    place_of_supply: props.purchaseOrder.place_of_supply ?? props.companyState ?? '',
     freight: props.purchaseOrder.freight ?? '0',
     round_off: props.purchaseOrder.round_off ?? '0',
     subject: props.purchaseOrder.subject ?? '',
@@ -33,10 +33,32 @@ const form = useForm({
         rate: line.rate ?? '0',
         hsn_sac: line.hsn_sac ?? '',
         discount_percentage: line.discount_percentage ?? '0',
+        gst_percentage: normalizeRate(line.gst_percentage ?? '18.00'),
     })),
 });
 
 const canEditRates = computed(() => props.purchaseOrder.abilities?.edit_rates !== false);
+
+function normalizeRegion(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/\b(state|ut|union territory)\b/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function normalizeRate(value) {
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) {
+        return props.gstRates[0] || '0.00';
+    }
+
+    const scaled = number.toFixed(2);
+    const match = props.gstRates.find((rate) => Number(rate).toFixed(2) === scaled);
+
+    return match ?? scaled;
+}
 
 function roundMoney(value) {
     const number = Number(value);
@@ -55,14 +77,24 @@ function percentOf(base, rate) {
     return roundMoney(base * (Number(rate) || 0) / 100);
 }
 
+const taxSplit = computed(() => {
+    const supply = normalizeRegion(form.place_of_supply);
+    const company = normalizeRegion(props.companyState);
+
+    if (!supply || !company) {
+        return 'cgst_sgst';
+    }
+
+    return supply === company ? 'cgst_sgst' : 'igst';
+});
+
 const preview = computed(() => {
-    const cgstRate = Number(form.cgst_percentage) || 0;
-    const sgstRate = Number(form.sgst_percentage) || 0;
     let subtotal = 0;
     let discount = 0;
     let taxable = 0;
     let cgst = 0;
     let sgst = 0;
+    let igst = 0;
 
     lines.value.forEach((line, index) => {
         const qty = Number(line.quantity) || 0;
@@ -70,21 +102,56 @@ const preview = computed(() => {
         const gross = roundMoney(qty * rate);
         const discountAmount = percentOf(gross, form.items[index]?.discount_percentage);
         const taxableAmount = roundMoney(gross - discountAmount);
+        const gstRate = Number(form.items[index]?.gst_percentage ?? line.gst_percentage) || 0;
+        const half = roundMoney(gstRate / 2);
+        const otherHalf = roundMoney(gstRate - half);
+
         subtotal = roundMoney(subtotal + gross);
         discount = roundMoney(discount + discountAmount);
         taxable = roundMoney(taxable + taxableAmount);
-        cgst = roundMoney(cgst + percentOf(taxableAmount, cgstRate));
-        sgst = roundMoney(sgst + percentOf(taxableAmount, sgstRate));
+
+        if (taxSplit.value === 'igst') {
+            igst = roundMoney(igst + percentOf(taxableAmount, gstRate));
+        } else {
+            cgst = roundMoney(cgst + percentOf(taxableAmount, half));
+            sgst = roundMoney(sgst + percentOf(taxableAmount, otherHalf));
+        }
     });
 
     const freight = roundMoney(form.freight);
     const roundOff = roundMoney(form.round_off);
-    const grand = roundMoney(taxable + cgst + sgst + freight + roundOff);
+    const gstTotal = roundMoney(cgst + sgst + igst);
+    const grand = roundMoney(taxable + gstTotal + freight + roundOff);
 
-    return { subtotal, discount, taxable, cgst, sgst, freight, roundOff, grand };
+    return { subtotal, discount, taxable, cgst, sgst, igst, gstTotal, freight, roundOff, grand };
 });
 
 const selectedVendor = computed(() => props.vendors.find((vendor) => String(vendor.id) === String(form.vendor_id)) ?? null);
+
+function linePreview(index) {
+    const line = lines.value[index];
+    const qty = Number(line?.quantity) || 0;
+    const rate = Number(form.items[index]?.rate ?? line?.rate) || 0;
+    const gross = roundMoney(qty * rate);
+    const discountAmount = percentOf(gross, form.items[index]?.discount_percentage);
+    const taxableAmount = roundMoney(gross - discountAmount);
+    const gstRate = Number(form.items[index]?.gst_percentage) || 0;
+    const half = roundMoney(gstRate / 2);
+    const otherHalf = roundMoney(gstRate - half);
+    let gstAmount = 0;
+
+    if (taxSplit.value === 'igst') {
+        gstAmount = percentOf(taxableAmount, gstRate);
+    } else {
+        gstAmount = roundMoney(percentOf(taxableAmount, half) + percentOf(taxableAmount, otherHalf));
+    }
+
+    return {
+        taxable: taxableAmount,
+        gst: gstAmount,
+        total: roundMoney(taxableAmount + gstAmount),
+    };
+}
 
 function submit() {
     if (props.purchaseOrder.id) {
@@ -116,17 +183,10 @@ function submit() {
                 <label class="block text-sm">
                     <span class="font-medium">Place of supply</span>
                     <input v-model="form.place_of_supply" type="text" maxlength="255" class="ui-input">
+                    <span class="mt-1 block text-xs text-slate-500">
+                        Compared with company state ({{ companyState || 'not set' }}) to apply CGST/SGST or IGST.
+                    </span>
                     <span v-if="form.errors.place_of_supply" class="mt-1 block text-red-700">{{ form.errors.place_of_supply }}</span>
-                </label>
-                <label class="block text-sm">
-                    <span class="font-medium">CGST %</span>
-                    <input v-model="form.cgst_percentage" type="number" min="0" max="100" step="0.01" class="ui-input">
-                    <span v-if="form.errors.cgst_percentage" class="mt-1 block text-red-700">{{ form.errors.cgst_percentage }}</span>
-                </label>
-                <label class="block text-sm">
-                    <span class="font-medium">SGST %</span>
-                    <input v-model="form.sgst_percentage" type="number" min="0" max="100" step="0.01" class="ui-input">
-                    <span v-if="form.errors.sgst_percentage" class="mt-1 block text-red-700">{{ form.errors.sgst_percentage }}</span>
                 </label>
                 <label class="block text-sm">
                     <span class="font-medium">Freight</span>
@@ -179,8 +239,8 @@ function submit() {
                 </label>
             </div>
 
-            <div class="ui-table-wrap">
-                <table class="min-w-full border-collapse text-sm">
+            <div class="ui-table-wrap overflow-x-auto">
+                <table class="min-w-[1100px] border-collapse text-sm">
                     <thead>
                         <tr>
                             <th class="px-3 py-2 font-medium text-slate-500">Sr. No.</th>
@@ -192,7 +252,10 @@ function submit() {
                             <th class="px-3 py-2 font-medium text-slate-500 text-right">Previous GRN qty</th>
                             <th class="px-3 py-2 font-medium text-slate-500 text-right">Rate</th>
                             <th class="px-3 py-2 font-medium text-slate-500 text-right">Disc %</th>
-                            <th class="px-3 py-2 font-medium text-slate-500 text-right">Amount</th>
+                            <th class="px-3 py-2 font-medium text-slate-500 text-right">GST %</th>
+                            <th class="px-3 py-2 font-medium text-slate-500 text-right">Taxable</th>
+                            <th class="px-3 py-2 font-medium text-slate-500 text-right">GST Amt</th>
+                            <th class="px-3 py-2 font-medium text-slate-500 text-right">Total</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -216,14 +279,22 @@ function submit() {
                                     type="number"
                                     min="0"
                                     step="0.01"
-                                    class="ui-input num-input"
+                                    class="ui-input num-input min-w-[6.5rem]"
                                 >
                                 <span v-else class="tabular-nums">{{ formatInr(line.rate) }}</span>
                             </td>
                             <td class="border border-slate-200 px-3 py-2 text-right">
-                                <input v-if="form.items[index]" v-model="form.items[index].discount_percentage" type="number" min="0" max="100" step="0.01" class="ui-input num-input-sm">
+                                <input v-if="form.items[index]" v-model="form.items[index].discount_percentage" type="number" min="0" max="100" step="0.01" class="ui-input num-input-sm min-w-[4.5rem]">
                             </td>
-                            <td class="num-cell border border-slate-200 px-3 py-2">{{ formatInr(roundMoney((Number(line.quantity) || 0) * (Number(form.items[index]?.rate ?? line.rate) || 0))) }}</td>
+                            <td class="border border-slate-200 px-3 py-2 text-right">
+                                <select v-if="form.items[index]" v-model="form.items[index].gst_percentage" class="ui-input min-w-[5.5rem]">
+                                    <option v-for="rate in gstRates" :key="rate" :value="rate">{{ Number(rate) }}%</option>
+                                </select>
+                                <span v-if="form.errors[`items.${index}.gst_percentage`]" class="mt-1 block text-xs text-red-700">{{ form.errors[`items.${index}.gst_percentage`] }}</span>
+                            </td>
+                            <td class="num-cell border border-slate-200 px-3 py-2">{{ formatInr(linePreview(index).taxable) }}</td>
+                            <td class="num-cell border border-slate-200 px-3 py-2">{{ formatInr(linePreview(index).gst) }}</td>
+                            <td class="num-cell border border-slate-200 px-3 py-2">{{ formatInr(linePreview(index).total) }}</td>
                         </tr>
                     </tbody>
                 </table>
@@ -233,13 +304,17 @@ function submit() {
                 <textarea v-model="form.rate_change_reason" rows="2" class="ui-textarea" placeholder="Required when any line rate changes"></textarea>
                 <span v-if="form.errors.rate_change_reason" class="mt-1 block text-red-700">{{ form.errors.rate_change_reason }}</span>
             </label>
-            <p class="text-sm text-slate-500">Quantity and description stay locked from the purchase request. Rate, HSN, and discount can be edited on drafts. Changing a rate requires a reason and is written to the audit log.</p>
+            <p class="text-sm text-slate-500">Quantity and description stay locked from the purchase request. Rate, HSN, discount, and GST % can be edited on drafts. Changing a rate requires a reason and is written to the audit log.</p>
             <dl class="grid gap-2 text-sm sm:ml-auto sm:w-80">
                 <div class="flex justify-between"><dt>Subtotal</dt><dd class="tabular-nums">{{ formatInr(preview.subtotal) }}</dd></div>
                 <div class="flex justify-between"><dt>Discount</dt><dd class="tabular-nums">{{ formatInr(preview.discount ? -preview.discount : 0) }}</dd></div>
                 <div class="flex justify-between"><dt>Taxable value</dt><dd class="tabular-nums">{{ formatInr(preview.taxable) }}</dd></div>
-                <div class="flex justify-between"><dt>CGST</dt><dd class="tabular-nums">{{ formatInr(preview.cgst) }}</dd></div>
-                <div class="flex justify-between"><dt>SGST</dt><dd class="tabular-nums">{{ formatInr(preview.sgst) }}</dd></div>
+                <div v-if="taxSplit === 'igst'" class="flex justify-between"><dt>IGST</dt><dd class="tabular-nums">{{ formatInr(preview.igst) }}</dd></div>
+                <template v-else>
+                    <div class="flex justify-between"><dt>CGST</dt><dd class="tabular-nums">{{ formatInr(preview.cgst) }}</dd></div>
+                    <div class="flex justify-between"><dt>SGST</dt><dd class="tabular-nums">{{ formatInr(preview.sgst) }}</dd></div>
+                </template>
+                <div class="flex justify-between"><dt>Total GST</dt><dd class="tabular-nums">{{ formatInr(preview.gstTotal) }}</dd></div>
                 <div class="flex justify-between"><dt>Freight</dt><dd class="tabular-nums">{{ formatInr(preview.freight) }}</dd></div>
                 <div class="flex justify-between"><dt>Round off</dt><dd class="tabular-nums">{{ formatInr(preview.roundOff) }}</dd></div>
                 <div class="flex justify-between font-semibold"><dt>Grand total</dt><dd class="tabular-nums">{{ formatInr(preview.grand) }}</dd></div>

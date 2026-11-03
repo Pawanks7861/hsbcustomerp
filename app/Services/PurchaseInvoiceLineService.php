@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\CompanySetting;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoiceItem;
 use App\Models\PurchaseOrder;
@@ -9,6 +10,7 @@ use App\Models\PurchaseOrderItem;
 use App\Support\DocumentStatus;
 use App\Support\Money;
 use App\Support\PurchaseLines;
+use App\Support\Tax;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -22,7 +24,7 @@ class PurchaseInvoiceLineService
         $order->loadMissing('items');
         $invoiced = $this->invoicedQuantities($order->items->pluck('id')->all(), $exceptInvoiceId);
 
-        return $order->items->map(function (PurchaseOrderItem $item) use ($invoiced, $order): array {
+        return $order->items->map(function (PurchaseOrderItem $item) use ($invoiced): array {
             $ordered = Money::scale($item->quantity, 3) ?? '0.000';
             $previous = $invoiced[$item->id] ?? '0.000';
             $remaining = Money::sub($ordered, $previous, 3);
@@ -41,9 +43,10 @@ class PurchaseInvoiceLineService
                 'remaining' => $remaining,
                 'rate' => (string) $item->rate,
                 'discount_percentage' => (string) ($item->discount_percentage ?? '0.00'),
-                'cgst_percentage' => (string) ($order->cgst_percentage ?? '0.00'),
-                'sgst_percentage' => (string) ($order->sgst_percentage ?? '0.00'),
-                'gst_percentage' => (string) ($order->gst_percentage ?? '0.00'),
+                'gst_percentage' => (string) ($item->gst_percentage ?? '0.00'),
+                'cgst_percentage' => (string) ($item->cgst_percentage ?? '0.00'),
+                'sgst_percentage' => (string) ($item->sgst_percentage ?? '0.00'),
+                'igst_percentage' => (string) ($item->igst_percentage ?? '0.00'),
             ];
         })->all();
     }
@@ -115,10 +118,15 @@ class PurchaseInvoiceLineService
                 }
 
                 $rate = Money::scale($item->rate, 2) ?? '0.00';
+                $gst = $taxPercentage !== null
+                    ? (Money::scale($taxPercentage, 2) ?? '0.00')
+                    : (Money::scale($item->gst_percentage ?? 0, 2) ?? '0.00');
+
                 $pricedRows[] = [
                     'amount' => Money::itemAmount($quantity, $rate) ?? '0.00',
                     'discount_percentage' => $item->discount_percentage ?? 0,
                     'hsn_sac' => $item->hsn_sac,
+                    'gst_percentage' => $gst,
                 ];
                 $snapshots[] = [
                     'item' => $item,
@@ -135,13 +143,17 @@ class PurchaseInvoiceLineService
                 ]);
             }
 
-            $commercial = $taxPercentage === null ? $this->commercial($order) : [];
-            $rate = $taxPercentage ?? $order->gst_percentage;
-            $priced = PurchaseLines::price($pricedRows, $rate, $commercial);
-            $preRound = PurchaseLines::summarize($priced, $rate, $commercial);
+            $commercial = [
+                'tax_split' => Tax::splitMode(
+                    $order->place_of_supply,
+                    CompanySetting::current()?->state
+                ),
+            ];
+            $priced = PurchaseLines::price($pricedRows, null, $commercial);
+            $preRound = PurchaseLines::summarize($priced, null, $commercial);
             $beforeRound = Money::add($preRound['taxable_value'], $preRound['gst_amount']);
             $commercial['round_off'] = $this->resolveRoundOff($beforeRound, $roundOffMode, $manualRoundOff);
-            $totals = PurchaseLines::summarize($priced, $rate, $commercial);
+            $totals = PurchaseLines::summarize($priced, null, $commercial);
 
             $invoice->items()->delete();
 
@@ -162,8 +174,13 @@ class PurchaseInvoiceLineService
                     'discount_percentage' => $pricedLine['discount_percentage'],
                     'amount' => $pricedLine['amount'],
                     'taxable_amount' => $pricedLine['taxable_amount'],
+                    'gst_percentage' => $pricedLine['gst_percentage'],
+                    'cgst_percentage' => $pricedLine['cgst_percentage'],
+                    'sgst_percentage' => $pricedLine['sgst_percentage'],
+                    'igst_percentage' => $pricedLine['igst_percentage'],
                     'cgst_amount' => $pricedLine['cgst_amount'],
                     'sgst_amount' => $pricedLine['sgst_amount'],
+                    'igst_amount' => $pricedLine['igst_amount'],
                     'line_total' => $pricedLine['line_total'],
                 ]);
             }
@@ -243,21 +260,6 @@ class PurchaseInvoiceLineService
         }
 
         return $requested;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function commercial(PurchaseOrder $order): array
-    {
-        if ($order->cgst_percentage === null && $order->sgst_percentage === null) {
-            return [];
-        }
-
-        return [
-            'cgst_percentage' => $order->cgst_percentage ?? 0,
-            'sgst_percentage' => $order->sgst_percentage ?? 0,
-        ];
     }
 
     private function resolveRoundOff(string $beforeRound, string $mode, mixed $manual): string

@@ -7,9 +7,11 @@ use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\PurchaseRequest;
 use App\Models\PurchaseRequestItem;
+use App\Models\CompanySetting;
 use App\Support\DocumentStatus;
 use App\Support\Money;
 use App\Support\PurchaseLines;
+use App\Support\Tax;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 
@@ -170,6 +172,12 @@ class PurchaseRequestPoSyncService
 
         $quantity = Money::scale($prLine->quantity, 3) ?? '0.000';
         $rate = Money::scale($prLine->estimated_rate, 2) ?? '0.00';
+        $defaultGst = $order->items
+            ->map(fn (PurchaseOrderItem $item) => Money::scale($item->gst_percentage, 2))
+            ->filter()
+            ->first()
+            ?? (Money::scale($order->gst_percentage, 2) ?: '18.00');
+
         $priced = PurchaseLines::price([[
             'name' => $prLine->name,
             'description' => $prLine->description,
@@ -181,11 +189,9 @@ class PurchaseRequestPoSyncService
             'boq_item_id' => $prLine->boq_item_id,
             'purchase_request_item_id' => $prLine->id,
             'discount_percentage' => '0',
+            'gst_percentage' => $defaultGst,
             'remarks' => $prLine->remarks,
-        ]], $order->gst_percentage, [
-            'cgst_percentage' => $order->cgst_percentage,
-            'sgst_percentage' => $order->sgst_percentage,
-        ])[0];
+        ]], null, $this->commercialFromOrder($order))[0];
 
         return $order->items()->create($priced);
     }
@@ -258,12 +264,7 @@ class PurchaseRequestPoSyncService
     private function reprice(PurchaseOrder $order): void
     {
         $order->load('items');
-        $commercial = [
-            'freight' => $order->freight,
-            'round_off' => $order->round_off,
-            'cgst_percentage' => $order->cgst_percentage,
-            'sgst_percentage' => $order->sgst_percentage,
-        ];
+        $commercial = $this->commercialFromOrder($order);
 
         $priced = PurchaseLines::price(
             $order->items->map(fn (PurchaseOrderItem $item) => [
@@ -273,8 +274,9 @@ class PurchaseRequestPoSyncService
                 'amount' => Money::itemAmount($item->quantity, $item->rate) ?? '0.00',
                 'hsn_sac' => $item->hsn_sac,
                 'discount_percentage' => (string) $item->discount_percentage,
+                'gst_percentage' => (string) ($item->gst_percentage ?? '0.00'),
             ])->all(),
-            $order->gst_percentage,
+            null,
             $commercial
         );
 
@@ -283,13 +285,33 @@ class PurchaseRequestPoSyncService
                 'amount' => $row['amount'],
                 'discount_amount' => $row['discount_amount'],
                 'taxable_amount' => $row['taxable_amount'],
+                'gst_percentage' => $row['gst_percentage'],
+                'cgst_percentage' => $row['cgst_percentage'],
+                'sgst_percentage' => $row['sgst_percentage'],
+                'igst_percentage' => $row['igst_percentage'],
                 'cgst_amount' => $row['cgst_amount'],
                 'sgst_amount' => $row['sgst_amount'],
+                'igst_amount' => $row['igst_amount'],
                 'line_total' => $row['line_total'],
             ]);
         }
 
-        $order->update(PurchaseLines::summarize($priced, $order->gst_percentage, $commercial));
+        $order->update(PurchaseLines::summarize($priced, null, $commercial));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function commercialFromOrder(PurchaseOrder $order): array
+    {
+        return [
+            'freight' => $order->freight,
+            'round_off' => $order->round_off,
+            'tax_split' => Tax::splitMode(
+                $order->place_of_supply,
+                CompanySetting::current()?->state
+            ),
+        ];
     }
 
     private function lineKey(PurchaseRequestItem $prLine): string

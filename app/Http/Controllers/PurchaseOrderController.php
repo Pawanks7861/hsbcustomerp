@@ -23,6 +23,7 @@ use App\Support\Listing;
 use App\Support\Money;
 use App\Support\PdfFormat;
 use App\Support\PurchaseLines;
+use App\Support\Tax;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -98,6 +99,8 @@ class PurchaseOrderController extends Controller
                 'description' => $purchaseRequest->boqItem->description,
             ] : null,
             'vendors' => $this->vendorOptions(),
+            'gstRates' => Tax::gstRates(),
+            'companyState' => CompanySetting::current()?->state,
             'purchaseOrder' => [
                 'id' => null,
                 'vendor_id' => '',
@@ -109,10 +112,7 @@ class PurchaseOrderController extends Controller
                 'gst_number' => '',
                 'delivery_date' => '',
                 'delivery_address' => '',
-                'place_of_supply' => '',
-                'gst_percentage' => '0',
-                'cgst_percentage' => '0',
-                'sgst_percentage' => '0',
+                'place_of_supply' => CompanySetting::current()?->state ?? '',
                 'freight' => '0',
                 'round_off' => '0',
                 'subject' => '',
@@ -187,6 +187,8 @@ class PurchaseOrderController extends Controller
                 'description' => $purchaseOrder->boqItem->description,
             ] : null,
             'vendors' => $this->vendorOptions($purchaseOrder->vendor_id),
+            'gstRates' => Tax::gstRates(),
+            'companyState' => CompanySetting::current()?->state,
             'purchaseOrder' => [
                 ...$this->formPayload($purchaseOrder),
                 'abilities' => $this->abilities(request(), $purchaseOrder),
@@ -206,15 +208,19 @@ class PurchaseOrderController extends Controller
         DB::transaction(function () use ($request, $purchaseOrder, $canEditRates): void {
             $purchaseOrder->load('items');
             $commercial = $this->commercial($request);
+            $fallbackGst = $this->fallbackGstPercentage($request);
             $source = $this->pricedSource($purchaseOrder, $request, $canEditRates);
-            $priced = PurchaseLines::price($source, $request->validated('gst_percentage'), $commercial);
+            $priced = PurchaseLines::price($source, $fallbackGst, $commercial);
             $rateChanges = [];
+            $gstChanges = [];
 
             foreach ($purchaseOrder->items as $index => $item) {
                 $line = $priced[$index];
                 $previousRate = (string) $item->rate;
                 $nextRate = Money::scale($line['rate'] ?? $item->rate, 2) ?? $previousRate;
                 $nextAmount = Money::scale($line['amount'] ?? $item->amount, 2) ?? (string) $item->amount;
+                $previousGst = Money::scale($item->gst_percentage ?? 0, 2) ?? '0.00';
+                $nextGst = Money::scale($line['gst_percentage'] ?? $previousGst, 2) ?? $previousGst;
 
                 if ($canEditRates && bccomp($previousRate, $nextRate, 2) !== 0) {
                     $rateChanges[] = [
@@ -225,6 +231,15 @@ class PurchaseOrderController extends Controller
                     ];
                 }
 
+                if (bccomp($previousGst, $nextGst, 2) !== 0) {
+                    $gstChanges[] = [
+                        'item_id' => $item->id,
+                        'description' => $item->description,
+                        'previous_gst_percentage' => $previousGst,
+                        'new_gst_percentage' => $nextGst,
+                    ];
+                }
+
                 $item->update([
                     'rate' => $canEditRates ? $nextRate : $item->rate,
                     'amount' => $canEditRates ? $nextAmount : $item->amount,
@@ -232,8 +247,13 @@ class PurchaseOrderController extends Controller
                     'discount_percentage' => $line['discount_percentage'],
                     'discount_amount' => $line['discount_amount'],
                     'taxable_amount' => $line['taxable_amount'],
+                    'gst_percentage' => $line['gst_percentage'],
+                    'cgst_percentage' => $line['cgst_percentage'],
+                    'sgst_percentage' => $line['sgst_percentage'],
+                    'igst_percentage' => $line['igst_percentage'],
                     'cgst_amount' => $line['cgst_amount'],
                     'sgst_amount' => $line['sgst_amount'],
+                    'igst_amount' => $line['igst_amount'],
                     'line_total' => $line['line_total'],
                 ]);
             }
@@ -254,9 +274,17 @@ class PurchaseOrderController extends Controller
                 ]);
             }
 
+            if ($gstChanges !== []) {
+                $this->activity->log($request->user()->id, 'purchase_order.gst_changed', $purchaseOrder, [
+                    'po_number' => $purchaseOrder->po_number,
+                    'changes' => $gstChanges,
+                    'approval_status' => $purchaseOrder->status,
+                ]);
+            }
+
             $purchaseOrder->update([
                 ...$this->header($request, $purchaseOrder),
-                ...PurchaseLines::summarize($priced, $request->validated('gst_percentage'), $commercial),
+                ...PurchaseLines::summarize($priced, $fallbackGst, $commercial),
             ]);
         });
 
@@ -475,13 +503,22 @@ class PurchaseOrderController extends Controller
             'hsn_sac' => $line['hsn_sac'] ?? '',
             'rate' => $line['rate'] ?? '',
             'discount_percentage' => $line['discount_percentage'] ?? '',
+            'gst_percentage' => $line['gst_percentage'] ?? '',
+            'cgst_percentage' => $line['cgst_percentage'] ?? '',
+            'sgst_percentage' => $line['sgst_percentage'] ?? '',
+            'igst_percentage' => $line['igst_percentage'] ?? '',
             'taxable_amount' => $line['taxable_amount'] ?? '',
             'cgst_amount' => $line['cgst_amount'] ?? '',
             'sgst_amount' => $line['sgst_amount'] ?? '',
+            'igst_amount' => $line['igst_amount'] ?? '',
             'line_total' => $line['line_total'] ?? '',
             'amount' => $line['amount'] ?? '',
             'remarks' => $line['remarks'] ?? '',
         ])->all();
+
+        $usesIgst = (float) ($document['igst_amount'] ?? 0) > 0
+            && (float) ($document['cgst_amount'] ?? 0) <= 0
+            && (float) ($document['sgst_amount'] ?? 0) <= 0;
 
         $data = [
             'title' => 'PURCHASE ORDER',
@@ -492,9 +529,11 @@ class PurchaseOrderController extends Controller
             'date' => PdfFormat::date($document['po_date'] ?? null),
             'deliveryDate' => PdfFormat::date($document['delivery_date'] ?? null),
             'placeOfSupply' => $document['place_of_supply'] ?? '',
-            'taxLabel' => ((float) ($document['cgst_percentage'] ?? 0) > 0 && (float) ($document['sgst_percentage'] ?? 0) > 0)
-                ? 'Intra-state (CGST + SGST)'
-                : '',
+            'taxLabel' => $usesIgst
+                ? 'Inter-state (IGST)'
+                : (((float) ($document['cgst_amount'] ?? 0) > 0 || (float) ($document['sgst_amount'] ?? 0) > 0)
+                    ? 'Intra-state (CGST + SGST)'
+                    : ''),
             'status' => $document['status'],
             'party' => $this->vendorParty($purchaseOrder),
             'relatedLabel' => 'Purchase Request',
@@ -586,9 +625,10 @@ class PurchaseOrderController extends Controller
             try {
                 return DB::transaction(function () use ($request, $project, $purchaseRequest) {
                     $commercial = $this->commercial($request);
+                    $fallbackGst = $this->fallbackGstPercentage($request);
                     $lines = PurchaseLines::price(
                         $this->withPostedCommercial($this->storedLines($purchaseRequest), $request),
-                        $request->validated('gst_percentage'),
+                        $fallbackGst,
                         $commercial
                     );
                     $record = PurchaseOrder::query()->create([
@@ -598,7 +638,7 @@ class PurchaseOrderController extends Controller
                         'purchase_request_id' => $purchaseRequest->id,
                         'po_number' => DocumentNumber::next(PurchaseOrder::class, 'po_number', 'PO'),
                         ...$this->header($request),
-                        ...PurchaseLines::summarize($lines, $request->validated('gst_percentage'), $commercial),
+                        ...PurchaseLines::summarize($lines, $fallbackGst, $commercial),
                         'status' => DocumentStatus::DRAFT,
                         'created_by' => $request->user()->id,
                     ]);
@@ -808,6 +848,7 @@ class PurchaseOrderController extends Controller
             'taxable_value' => (string) $record->taxable_value,
             'cgst_amount' => (string) $record->cgst_amount,
             'sgst_amount' => (string) $record->sgst_amount,
+            'igst_amount' => (string) ($record->igst_amount ?? '0.00'),
             'gst_amount' => (string) $record->gst_amount,
             'grand_total' => (string) $record->grand_total,
         ];
@@ -834,6 +875,7 @@ class PurchaseOrderController extends Controller
             'gst_percentage' => (string) $record->gst_percentage,
             'cgst_percentage' => (string) $record->cgst_percentage,
             'sgst_percentage' => (string) $record->sgst_percentage,
+            'igst_amount' => (string) ($record->igst_amount ?? '0.00'),
             'freight' => (string) $record->freight,
             'round_off' => (string) $record->round_off,
             'terms_conditions' => $record->terms_conditions ?? '',
@@ -850,9 +892,14 @@ class PurchaseOrderController extends Controller
                 'amount' => (string) $item->amount,
                 'discount_percentage' => (string) $item->discount_percentage,
                 'discount_amount' => (string) $item->discount_amount,
+                'gst_percentage' => (string) ($item->gst_percentage ?? '0.00'),
+                'cgst_percentage' => (string) ($item->cgst_percentage ?? '0.00'),
+                'sgst_percentage' => (string) ($item->sgst_percentage ?? '0.00'),
+                'igst_percentage' => (string) ($item->igst_percentage ?? '0.00'),
                 'taxable_amount' => (string) $item->taxable_amount,
                 'cgst_amount' => (string) $item->cgst_amount,
                 'sgst_amount' => (string) $item->sgst_amount,
+                'igst_amount' => (string) ($item->igst_amount ?? '0.00'),
                 'line_total' => (string) $item->line_total,
                 'remarks' => $item->remarks ?? '',
             ])->values()->all(),
@@ -877,6 +924,8 @@ class PurchaseOrderController extends Controller
             ->all();
         $recorded = app(BoqReceiptProgress::class)->recordedFor($ids);
 
+        $defaultGst = in_array('18.00', Tax::gstRates(), true) ? '18.00' : (Tax::gstRates()[0] ?? '0.00');
+
         return collect($lines)->map(fn (array $line) => [
             'service_code' => $line['service_code'] ?? '',
             'name' => $line['name'] ?? $line['description'],
@@ -888,6 +937,7 @@ class PurchaseOrderController extends Controller
             'rate' => (string) $line['rate'],
             'amount' => (string) $line['amount'],
             'discount_percentage' => '0',
+            'gst_percentage' => $defaultGst,
             'remarks' => $line['remarks'] ?? '',
         ])->all();
     }
@@ -934,19 +984,33 @@ class PurchaseOrderController extends Controller
     private function commercial(PurchaseOrderItemRequest $request): array
     {
         $validated = $request->validated();
-        $commercial = [
+
+        return [
             'freight' => $validated['freight'] ?? 0,
             'round_off' => $validated['round_off'] ?? 0,
+            'tax_split' => Tax::splitMode(
+                $validated['place_of_supply'] ?? null,
+                CompanySetting::current()?->state
+            ),
         ];
+    }
 
-        if (array_key_exists('cgst_percentage', $validated) || array_key_exists('sgst_percentage', $validated)) {
-            if ($validated['cgst_percentage'] !== null || $validated['sgst_percentage'] !== null) {
-                $commercial['cgst_percentage'] = $validated['cgst_percentage'] ?? 0;
-                $commercial['sgst_percentage'] = $validated['sgst_percentage'] ?? 0;
-            }
+    private function fallbackGstPercentage(PurchaseOrderItemRequest $request): string
+    {
+        $validated = $request->validated();
+
+        if (array_key_exists('gst_percentage', $validated) && $validated['gst_percentage'] !== null && $validated['gst_percentage'] !== '') {
+            return Money::scale($validated['gst_percentage'], 2) ?? '0.00';
         }
 
-        return $commercial;
+        if (array_key_exists('cgst_percentage', $validated) || array_key_exists('sgst_percentage', $validated)) {
+            $cgst = Money::scale($validated['cgst_percentage'] ?? 0, 2) ?? '0.00';
+            $sgst = Money::scale($validated['sgst_percentage'] ?? 0, 2) ?? '0.00';
+
+            return Money::add($cgst, $sgst);
+        }
+
+        return '18.00';
     }
 
     /**
@@ -960,6 +1024,7 @@ class PurchaseOrderController extends Controller
             'amount' => (string) $item->amount,
             'hsn_sac' => $item->hsn_sac,
             'discount_percentage' => (string) $item->discount_percentage,
+            'gst_percentage' => (string) ($item->gst_percentage ?? '0.00'),
         ])->all(), $request, $canEditRates);
     }
 
@@ -986,6 +1051,10 @@ class PurchaseOrderController extends Controller
 
             if (is_array($extra) && array_key_exists('discount_percentage', $extra) && $extra['discount_percentage'] !== null) {
                 $line['discount_percentage'] = $extra['discount_percentage'];
+            }
+
+            if (is_array($extra) && array_key_exists('gst_percentage', $extra) && $extra['gst_percentage'] !== null && $extra['gst_percentage'] !== '') {
+                $line['gst_percentage'] = Money::scale($extra['gst_percentage'], 2) ?? '0.00';
             }
 
             $lines[$index] = $line;

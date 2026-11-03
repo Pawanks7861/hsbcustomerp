@@ -16,12 +16,10 @@ const props = defineProps({
 });
 
 const taxRates = ['0', '5', '12', '18', '28'];
-const poTaxRate = props.selectedOrder ? String(Number(props.selectedOrder.gst_percentage || 0)) : '';
-const poRateIsCustom = poTaxRate !== '' && !taxRates.includes(poTaxRate);
 
 const form = useForm({
     purchase_order_id: props.selectedOrder?.id || '',
-    tax_percentage: poRateIsCustom ? '' : (poTaxRate || '18'),
+    tax_percentage: '',
     round_off_mode: 'auto',
     round_off: '0',
     vendor_id: '',
@@ -58,7 +56,11 @@ const splitRates = computed(() => {
     const gst = Number(form.tax_percentage);
     const cgst = Math.round((gst / 2 + Number.EPSILON) * 100) / 100;
 
-    return { cgst, sgst: Math.round((gst - cgst + Number.EPSILON) * 100) / 100 };
+    return {
+        gst,
+        cgst,
+        sgst: Math.round((gst - cgst + Number.EPSILON) * 100) / 100,
+    };
 });
 
 const totals = computed(() => {
@@ -73,12 +75,32 @@ const totals = computed(() => {
         const discountRate = Number(row.discount_percentage || 0);
         const discount = Math.round(((row.gross * discountRate) / 100 + Number.EPSILON) * 100) / 100;
         const net = Math.max(0, Math.round((row.gross - discount + Number.EPSILON) * 100) / 100);
-        const cgstRate = splitRates.value ? splitRates.value.cgst : Number(row.cgst_percentage || 0);
-        const sgstRate = splitRates.value ? splitRates.value.sgst : Number(row.sgst_percentage || 0);
-        const cgst = Math.round(((net * cgstRate) / 100 + Number.EPSILON) * 100) / 100;
-        const sgst = Math.round(((net * sgstRate) / 100 + Number.EPSILON) * 100) / 100;
+        const useIgst = Number(row.igst_percentage || 0) > 0
+            && Number(row.cgst_percentage || 0) <= 0
+            && Number(row.sgst_percentage || 0) <= 0;
+
+        let lineTax = 0;
+        if (splitRates.value) {
+            if (useIgst) {
+                lineTax = Math.round(((net * splitRates.value.gst) / 100 + Number.EPSILON) * 100) / 100;
+            } else {
+                const cgst = Math.round(((net * splitRates.value.cgst) / 100 + Number.EPSILON) * 100) / 100;
+                const sgst = Math.round(((net * splitRates.value.sgst) / 100 + Number.EPSILON) * 100) / 100;
+                lineTax = cgst + sgst;
+            }
+        } else if (useIgst) {
+            lineTax = Math.round(((net * Number(row.igst_percentage || row.gst_percentage || 0)) / 100 + Number.EPSILON) * 100) / 100;
+        } else {
+            const cgstRate = Number(row.cgst_percentage || 0);
+            const sgstRate = Number(row.sgst_percentage || 0);
+            const gstRate = Number(row.gst_percentage || 0);
+            const cgst = Math.round(((net * (cgstRate || gstRate / 2)) / 100 + Number.EPSILON) * 100) / 100;
+            const sgst = Math.round(((net * (sgstRate || (gstRate - (cgstRate || gstRate / 2)))) / 100 + Number.EPSILON) * 100) / 100;
+            lineTax = cgst + sgst;
+        }
+
         taxable += net;
-        tax += cgst + sgst;
+        tax += lineTax;
     });
 
     const before = Math.round((taxable + tax + Number.EPSILON) * 100) / 100;
@@ -143,9 +165,10 @@ function submit() {
                 <label class="text-sm">Due Date<input v-model="form.due_date" type="date" class="ui-input"></label>
                 <label class="text-sm">Tax (GST)
                     <select v-model="form.tax_percentage" class="ui-input">
-                        <option v-if="poRateIsCustom" value="">As per PO ({{ poTaxRate }}%)</option>
-                        <option v-for="rate in taxRates" :key="rate" :value="rate">{{ rate }}%</option>
+                        <option value="">As per PO line rates</option>
+                        <option v-for="rate in taxRates" :key="rate" :value="rate">Override all lines · {{ rate }}%</option>
                     </select>
+                    <span class="mt-1 block text-xs text-slate-500">Leave as PO line rates to keep item-wise GST from the purchase order.</span>
                     <span v-if="form.errors.tax_percentage" class="mt-1 block text-red-700">{{ form.errors.tax_percentage }}</span>
                 </label>
                 <div class="md:col-span-2">
@@ -174,6 +197,7 @@ function submit() {
                             <th class="px-2 py-2 text-right">Current Invoice Qty</th>
                             <th class="px-2 py-2 text-right">Balance Qty</th>
                             <th class="px-2 py-2 text-right">Rate</th>
+                            <th class="px-2 py-2 text-right">GST %</th>
                             <th class="px-2 py-2 text-right">Amount</th>
                         </tr>
                     </thead>
@@ -193,6 +217,7 @@ function submit() {
                             </td>
                             <td class="num-cell px-2 py-2">{{ formatQty(row.balance) }}</td>
                             <td class="num-cell px-2 py-2">{{ formatInr(row.rate) }}</td>
+                            <td class="num-cell px-2 py-2">{{ form.tax_percentage === '' ? Number(row.gst_percentage || 0) : Number(form.tax_percentage) }}%</td>
                             <td class="num-cell px-2 py-2">{{ row.gross === null ? '—' : formatInr(row.gross) }}</td>
                         </tr>
                     </tbody>
@@ -200,7 +225,7 @@ function submit() {
                 <p v-if="form.errors.items" class="mt-3 text-sm text-red-700">{{ form.errors.items }}</p>
                 <div class="mt-4 ml-auto w-full max-w-sm space-y-2 text-sm">
                     <div class="flex justify-between"><span class="text-slate-500">Taxable amount</span><span class="tabular-nums">{{ formatInr(totals.taxable) }}</span></div>
-                    <div class="flex justify-between"><span class="text-slate-500">Tax{{ form.tax_percentage === '' ? '' : ` (GST ${form.tax_percentage}%)` }}</span><span class="tabular-nums">{{ formatInr(totals.tax) }}</span></div>
+                    <div class="flex justify-between"><span class="text-slate-500">Tax{{ form.tax_percentage === '' ? ' (item-wise)' : ` (GST ${form.tax_percentage}%)` }}</span><span class="tabular-nums">{{ formatInr(totals.tax) }}</span></div>
                     <div class="flex justify-between"><span class="text-slate-500">Total before round off</span><span class="tabular-nums">{{ formatInr(totals.before) }}</span></div>
                     <label v-if="canRoundOff" class="flex items-center justify-between gap-3">
                         <span class="text-slate-500">Round off</span>

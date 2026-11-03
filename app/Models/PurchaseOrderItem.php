@@ -22,8 +22,13 @@ class PurchaseOrderItem extends Model
         'discount_percentage',
         'discount_amount',
         'taxable_amount',
+        'gst_percentage',
+        'cgst_percentage',
+        'sgst_percentage',
+        'igst_percentage',
         'cgst_amount',
         'sgst_amount',
+        'igst_amount',
         'line_total',
         'remarks',
     ];
@@ -35,8 +40,13 @@ class PurchaseOrderItem extends Model
         'discount_percentage' => 'decimal:2',
         'discount_amount' => 'decimal:2',
         'taxable_amount' => 'decimal:2',
+        'gst_percentage' => 'decimal:2',
+        'cgst_percentage' => 'decimal:2',
+        'sgst_percentage' => 'decimal:2',
+        'igst_percentage' => 'decimal:2',
         'cgst_amount' => 'decimal:2',
         'sgst_amount' => 'decimal:2',
+        'igst_amount' => 'decimal:2',
         'line_total' => 'decimal:2',
     ];
 

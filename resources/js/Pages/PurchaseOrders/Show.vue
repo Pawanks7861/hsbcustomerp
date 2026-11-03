@@ -27,6 +27,11 @@ const amendmentForm = useForm({
 
 const canViewRates = computed(() => props.abilities?.view_rates !== false);
 const moneyOrHidden = (value) => (canViewRates.value ? formatInr(value) : '—');
+const usesIgst = computed(() =>
+    Number(props.purchaseOrder.igst_amount || 0) > 0
+    && Number(props.purchaseOrder.cgst_amount || 0) <= 0
+    && Number(props.purchaseOrder.sgst_amount || 0) <= 0,
+);
 
 const pendingAmendments = computed(() => props.purchaseOrder.pending_rate_amendments ?? []);
 
@@ -171,9 +176,13 @@ function destroy() {
                             <th class="px-3 py-2 font-medium text-slate-500 text-right">Qty</th>
                             <th class="px-3 py-2 font-medium text-slate-500 text-right">Rate</th>
                             <th class="px-3 py-2 font-medium text-slate-500 text-right">Disc %</th>
+                            <th class="px-3 py-2 font-medium text-slate-500 text-right">GST %</th>
                             <th class="px-3 py-2 font-medium text-slate-500 text-right">Taxable</th>
-                            <th class="px-3 py-2 font-medium text-slate-500 text-right">CGST</th>
-                            <th class="px-3 py-2 font-medium text-slate-500 text-right">SGST</th>
+                            <th v-if="usesIgst" class="px-3 py-2 font-medium text-slate-500 text-right">IGST</th>
+                            <template v-else>
+                                <th class="px-3 py-2 font-medium text-slate-500 text-right">CGST</th>
+                                <th class="px-3 py-2 font-medium text-slate-500 text-right">SGST</th>
+                            </template>
                             <th class="px-3 py-2 font-medium text-slate-500 text-right">Amount</th>
                         </tr>
                     </thead>
@@ -190,9 +199,13 @@ function destroy() {
                             <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ line.quantity }}</td>
                             <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ moneyOrHidden(line.rate) }}</td>
                             <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ line.discount_percentage }}</td>
+                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ Number(line.gst_percentage || 0) }}%</td>
                             <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ formatInr(line.taxable_amount) }}</td>
-                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ formatInr(line.cgst_amount) }}</td>
-                            <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ formatInr(line.sgst_amount) }}</td>
+                            <td v-if="usesIgst" class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ formatInr(line.igst_amount) }}</td>
+                            <template v-else>
+                                <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ formatInr(line.cgst_amount) }}</td>
+                                <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ formatInr(line.sgst_amount) }}</td>
+                            </template>
                             <td class="border border-slate-200 px-3 py-2 text-right tabular-nums">{{ formatInr(line.line_total || line.amount) }}</td>
                         </tr>
                     </tbody>
@@ -202,8 +215,12 @@ function destroy() {
                 <div class="flex justify-between"><dt>Subtotal</dt><dd class="tabular-nums">{{ formatInr(purchaseOrder.subtotal) }}</dd></div>
                 <div class="flex justify-between"><dt>Discount</dt><dd class="tabular-nums">{{ formatInr(Number(purchaseOrder.discount_total) ? -purchaseOrder.discount_total : 0) }}</dd></div>
                 <div class="flex justify-between"><dt>Taxable value</dt><dd class="tabular-nums">{{ formatInr(purchaseOrder.taxable_value) }}</dd></div>
-                <div class="flex justify-between"><dt>CGST @ {{ purchaseOrder.cgst_percentage }}%</dt><dd class="tabular-nums">{{ formatInr(purchaseOrder.cgst_amount) }}</dd></div>
-                <div class="flex justify-between"><dt>SGST @ {{ purchaseOrder.sgst_percentage }}%</dt><dd class="tabular-nums">{{ formatInr(purchaseOrder.sgst_amount) }}</dd></div>
+                <div v-if="usesIgst" class="flex justify-between"><dt>IGST</dt><dd class="tabular-nums">{{ formatInr(purchaseOrder.igst_amount) }}</dd></div>
+                <template v-else>
+                    <div class="flex justify-between"><dt>CGST</dt><dd class="tabular-nums">{{ formatInr(purchaseOrder.cgst_amount) }}</dd></div>
+                    <div class="flex justify-between"><dt>SGST</dt><dd class="tabular-nums">{{ formatInr(purchaseOrder.sgst_amount) }}</dd></div>
+                </template>
+                <div class="flex justify-between"><dt>Total GST</dt><dd class="tabular-nums">{{ formatInr(purchaseOrder.gst_amount) }}</dd></div>
                 <div class="flex justify-between"><dt>Freight</dt><dd class="tabular-nums">{{ formatInr(purchaseOrder.freight) }}</dd></div>
                 <div class="flex justify-between"><dt>Round off</dt><dd class="tabular-nums">{{ formatInr(purchaseOrder.round_off) }}</dd></div>
                 <div class="flex justify-between font-semibold"><dt>Grand total</dt><dd class="tabular-nums">{{ formatInr(purchaseOrder.grand_total) }}</dd></div>

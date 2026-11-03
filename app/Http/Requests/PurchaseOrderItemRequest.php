@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Support\Tax;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class PurchaseOrderItemRequest extends FormRequest
 {
@@ -38,9 +40,40 @@ class PurchaseOrderItemRequest extends FormRequest
             'items.*.rate' => ['nullable', 'numeric', 'gte:0'],
             'items.*.hsn_sac' => ['nullable', 'string', 'max:20'],
             'items.*.discount_percentage' => ['nullable', 'numeric', 'gte:0', 'lte:100'],
+            'items.*.gst_percentage' => ['nullable', 'numeric', 'gte:0', 'lte:100'],
             'rate_change_reason' => ['nullable', 'string', 'max:1000'],
             'terms_conditions' => ['nullable', 'string', 'max:5000'],
             'remarks' => ['nullable', 'string', 'max:5000'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            $items = $this->input('items', []);
+
+            if (! is_array($items)) {
+                return;
+            }
+
+            foreach ($items as $index => $item) {
+                if (! is_array($item) || ! array_key_exists('gst_percentage', $item)) {
+                    continue;
+                }
+
+                $rate = $item['gst_percentage'];
+
+                if ($rate === null || $rate === '') {
+                    continue;
+                }
+
+                if (! Tax::isAllowedRate($rate)) {
+                    $validator->errors()->add(
+                        "items.$index.gst_percentage",
+                        'Select a configured GST rate.'
+                    );
+                }
+            }
+        });
     }
 }

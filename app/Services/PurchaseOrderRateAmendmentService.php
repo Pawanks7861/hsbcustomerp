@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ActivityLog;
+use App\Models\CompanySetting;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\PurchaseOrderRateAmendment;
@@ -10,6 +11,7 @@ use App\Models\User;
 use App\Support\DocumentStatus;
 use App\Support\Money;
 use App\Support\PurchaseLines;
+use App\Support\Tax;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -117,7 +119,6 @@ class PurchaseOrderRateAmendmentService
             }
 
             $commercial = $this->commercialFromOrder($purchaseOrder);
-            $gstPercentage = (string) $purchaseOrder->gst_percentage;
             $source = $this->pricedSource($purchaseOrder);
             $index = $purchaseOrder->items->search(fn (PurchaseOrderItem $line) => (int) $line->id === (int) $item->id);
 
@@ -130,7 +131,7 @@ class PurchaseOrderRateAmendmentService
             $source[$index]['rate'] = Money::scale($amendment->proposed_rate, 2) ?? (string) $amendment->proposed_rate;
             $source[$index]['amount'] = Money::itemAmount((string) $item->quantity, $source[$index]['rate']) ?? (string) $amendment->proposed_amount;
 
-            $priced = PurchaseLines::price($source, $gstPercentage, $commercial);
+            $priced = PurchaseLines::price($source, null, $commercial);
             $line = $priced[$index];
 
             $item->update([
@@ -139,12 +140,17 @@ class PurchaseOrderRateAmendmentService
                 'discount_percentage' => $line['discount_percentage'],
                 'discount_amount' => $line['discount_amount'],
                 'taxable_amount' => $line['taxable_amount'],
+                'gst_percentage' => $line['gst_percentage'],
+                'cgst_percentage' => $line['cgst_percentage'],
+                'sgst_percentage' => $line['sgst_percentage'],
+                'igst_percentage' => $line['igst_percentage'],
                 'cgst_amount' => $line['cgst_amount'],
                 'sgst_amount' => $line['sgst_amount'],
+                'igst_amount' => $line['igst_amount'],
                 'line_total' => $line['line_total'],
             ]);
 
-            $purchaseOrder->update(PurchaseLines::summarize($priced, $gstPercentage, $commercial));
+            $purchaseOrder->update(PurchaseLines::summarize($priced, null, $commercial));
 
             $amendment->update([
                 'status' => PurchaseOrderRateAmendment::STATUS_APPROVED,
@@ -268,17 +274,14 @@ class PurchaseOrderRateAmendmentService
      */
     private function commercialFromOrder(PurchaseOrder $purchaseOrder): array
     {
-        $commercial = [
+        return [
             'freight' => (string) $purchaseOrder->freight,
             'round_off' => (string) $purchaseOrder->round_off,
+            'tax_split' => Tax::splitMode(
+                $purchaseOrder->place_of_supply,
+                CompanySetting::current()?->state
+            ),
         ];
-
-        if ((float) $purchaseOrder->cgst_percentage > 0 || (float) $purchaseOrder->sgst_percentage > 0) {
-            $commercial['cgst_percentage'] = (string) $purchaseOrder->cgst_percentage;
-            $commercial['sgst_percentage'] = (string) $purchaseOrder->sgst_percentage;
-        }
-
-        return $commercial;
     }
 
     /**
@@ -292,6 +295,7 @@ class PurchaseOrderRateAmendmentService
             'amount' => (string) $item->amount,
             'hsn_sac' => $item->hsn_sac,
             'discount_percentage' => (string) $item->discount_percentage,
+            'gst_percentage' => (string) ($item->gst_percentage ?? '0.00'),
         ])->all();
     }
 
