@@ -149,10 +149,22 @@ function destroy() {
 
             <dl class="grid gap-4 text-sm sm:grid-cols-2">
                 <div><dt class="text-slate-500">Project</dt><dd class="font-medium">{{ project.project_name }} ({{ project.project_code }})</dd></div>
-                <div><dt class="text-slate-500">PR number</dt><dd><Link :href="`/projects/${project.id}/purchase-requests/${purchaseOrder.purchase_request_id}`" class="font-medium text-amber-700 hover:underline">{{ purchaseOrder.pr_number }}</Link></dd></div>
+                <div>
+                    <dt class="text-slate-500">PR number</dt>
+                    <dd>
+                        <Link
+                            v-if="purchaseOrder.purchase_request_id"
+                            :href="`/projects/${project.id}/purchase-requests/${purchaseOrder.purchase_request_id}`"
+                            class="font-medium text-amber-700 hover:underline"
+                        >
+                            {{ purchaseOrder.pr_number }}
+                        </Link>
+                        <span v-else class="font-medium text-slate-700">{{ purchaseOrder.pr_number || '—' }}</span>
+                    </dd>
+                </div>
                 <div><dt class="text-slate-500">Requested BOQ Qty</dt><dd class="tabular-nums">{{ purchaseOrder.requested_boq_quantity === null ? '—' : `${Number(purchaseOrder.requested_boq_quantity).toLocaleString('en-IN', { maximumFractionDigits: 3 })}${purchaseOrder.boq_unit ? ` ${purchaseOrder.boq_unit}` : ''}` }}</dd></div>
-                <div><dt class="text-slate-500">BOQ</dt><dd>{{ purchaseOrder.boq_title }}</dd></div>
-                <div><dt class="text-slate-500">Item description</dt><dd>{{ purchaseOrder.boq_item }}</dd></div>
+                <div><dt class="text-slate-500">BOQ</dt><dd>{{ purchaseOrder.boq_title || '—' }}</dd></div>
+                <div><dt class="text-slate-500">Item description</dt><dd>{{ purchaseOrder.boq_item || '—' }}</dd></div>
             </dl>
 
             <section class="text-sm">

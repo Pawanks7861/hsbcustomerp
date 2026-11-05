@@ -738,6 +738,12 @@ class PurchaseOrderController extends Controller
             abort_unless($purchaseOrder->boq()->where('project_id', $project->id)->exists(), 404);
         }
 
+        // Historical/imported POs may exist without a linked purchase request.
+        // Keep viewing/PDF available; normal create still requires an approved PR.
+        if ($purchaseOrder->purchase_request_id === null) {
+            return;
+        }
+
         abort_unless(
             $purchaseOrder->purchaseRequest()
                 ->where('project_id', $project->id)
