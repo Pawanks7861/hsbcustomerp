@@ -732,7 +732,7 @@ class PurchaseOrderController extends Controller
 
     private function ensureOrder(Project $project, PurchaseOrder $purchaseOrder): void
     {
-        abort_unless($purchaseOrder->project_id === $project->id, 404);
+        abort_unless((int) $purchaseOrder->project_id === (int) $project->id, 404);
 
         if ($purchaseOrder->boq_id) {
             abort_unless($purchaseOrder->boq()->where('project_id', $project->id)->exists(), 404);
