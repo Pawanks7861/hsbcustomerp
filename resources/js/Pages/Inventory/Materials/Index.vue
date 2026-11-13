@@ -91,11 +91,16 @@ function save() {
 }
 
 function destroy(material) {
+    if (material.can_delete === false) {
+        window.alert(material.delete_blocked_reason || 'This material cannot be deleted because it has stock transactions. Mark it inactive instead.');
+        return;
+    }
+
     if (!confirm(`Delete ${material.material_code}?`)) {
         return;
     }
 
-    router.delete(`${basePath()}/${material.id}`, { preserveScroll: true, preserveState: true });
+    router.delete(`${basePath()}/${material.id}`, { preserveScroll: true });
 }
 </script>
 
@@ -149,7 +154,12 @@ function destroy(material) {
                         <td>
                             <div class="flex items-center justify-end gap-1">
                                 <TableActionIcon action="edit" @click="edit(material)" />
-                                <TableActionIcon action="delete" @click="destroy(material)" />
+                                <TableActionIcon
+                                    action="delete"
+                                    :disabled="material.can_delete === false"
+                                    :label="material.can_delete === false ? (material.delete_blocked_reason || 'Cannot delete') : 'Delete'"
+                                    @click="destroy(material)"
+                                />
                             </div>
                         </td>
                     </tr>

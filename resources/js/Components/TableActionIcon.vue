@@ -8,6 +8,7 @@ const props = defineProps({
     href: { type: String, default: null },
     label: { type: String, default: '' },
     target: { type: String, default: null },
+    disabled: { type: Boolean, default: false },
 });
 
 const icons = { view: Eye, edit: Pencil, delete: Trash2 };
@@ -32,15 +33,16 @@ const tag = computed(() => {
 
 <template>
     <component
-        :is="tag"
-        :href="href || undefined"
-        :type="href ? undefined : 'button'"
-        :target="target || undefined"
-        :rel="target === '_blank' ? 'noopener' : undefined"
+        :is="disabled ? 'button' : tag"
+        :href="disabled ? undefined : (href || undefined)"
+        :type="disabled || !href ? 'button' : undefined"
+        :target="disabled ? undefined : (target || undefined)"
+        :rel="!disabled && target === '_blank' ? 'noopener' : undefined"
         :title="caption"
         :aria-label="caption"
+        :disabled="disabled || undefined"
         class="inline-flex h-8 w-8 items-center justify-center rounded-lg"
-        :class="tone"
+        :class="disabled ? 'cursor-not-allowed text-slate-300' : tone"
     >
         <component :is="icon" class="h-4 w-4" />
     </component>

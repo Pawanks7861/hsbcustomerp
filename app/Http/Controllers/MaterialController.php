@@ -88,6 +88,11 @@ class MaterialController extends Controller
             'material_code', 'name', 'category', 'unit', 'description', 'classification', 'default_unit_price', 'useful_life_years',
         ]);
 
+        $materials = Listing::paginate($query, $request);
+        $blockedIds = $this->materialIdsWithStockActivity(
+            collect($materials->items())->pluck('id')->all()
+        );
+
         return Inertia::render('Inventory/Materials/Index', [
             'project' => $project ? $this->projectCard($project) : null,
             'central' => $project === null,
@@ -98,7 +103,7 @@ class MaterialController extends Controller
             ],
             'canEditPrice' => $request->user()?->is_admin || app(Access::class)->allows($request->user(), 'inventory.edit'),
             'units' => MaterialUnits::all(),
-            'materials' => Listing::paginate($query, $request)->through(fn (Material $material) => $this->payload($material)),
+            'materials' => $materials->through(fn (Material $material) => $this->payload($material, ! isset($blockedIds[$material->id]))),
             'canCreateUnit' => $request->user()?->is_admin || app(Access::class)->allows($request->user(), 'inventory.create'),
         ]);
     }
@@ -134,20 +139,48 @@ class MaterialController extends Controller
 
     private function deleteMaterial(Material $material, ?Project $project): RedirectResponse
     {
-        $used = $material->ledgerEntries()->exists()
-            || MaterialReceiptItem::query()->where('material_id', $material->id)->exists()
-            || MaterialIssueItem::query()->where('material_id', $material->id)->exists()
-            || StockAdjustment::query()->where('material_id', $material->id)->exists();
+        if ($this->materialHasStockActivity($material)) {
+            $message = 'Materials with stock transactions cannot be deleted. Mark the material inactive instead.';
 
-        if ($used) {
-            return back()->withErrors([
-                'material' => 'Materials with stock transactions cannot be deleted. Mark the material inactive instead.',
-            ]);
+            return back()
+                ->withErrors(['material' => $message])
+                ->with('error', $message);
         }
 
         $material->delete();
 
         return $this->backToIndex($project)->with('success', 'Material deleted.');
+    }
+
+    private function materialHasStockActivity(Material $material): bool
+    {
+        return isset($this->materialIdsWithStockActivity([$material->id])[$material->id]);
+    }
+
+    /**
+     * @param  list<int|string>  $materialIds
+     * @return array<int, true>
+     */
+    private function materialIdsWithStockActivity(array $materialIds): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $materialIds))));
+        if ($ids === []) {
+            return [];
+        }
+
+        $used = [];
+        foreach ([
+            Material::query()->whereIn('id', $ids)->whereHas('ledgerEntries')->pluck('id'),
+            MaterialReceiptItem::query()->whereIn('material_id', $ids)->distinct()->pluck('material_id'),
+            MaterialIssueItem::query()->whereIn('material_id', $ids)->distinct()->pluck('material_id'),
+            StockAdjustment::query()->whereIn('material_id', $ids)->distinct()->pluck('material_id'),
+        ] as $rows) {
+            foreach ($rows as $id) {
+                $used[(int) $id] = true;
+            }
+        }
+
+        return $used;
     }
 
     private function updateMaterial(Request $request, Material $material): void
@@ -274,8 +307,13 @@ class MaterialController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function payload(Material $material): array
+    /**
+     * @return array<string, mixed>
+     */
+    private function payload(Material $material, ?bool $canDelete = null): array
     {
+        $canDelete ??= ! $this->materialHasStockActivity($material);
+
         return [
             'id' => $material->id,
             'material_code' => $material->material_code,
@@ -287,6 +325,10 @@ class MaterialController extends Controller
             'classification' => $material->classification ?: MaterialAttributes::CONSUMABLE,
             'useful_life_years' => $material->useful_life_years,
             'is_active' => $material->is_active,
+            'can_delete' => $canDelete,
+            'delete_blocked_reason' => $canDelete
+                ? null
+                : 'This material has stock transactions. Mark it inactive instead of deleting.',
         ];
     }
 
