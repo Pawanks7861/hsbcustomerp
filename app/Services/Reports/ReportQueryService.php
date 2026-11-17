@@ -306,6 +306,9 @@ class ReportQueryService
             }
 
             $rows[] = [
+                'purchase_order_id' => $order->id,
+                'project_id' => $order->project_id,
+                'vendor_id' => $order->vendor_id,
                 'po_number' => $order->po_number,
                 'po_date' => $order->po_date?->toDateString(),
                 'project_code' => $order->project?->project_code,
@@ -331,7 +334,7 @@ class ReportQueryService
     public function invoiceOutstandingReport(User $user, array $filters): array
     {
         $query = PurchaseInvoice::query()
-            ->with(['project:id,project_code', 'vendor:id,name'])
+            ->with(['project:id,project_code', 'vendor:id,name', 'purchaseOrder:id,po_number'])
             ->where('approval_status', PurchaseInvoice::APPROVAL_APPROVED)
             ->orderByDesc('invoice_date')
             ->orderByDesc('id');
@@ -356,10 +359,15 @@ class ReportQueryService
             }
 
             $rows[] = [
+                'purchase_invoice_id' => $invoice->id,
+                'purchase_order_id' => $invoice->purchase_order_id,
+                'project_id' => $invoice->project_id,
+                'vendor_id' => $invoice->vendor_id,
                 'invoice_number' => $invoice->invoice_number,
                 'invoice_date' => $invoice->invoice_date?->toDateString(),
                 'project_code' => $invoice->project?->project_code,
                 'vendor_name' => $invoice->vendor?->name,
+                'po_number' => $invoice->purchaseOrder?->po_number,
                 'total_amount' => $total,
                 'paid_amount' => $paid,
                 'outstanding' => $outstanding,
@@ -412,6 +420,7 @@ class ReportQueryService
                     return [
                         'project' => 'Company (no project)',
                         'project_code' => '—',
+                        'project_id' => null,
                         'total_amount' => Money::scale((string) $row->total_amount, 2) ?? '0.00',
                     ];
                 }
@@ -421,6 +430,7 @@ class ReportQueryService
                 return [
                     'project' => $project?->project_name,
                     'project_code' => $project?->project_code,
+                    'project_id' => $row->project_id,
                     'total_amount' => Money::scale((string) $row->total_amount, 2) ?? '0.00',
                 ];
             })
@@ -445,8 +455,8 @@ class ReportQueryService
                     'key' => 'by_project',
                     'title' => 'By project',
                     'columns' => [
-                        ['key' => 'project_code', 'label' => 'Code'],
-                        ['key' => 'project', 'label' => 'Project'],
+                        ['key' => 'project_code', 'label' => 'Code', 'link' => 'project'],
+                        ['key' => 'project', 'label' => 'Project', 'link' => 'project'],
                         ['key' => 'total_amount', 'label' => 'Total', 'align' => 'right', 'money' => true],
                     ],
                     'rows' => $byProject,
@@ -465,6 +475,9 @@ class ReportQueryService
         $projectId = isset($filters['project_id']) ? (int) $filters['project_id'] : null;
         $from = $filters['from'] ?? null;
         $to = $filters['to'] ?? null;
+        $balance = in_array(($filters['balance'] ?? 'outstanding'), ['outstanding', 'all', 'zero', 'credit'], true)
+            ? ($filters['balance'] ?? 'outstanding')
+            : 'outstanding';
 
         if ($projectId !== null) {
             $this->ensureProjectAccess($user, $projectId);
@@ -479,16 +492,51 @@ class ReportQueryService
         $totals = [
             'total_invoice_value' => '0.00',
             'invoice_payments' => '0.00',
+            'advance_adjusted' => '0.00',
+            'debit_notes_total' => '0.00',
+            'credit_notes_total' => '0.00',
             'outstanding_payable' => '0.00',
             'available_advance' => '0.00',
         ];
 
         foreach ($vendors as $vendor) {
             $summary = $this->balances->summary($vendor, $projectId, $from, $to);
+            $outstanding = Money::scale($summary['outstanding_payable'] ?? '0.00', 2) ?? '0.00';
+            $advance = Money::scale($summary['available_advance'] ?? '0.00', 2) ?? '0.00';
+            $hasPayable = bccomp($outstanding, '0.00', 2) === 1;
+            $hasCredit = bccomp($advance, '0.00', 2) === 1;
+            $isZero = ! $hasPayable && ! $hasCredit;
+
+            if ($balance === 'outstanding' && $isZero) {
+                continue;
+            }
+            if ($balance === 'zero' && ! $isZero) {
+                continue;
+            }
+            if ($balance === 'credit' && ! $hasCredit) {
+                continue;
+            }
+
+            $ledgerQuery = http_build_query(array_filter([
+                'from' => $from,
+                'to' => $to,
+                'project_id' => $projectId,
+            ], fn ($value) => $value !== null && $value !== ''));
+
             $rows[] = [
+                'vendor_id' => $vendor->id,
                 'vendor_code' => $vendor->vendor_code,
                 'name' => $vendor->name,
-                ...$summary,
+                'total_invoice_value' => $summary['total_invoice_value'],
+                'invoice_payments' => $summary['invoice_payments'],
+                'advance_adjusted' => $summary['advance_adjusted'],
+                'debit_notes_total' => $summary['debit_notes_total'],
+                'credit_notes_total' => $summary['credit_notes_total'],
+                'outstanding_payable' => $outstanding,
+                'available_advance' => $advance,
+                'actions' => 'View Ledger',
+                'href_actions' => '/vendors/'.$vendor->id.'/ledger'.($ledgerQuery !== '' ? '?'.$ledgerQuery : ''),
+                'href_name' => '/vendors/'.$vendor->id.'/ledger'.($ledgerQuery !== '' ? '?'.$ledgerQuery : ''),
             ];
 
             foreach ($totals as $key => $sum) {
@@ -529,6 +577,10 @@ class ReportQueryService
             foreach ($query->get() as $note) {
                 $rows[] = [
                     'note_type' => $label,
+                    'note_kind' => $label === 'Debit' ? 'debit' : 'credit',
+                    'note_id' => $note->id,
+                    'project_id' => $note->project_id,
+                    'vendor_id' => $note->vendor_id,
                     'number' => $note->number,
                     'date' => $note->date?->toDateString(),
                     'project_code' => $note->project?->project_code,
@@ -583,6 +635,9 @@ class ReportQueryService
             $paid = $posted ? $invoice->paidTotal() : '0.00';
             $outstanding = $posted ? $invoice->outstanding() : '0.00';
             $rows[] = [
+                'client_invoice_id' => $invoice->id,
+                'project_id' => $invoice->project_id,
+                'client_id' => $invoice->client_id,
                 'invoice_number' => $invoice->invoice_number,
                 'invoice_date' => $invoice->invoice_date?->toDateString(),
                 'project_code' => $invoice->project?->project_code,
@@ -632,6 +687,9 @@ class ReportQueryService
                 continue;
             }
             $rows[] = [
+                'client_invoice_id' => $invoice->id,
+                'project_id' => $invoice->project_id,
+                'client_id' => $invoice->client_id,
                 'invoice_number' => $invoice->invoice_number,
                 'invoice_date' => $invoice->invoice_date?->toDateString(),
                 'due_date' => $invoice->due_date?->toDateString(),
@@ -673,6 +731,9 @@ class ReportQueryService
         foreach ($query->get() as $payment) {
             $amount = Money::scale((string) $payment->amount, 2) ?? '0.00';
             $rows[] = [
+                'client_invoice_id' => $payment->client_invoice_id ?? $payment->invoice?->id,
+                'project_id' => $payment->project_id,
+                'client_id' => $payment->client_id,
                 'payment_date' => $payment->payment_date?->toDateString(),
                 'invoice_number' => $payment->invoice?->invoice_number,
                 'project_code' => $payment->project?->project_code,
@@ -722,6 +783,8 @@ class ReportQueryService
                 ->where('transaction_type', StockLedgerEntry::ISSUE)
                 ->sum('stock_out'), 3) ?? '0.000';
             $rows[] = [
+                'material_id' => $material->id,
+                'project_id' => $project->id,
                 'material_code' => $material->material_code,
                 'material_name' => $material->name,
                 'classification' => $material->classification ?: MaterialAttributes::CONSUMABLE,
@@ -777,6 +840,8 @@ class ReportQueryService
             $valued = $this->valuation->onHand($scopeId, (int) $materialId, $available);
             $rows[] = [
                 'store' => $store,
+                'material_id' => $material->id,
+                'project_id' => $scopeId,
                 'material_code' => $material->material_code,
                 'material_name' => $material->name,
                 'classification' => $material->classification ?: MaterialAttributes::CONSUMABLE,
@@ -815,6 +880,8 @@ class ReportQueryService
 
             $id = (int) $entry->material_id;
             $grouped[$id] ??= [
+                'material_id' => $id,
+                'project_id' => $project->id,
                 'material_code' => $material->material_code,
                 'material_name' => $material->name,
                 'classification' => $material->classification ?: MaterialAttributes::CONSUMABLE,

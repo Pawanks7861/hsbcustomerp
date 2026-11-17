@@ -256,8 +256,15 @@ class VendorLedgerService
             $invoiceQuery->whereDate('invoice_date', '<=', $to);
         }
 
-        foreach ($invoiceQuery->with('project')->orderBy('invoice_date')->orderBy('id')->get() as $invoice) {
+        foreach ($invoiceQuery->with(['project', 'purchaseOrder'])->orderBy('invoice_date')->orderBy('id')->get() as $invoice) {
             /** @var PurchaseInvoice $invoice */
+            $projectHref = $invoice->project_id ? '/projects/'.$invoice->project_id : null;
+            $invoiceHref = $invoice->project_id
+                ? '/projects/'.$invoice->project_id.'/purchase-invoices/'.$invoice->id
+                : null;
+            $poHref = $invoice->project_id && $invoice->purchase_order_id
+                ? '/projects/'.$invoice->project_id.'/purchase-orders/'.$invoice->purchase_order_id
+                : null;
             $rows[] = $this->row(
                 $invoice->invoice_date?->toDateString(),
                 'Purchase Invoice',
@@ -266,6 +273,10 @@ class VendorLedgerService
                 null,
                 (string) $invoice->total_amount,
                 $invoice->invoice_date?->format('Ymd').'I'.$invoice->id,
+                $invoiceHref,
+                $projectHref,
+                $invoice->purchaseOrder?->po_number,
+                $poHref,
             );
         }
 
@@ -285,14 +296,24 @@ class VendorLedgerService
                 ? null
                 : (string) $payment->amount;
 
+            $reference = $payment->invoice?->invoice_number ?? $payment->reference_number ?? 'Payment '.$payment->id;
+            $href = null;
+            if ($payment->purchase_invoice_id && $payment->invoice?->project_id) {
+                $href = '/projects/'.$payment->invoice->project_id.'/purchase-invoices/'.$payment->purchase_invoice_id;
+            } elseif ($payment->vendor_id) {
+                $href = '/vendors/'.$payment->vendor_id;
+            }
+
             $rows[] = $this->row(
                 $payment->payment_date?->toDateString(),
                 $payment->typeLabel(),
-                $payment->invoice?->invoice_number ?? $payment->reference_number ?? 'Payment '.$payment->id,
+                $reference,
                 $payment->project?->project_name,
                 $debit,
                 null,
                 $payment->payment_date?->format('Ymd').'P'.$payment->id,
+                $href,
+                $payment->project_id ? '/projects/'.$payment->project_id : null,
             );
         }
 
@@ -310,14 +331,20 @@ class VendorLedgerService
         }
 
         foreach ($adjustmentQuery->with('invoice.project')->orderBy('adjustment_date')->orderBy('id')->get() as $adjustment) {
+            $invoice = $adjustment->invoice;
+            $href = $invoice && $invoice->project_id
+                ? '/projects/'.$invoice->project_id.'/purchase-invoices/'.$invoice->id
+                : null;
             $rows[] = $this->row(
                 $adjustment->adjustment_date?->toDateString(),
                 'Advance Adjustment',
-                $adjustment->invoice?->invoice_number,
-                $adjustment->invoice?->project?->project_name,
+                $invoice?->invoice_number,
+                $invoice?->project?->project_name,
                 (string) $adjustment->amount,
                 null,
                 $adjustment->adjustment_date?->format('Ymd').'A'.$adjustment->id,
+                $href,
+                $invoice?->project_id ? '/projects/'.$invoice->project_id : null,
             );
         }
 
@@ -339,6 +366,8 @@ class VendorLedgerService
                 null,
                 (string) $recovery->amount_due,
                 ($recovery->created_at?->format('YmdHis') ?? '').'R'.$recovery->id,
+                $recovery->vendor_id ? '/vendors/'.$recovery->vendor_id : null,
+                $recovery->project_id ? '/projects/'.$recovery->project_id : null,
             );
         }
 
@@ -361,6 +390,8 @@ class VendorLedgerService
                 (string) $refund->amount,
                 null,
                 $refund->refund_date?->format('Ymd').'F'.$refund->id,
+                $refund->vendor_id ? '/vendors/'.$refund->vendor_id : null,
+                $refund->project_id ? '/projects/'.$refund->project_id : null,
             );
         }
 
@@ -403,6 +434,9 @@ class VendorLedgerService
         $rows = [];
 
         foreach ($query->with('project')->orderBy('date')->orderBy('id')->get() as $note) {
+            $noteHref = $note->project_id
+                ? '/projects/'.$note->project_id.'/'.($type === DebitNote::class ? 'debit-notes' : 'credit-notes').'/'.$note->id
+                : null;
             $rows[] = $this->row(
                 $note->date?->toDateString(),
                 $label,
@@ -411,6 +445,8 @@ class VendorLedgerService
                 (string) $note->total_amount,
                 null,
                 $note->date?->format('Ymd').$prefix.$note->id,
+                $noteHref,
+                $note->project_id ? '/projects/'.$note->project_id : null,
             );
         }
 
@@ -420,15 +456,30 @@ class VendorLedgerService
     /**
      * @return array<string, mixed>
      */
-    private function row(?string $date, string $type, ?string $reference, ?string $project, ?string $debit, ?string $credit, string $sort): array
-    {
+    private function row(
+        ?string $date,
+        string $type,
+        ?string $reference,
+        ?string $project,
+        ?string $debit,
+        ?string $credit,
+        string $sort,
+        ?string $hrefReference = null,
+        ?string $hrefProject = null,
+        ?string $poNumber = null,
+        ?string $hrefPo = null,
+    ): array {
         return [
             'date' => $date,
             'type' => $type,
             'reference' => $reference,
             'project' => $project,
+            'po_number' => $poNumber,
             'debit' => $debit ? Money::scale($debit, 2) : null,
             'credit' => $credit ? Money::scale($credit, 2) : null,
+            'href_reference' => $hrefReference,
+            'href_project' => $hrefProject,
+            'href_po' => $hrefPo,
             'sort' => $sort,
         ];
     }

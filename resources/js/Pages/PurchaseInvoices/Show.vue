@@ -40,12 +40,31 @@ function applyAdvance() {
                     :view-url="`/projects/${project.id}/purchase-invoices/${invoice.id}/pdf`"
                     :download-url="`/projects/${project.id}/purchase-invoices/${invoice.id}/pdf/download`"
                 />
+                <Link
+                    v-if="abilities.edit"
+                    :href="`/projects/${project.id}/purchase-invoices/${invoice.id}/edit`"
+                    class="ui-btn-secondary"
+                >
+                    Edit
+                </Link>
                 <Link v-if="canSettle" :href="`/vendors/${invoice.vendor_id}/payments/create?purchase_invoice_id=${invoice.id}&payment_type=invoice_payment`" class="ui-btn-primary">Record Payment</Link>
             </PageHeader>
         </template>
         <div class="ui-card mb-4 grid gap-3 p-5 text-sm md:grid-cols-3">
             <div><p class="text-slate-500">Vendor</p><p>{{ invoice.vendor }}</p></div>
-            <div><p class="text-slate-500">PO Number</p><p>{{ invoice.po_number }}</p></div>
+            <div>
+                <p class="text-slate-500">PO Number</p>
+                <p>
+                    <Link
+                        v-if="invoice.purchase_order_id"
+                        :href="`/projects/${project.id}/purchase-orders/${invoice.purchase_order_id}`"
+                        class="font-medium text-amber-700 hover:underline"
+                    >
+                        {{ invoice.po_number }}
+                    </Link>
+                    <span v-else>{{ invoice.po_number || '—' }}</span>
+                </p>
+            </div>
             <div><p class="text-slate-500">Project</p><p>{{ project.project_name }}</p></div>
             <div><p class="text-slate-500">Invoice Date</p><p>{{ invoice.invoice_date }}</p></div>
             <div><p class="text-slate-500">Invoice Total</p><p>{{ formatInr(invoice.total_amount) }}</p></div>

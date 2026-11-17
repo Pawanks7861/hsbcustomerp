@@ -69,10 +69,102 @@ class PurchaseInvoiceController extends Controller
         return Inertia::render('PurchaseInvoices/Form', [
             'project' => $this->projectCard($project),
             'invoice' => null,
-            'purchaseOrders' => $this->orderOptions($project),
+            'purchaseOrders' => $this->orderOptions($project, $order?->id),
             'selectedOrder' => $order ? $this->orderCard($order, $lines) : null,
             'vendors' => $this->vendorOptions(),
             'canRoundOff' => $access->allows($request->user(), 'invoices.round_off') || $access->isSuperAdmin($request->user()),
+            'lockPurchaseOrder' => false,
+        ]);
+    }
+
+    public function searchOrders(Request $request, Project $project, Access $access): \Illuminate\Http\JsonResponse
+    {
+        abort_unless(
+            $access->allows($request->user(), 'invoices.create')
+            || $access->allows($request->user(), 'invoices.edit'),
+            403
+        );
+
+        $term = trim((string) $request->string('q'));
+        $query = $project->purchaseOrders()
+            ->with(['vendor:id,name', 'project:id,project_name,project_code'])
+            ->where('status', DocumentStatus::APPROVED)
+            ->orderByDesc('po_date')
+            ->orderByDesc('id');
+
+        if ($term !== '') {
+            $like = '%'.$term.'%';
+            $query->where(function ($builder) use ($like) {
+                $builder->where('po_number', 'like', $like)
+                    ->orWhere('supplier_name', 'like', $like)
+                    ->orWhere('vendor_name_snapshot', 'like', $like)
+                    ->orWhereHas('vendor', fn ($vendor) => $vendor->where('name', 'like', $like)->orWhere('vendor_code', 'like', $like))
+                    ->orWhereHas('project', fn ($projectQuery) => $projectQuery
+                        ->where('project_name', 'like', $like)
+                        ->orWhere('project_code', 'like', $like));
+            });
+        }
+
+        $items = $query->limit(30)->get()->map(function (PurchaseOrder $order) {
+            $invoiced = Money::scale(
+                (string) $order->invoices()->where('approval_status', PurchaseInvoice::APPROVAL_APPROVED)->sum('total_amount'),
+                2
+            ) ?? '0.00';
+            $grand = Money::scale((string) $order->grand_total, 2) ?? '0.00';
+            $remaining = Money::sub($grand, $invoiced);
+            if (bccomp($remaining, '0', 2) === -1) {
+                $remaining = '0.00';
+            }
+            $vendor = $order->vendor?->name ?? $order->vendor_name_snapshot ?? $order->supplier_name ?? '—';
+            $projectName = $order->project?->project_name ?? '';
+
+            return [
+                'id' => $order->id,
+                'label' => trim($order->po_number.' | '.$vendor.' | '.$projectName),
+                'meta' => '₹'.number_format((float) $grand, 2).' · Remaining billable ₹'.number_format((float) $remaining, 2)
+                    .' · '.($order->po_date?->toDateString() ?? '—'),
+                'po_number' => $order->po_number,
+                'vendor' => $vendor,
+                'project' => $projectName,
+                'po_date' => $order->po_date?->toDateString(),
+                'grand_total' => $grand,
+                'remaining_billable' => $remaining,
+            ];
+        })->values()->all();
+
+        return response()->json(['items' => $items]);
+    }
+
+    public function edit(Request $request, Project $project, PurchaseInvoice $invoice, PurchaseInvoiceLineService $lines, Access $access): Response
+    {
+        abort_unless($access->allows($request->user(), 'invoices.edit'), 403);
+        $this->ensureInvoice($project, $invoice);
+        abort_unless($invoice->isEditable(), 403);
+
+        $order = $this->orderForProject($project, $invoice->purchase_order_id, approved: false);
+        abort_unless($order !== null, 404);
+
+        return Inertia::render('PurchaseInvoices/Form', [
+            'project' => $this->projectCard($project),
+            'invoice' => [
+                'id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+                'invoice_date' => $invoice->invoice_date?->toDateString(),
+                'due_date' => $invoice->due_date?->toDateString(),
+                'remarks' => $invoice->remarks,
+                'tax_percentage' => $invoice->tax_percentage === null ? '' : (string) ((float) $invoice->tax_percentage),
+                'round_off' => (string) ($invoice->round_off ?? '0.00'),
+                'purchase_order_id' => $invoice->purchase_order_id,
+                'items' => $invoice->items()->get(['purchase_order_item_id', 'quantity'])->map(fn (PurchaseInvoiceItem $item) => [
+                    'purchase_order_item_id' => $item->purchase_order_item_id,
+                    'quantity' => (string) $item->quantity,
+                ])->values()->all(),
+            ],
+            'purchaseOrders' => $this->orderOptions($project, $order->id),
+            'selectedOrder' => $this->orderCard($order, $lines, $invoice->id),
+            'vendors' => $this->vendorOptions(),
+            'canRoundOff' => $access->allows($request->user(), 'invoices.round_off') || $access->isSuperAdmin($request->user()),
+            'lockPurchaseOrder' => true,
         ]);
     }
 
@@ -493,14 +585,28 @@ class PurchaseInvoiceController extends Controller
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function orderOptions(Project $project): array
+    private function orderOptions(Project $project, ?int $includeId = null): array
     {
-        return $project->purchaseOrders()->with('vendor')->where('status', DocumentStatus::APPROVED)->orderByDesc('po_date')->get()->map(fn (PurchaseOrder $order) => [
-            'id' => $order->id,
-            'po_number' => $order->po_number,
-            'vendor' => $order->vendor?->name ?? $order->supplier_name,
-            'grand_total' => (string) $order->grand_total,
-        ])->all();
+        return $project->purchaseOrders()
+            ->with(['vendor', 'project:id,project_name'])
+            ->where(function ($query) use ($includeId) {
+                $query->where('status', DocumentStatus::APPROVED);
+                if ($includeId) {
+                    $query->orWhereKey($includeId);
+                }
+            })
+            ->orderByDesc('po_date')
+            ->limit(40)
+            ->get()
+            ->map(fn (PurchaseOrder $order) => [
+                'id' => $order->id,
+                'po_number' => $order->po_number,
+                'vendor' => $order->vendor?->name ?? $order->vendor_name_snapshot ?? $order->supplier_name,
+                'project' => $order->project?->project_name,
+                'po_date' => $order->po_date?->toDateString(),
+                'grand_total' => (string) $order->grand_total,
+                'label' => trim($order->po_number.' | '.($order->vendor?->name ?? $order->supplier_name ?? '—')),
+            ])->all();
     }
 
     /**

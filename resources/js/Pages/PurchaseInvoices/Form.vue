@@ -4,6 +4,7 @@ import { computed } from 'vue';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import FileUploadField from '../../Components/FileUploadField.vue';
 import PageHeader from '../../Components/PageHeader.vue';
+import SearchableSelect from '../../Components/SearchableSelect.vue';
 import { formatInr, formatQty, lineAmount } from '../../lib/money';
 
 const props = defineProps({
@@ -13,15 +14,21 @@ const props = defineProps({
     selectedOrder: { type: Object, default: null },
     vendors: { type: Array, default: () => [] },
     canRoundOff: { type: Boolean, default: false },
+    lockPurchaseOrder: { type: Boolean, default: false },
 });
 
 const taxRates = ['0', '5', '12', '18', '28'];
+const editing = computed(() => Boolean(props.invoice?.id));
+
+const initialQuantities = Object.fromEntries(
+    (props.invoice?.items || []).map((item) => [String(item.purchase_order_item_id), item.quantity]),
+);
 
 const form = useForm({
-    purchase_order_id: props.selectedOrder?.id || '',
-    tax_percentage: '',
-    round_off_mode: 'auto',
-    round_off: '0',
+    purchase_order_id: props.selectedOrder?.id || props.invoice?.purchase_order_id || '',
+    tax_percentage: props.invoice?.tax_percentage ?? '',
+    round_off_mode: props.invoice ? 'manual' : 'auto',
+    round_off: props.invoice?.round_off || '0',
     vendor_id: '',
     invoice_number: props.invoice?.invoice_number || '',
     invoice_date: props.invoice?.invoice_date || new Date().toISOString().slice(0, 10),
@@ -30,8 +37,16 @@ const form = useForm({
     invoice_file: null,
     items: (props.selectedOrder?.lines || []).map((line) => ({
         purchase_order_item_id: line.id,
-        quantity: '',
+        quantity: initialQuantities[String(line.id)] ?? '',
     })),
+});
+
+const selectedLabel = computed(() => {
+    if (!props.selectedOrder) {
+        return '';
+    }
+
+    return `${props.selectedOrder.po_number} | ${props.selectedOrder.vendor || '—'} | ₹${Number(props.selectedOrder.grand_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 });
 
 const rows = computed(() => (props.selectedOrder?.lines || []).map((line, index) => {
@@ -117,32 +132,65 @@ const totals = computed(() => {
     };
 });
 
-function chooseOrder(event) {
-    const id = event.target.value;
+function chooseOrder(item) {
+    const id = item?.id || '';
     form.purchase_order_id = id;
+    if (editing.value) {
+        return;
+    }
+
     router.get(`/projects/${props.project.id}/purchase-invoices/create`, id ? { purchase_order_id: id } : {}, {
         preserveState: false,
     });
 }
 
+function clearOrder() {
+    if (props.lockPurchaseOrder || editing.value) {
+        return;
+    }
+
+    form.purchase_order_id = '';
+    router.get(`/projects/${props.project.id}/purchase-invoices/create`, {}, { preserveState: false });
+}
+
 function submit() {
+    if (editing.value) {
+        form.put(`/projects/${props.project.id}/purchase-invoices/${props.invoice.id}`, { forceFormData: true });
+
+        return;
+    }
+
     form.post(`/projects/${props.project.id}/purchase-invoices`, { forceFormData: true });
 }
 </script>
 
 <template>
-    <Head title="Purchase Invoice" />
+    <Head :title="editing ? 'Edit Purchase Invoice' : 'Purchase Invoice'" />
     <AdminLayout :project="project">
         <template #header>
-            <PageHeader title="Purchase Invoice" :eyebrow="project.project_name" />
+            <PageHeader :title="editing ? 'Edit Purchase Invoice' : 'Purchase Invoice'" :eyebrow="project.project_name" />
         </template>
         <form class="space-y-4" @submit.prevent="submit">
             <section class="ui-card grid max-w-3xl gap-4 p-6 md:grid-cols-2">
-                <label class="text-sm md:col-span-2">Purchase Order
-                    <select :value="form.purchase_order_id" required class="ui-input" @change="chooseOrder">
-                        <option value="">Select approved PO</option>
-                        <option v-for="order in purchaseOrders" :key="order.id" :value="order.id">{{ order.po_number }} · {{ order.vendor }}</option>
-                    </select>
+                <label class="text-sm md:col-span-2">
+                    Purchase Order
+                    <SearchableSelect
+                        v-if="!lockPurchaseOrder"
+                        v-model="form.purchase_order_id"
+                        class="mt-1"
+                        :fetch-url="`/projects/${project.id}/purchase-invoices/orders/search`"
+                        :selected-label="selectedLabel"
+                        placeholder="Search PO number, vendor, or project…"
+                        :min-length="0"
+                        :required="true"
+                        :error="form.errors.purchase_order_id || ''"
+                        @select="chooseOrder"
+                        @clear="clearOrder"
+                    />
+                    <div v-else class="mt-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                        {{ selectedLabel || selectedOrder?.po_number || 'Linked purchase order' }}
+                        <p class="mt-1 text-xs text-slate-500">PO cannot be changed on an existing invoice.</p>
+                    </div>
                 </label>
                 <div v-if="selectedOrder" class="rounded-xl bg-slate-50 p-4 text-sm md:col-span-2">
                     <p v-if="selectedOrder.vendor_id">Vendor {{ selectedOrder.vendor }}</p>
@@ -243,7 +291,7 @@ function submit() {
                     <div class="flex justify-between font-semibold"><span>Final invoice total</span><span class="tabular-nums">{{ formatInr(totals.total) }}</span></div>
                 </div>
             </section>
-            <button class="ui-btn-primary" :disabled="form.processing || !selectedOrder">Save Invoice</button>
+            <button class="ui-btn-primary" :disabled="form.processing || !selectedOrder">{{ editing ? 'Update Invoice' : 'Save Invoice' }}</button>
         </form>
     </AdminLayout>
 </template>

@@ -381,9 +381,11 @@ Route::middleware(['auth', 'active', 'project.access', 'throttle.operation'])->g
 
         Route::get('projects/{project}/purchase-invoices', [PurchaseInvoiceController::class, 'index'])->middleware('permission:invoices.view')->name('projects.purchase-invoices.index');
         Route::get('projects/{project}/purchase-invoices/create', [PurchaseInvoiceController::class, 'create'])->middleware('permission:invoices.create')->name('projects.purchase-invoices.create');
+        Route::get('projects/{project}/purchase-invoices/orders/search', [PurchaseInvoiceController::class, 'searchOrders'])->name('projects.purchase-invoices.orders.search');
         Route::post('projects/{project}/purchase-invoices', [PurchaseInvoiceController::class, 'store'])->middleware('permission:invoices.create')->name('projects.purchase-invoices.store');
         Route::get('projects/{project}/purchase-invoices/{invoice}/pdf/download', [PurchaseInvoiceController::class, 'downloadPdf'])->middleware('permission:invoices.print')->name('projects.purchase-invoices.pdf.download');
         Route::get('projects/{project}/purchase-invoices/{invoice}/pdf', [PurchaseInvoiceController::class, 'pdf'])->middleware('permission:invoices.print')->name('projects.purchase-invoices.pdf');
+        Route::get('projects/{project}/purchase-invoices/{invoice}/edit', [PurchaseInvoiceController::class, 'edit'])->middleware('permission:invoices.edit')->name('projects.purchase-invoices.edit');
         Route::get('projects/{project}/purchase-invoices/{invoice}', [PurchaseInvoiceController::class, 'show'])->middleware('permission:invoices.view')->name('projects.purchase-invoices.show');
         Route::put('projects/{project}/purchase-invoices/{invoice}', [PurchaseInvoiceController::class, 'update'])->middleware('permission:invoices.edit')->name('projects.purchase-invoices.update');
         Route::delete('projects/{project}/purchase-invoices/{invoice}', [PurchaseInvoiceController::class, 'destroy'])->middleware('permission:invoices.delete')->name('projects.purchase-invoices.destroy');

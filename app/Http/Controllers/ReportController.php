@@ -135,6 +135,11 @@ class ReportController extends Controller
      */
     private function filters(Request $request): array
     {
+        $balance = $request->string('balance')->toString() ?: 'outstanding';
+        if (! in_array($balance, ['outstanding', 'all', 'zero', 'credit'], true)) {
+            $balance = 'outstanding';
+        }
+
         return [
             'project_id' => $request->integer('project_id') ?: null,
             'vendor_id' => $request->integer('vendor_id') ?: null,
@@ -142,6 +147,7 @@ class ReportController extends Controller
             'from' => $request->string('from')->toString() ?: null,
             'to' => $request->string('to')->toString() ?: null,
             'status' => $request->string('status')->toString() ?: null,
+            'balance' => $balance,
         ];
     }
 
@@ -178,6 +184,10 @@ class ReportController extends Controller
 
         if ($filters['status']) {
             $labels[] = ['label' => 'Status', 'value' => $filters['status']];
+        }
+
+        if (! empty($filters['balance']) && $filters['balance'] !== 'outstanding') {
+            $labels[] = ['label' => 'Balance', 'value' => (string) $filters['balance']];
         }
 
         return $labels;

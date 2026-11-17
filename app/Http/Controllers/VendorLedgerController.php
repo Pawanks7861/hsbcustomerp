@@ -110,7 +110,7 @@ class VendorLedgerController extends Controller
             'closing' => $statement['closing'],
             'total_debit' => $statement['total_debit'],
             'total_credit' => $statement['total_credit'],
-            'entries' => Listing::paginateRows($statement['entries'], $request, ['date', 'type', 'reference', 'project', 'debit', 'credit', 'balance']),
+            'entries' => Listing::paginateRows($statement['entries'], $request, ['date', 'type', 'reference', 'po_number', 'project', 'debit', 'credit', 'balance']),
         ]);
     }
 }

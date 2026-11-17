@@ -46,7 +46,8 @@ const queryString = computed(() => {
 
 function apply(event) {
     const data = Object.fromEntries(new FormData(event.target).entries());
-    const changes = Object.fromEntries(['project_id', 'vendor_id', 'client_id', 'from', 'to', 'status'].map((key) => [key, data[key] || '']));
+    const keys = ['project_id', 'vendor_id', 'client_id', 'from', 'to', 'status', 'balance'];
+    const changes = Object.fromEntries(keys.map((key) => [key, data[key] || '']));
     visitListing(changes);
 }
 
@@ -57,6 +58,75 @@ function formatCell(row, column) {
     }
 
     return value ?? '—';
+}
+
+function cellHref(row, column) {
+    const explicit = row[`href_${column.key}`];
+    if (explicit) {
+        return explicit;
+    }
+
+    if (!column.link) {
+        return null;
+    }
+
+    const value = row[column.key];
+    if (value === null || value === undefined || value === '' || value === '—') {
+        return null;
+    }
+
+    switch (column.link) {
+        case 'project':
+            return row.project_id ? `/projects/${row.project_id}` : null;
+        case 'purchase_order':
+            return row.purchase_order_id && row.project_id
+                ? `/projects/${row.project_id}/purchase-orders/${row.purchase_order_id}`
+                : null;
+        case 'purchase_invoice':
+            return row.purchase_invoice_id && row.project_id
+                ? `/projects/${row.project_id}/purchase-invoices/${row.purchase_invoice_id}`
+                : null;
+        case 'vendor_ledger': {
+            if (!row.vendor_id) {
+                return null;
+            }
+            const params = new URLSearchParams();
+            if (props.filters.from) {
+                params.set('from', props.filters.from);
+            }
+            if (props.filters.to) {
+                params.set('to', props.filters.to);
+            }
+            if (props.filters.project_id) {
+                params.set('project_id', props.filters.project_id);
+            }
+            const qs = params.toString();
+
+            return `/vendors/${row.vendor_id}/ledger${qs ? `?${qs}` : ''}`;
+        }
+        case 'note':
+            if (!row.note_id || !row.project_id) {
+                return null;
+            }
+
+            return row.note_kind === 'credit'
+                ? `/projects/${row.project_id}/credit-notes/${row.note_id}`
+                : `/projects/${row.project_id}/debit-notes/${row.note_id}`;
+        case 'client_invoice':
+            return row.client_invoice_id && row.project_id
+                ? `/projects/${row.project_id}/client-invoices/${row.client_invoice_id}`
+                : null;
+        case 'client':
+            return row.client_id ? `/clients/${row.client_id}` : null;
+        case 'material':
+            if (row.project_id) {
+                return `/projects/${row.project_id}/inventory/materials`;
+            }
+
+            return '/inventory/materials';
+        default:
+            return null;
+    }
 }
 
 function totalLabel(key) {
@@ -122,6 +192,12 @@ function formatTotal(key, value) {
                 <option value="">All statuses</option>
                 <option v-for="status in statusOptions" :key="status" :value="status">{{ status }}</option>
             </select>
+            <select v-if="filterSet.has('balance')" name="balance" class="ui-input" :value="filters.balance || 'outstanding'">
+                <option value="outstanding">Outstanding only</option>
+                <option value="all">All vendors</option>
+                <option value="zero">Zero outstanding</option>
+                <option value="credit">Advance / credit balances</option>
+            </select>
             <button class="ui-btn-primary md:col-span-1">Apply</button>
         </form>
 
@@ -152,7 +228,14 @@ function formatTotal(key, value) {
                                     :key="column.key"
                                     :class="column.align === 'right' ? 'text-right' : ''"
                                 >
-                                    {{ formatCell(row, column) }}
+                                    <Link
+                                        v-if="cellHref(row, column)"
+                                        :href="cellHref(row, column)"
+                                        class="text-amber-900 underline-offset-2 hover:underline focus:underline"
+                                    >
+                                        {{ formatCell(row, column) }}
+                                    </Link>
+                                    <template v-else>{{ formatCell(row, column) }}</template>
                                 </td>
                             </tr>
                             <tr v-if="!section.rows.length">
@@ -185,7 +268,14 @@ function formatTotal(key, value) {
                                 :key="column.key"
                                 :class="column.align === 'right' ? 'text-right' : ''"
                             >
-                                {{ formatCell(row, column) }}
+                                <Link
+                                    v-if="cellHref(row, column)"
+                                    :href="cellHref(row, column)"
+                                    class="text-amber-900 underline-offset-2 hover:underline focus:underline"
+                                >
+                                    {{ formatCell(row, column) }}
+                                </Link>
+                                <template v-else>{{ formatCell(row, column) }}</template>
                             </td>
                         </tr>
                         <tr v-if="!rows.data.length">
