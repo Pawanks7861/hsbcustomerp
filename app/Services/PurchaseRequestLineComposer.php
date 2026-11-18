@@ -70,9 +70,11 @@ class PurchaseRequestLineComposer
                 ]);
             }
 
-            $rate = $item
-                ? Money::scale($item->rate, 2)
-                : Money::scale($row['estimated_rate'] ?? null, 2);
+            $postedRate = array_key_exists('estimated_rate', $row) && $row['estimated_rate'] !== null && $row['estimated_rate'] !== ''
+                ? Money::scale($row['estimated_rate'], 2)
+                : null;
+            $boqRate = $item ? Money::scale($item->rate, 2) : null;
+            $rate = $postedRate ?? $boqRate;
             $remarks = trim((string) ($row['remarks'] ?? ''));
             $serviceCode = trim((string) ($row['service_code'] ?? ($item?->service_code ?? '')));
 

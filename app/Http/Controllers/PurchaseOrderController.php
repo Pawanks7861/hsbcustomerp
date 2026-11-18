@@ -119,6 +119,12 @@ class PurchaseOrderController extends Controller
                 'terms_conditions' => '',
                 'remarks' => '',
                 'items' => $this->linesFromRequest($purchaseRequest),
+                'abilities' => [
+                    'edit_rates' => $this->access->allows($request->user(), 'purchase_orders.edit_rates')
+                        || $this->access->allows($request->user(), 'purchase_orders.edit')
+                        || $this->access->allows($request->user(), 'purchase_orders.create')
+                        || $request->user()->isSuperAdmin(),
+                ],
             ],
         ]);
     }
@@ -128,7 +134,12 @@ class PurchaseOrderController extends Controller
         $this->ensureApprovedRequest($project, $purchaseRequest);
         $this->authorize('createPurchaseOrder', $purchaseRequest);
 
-        $record = $this->persistNew($request, $project, $purchaseRequest);
+        $canEditRates = $this->access->allows($request->user(), 'purchase_orders.edit_rates')
+            || $this->access->allows($request->user(), 'purchase_orders.edit')
+            || $this->access->allows($request->user(), 'purchase_orders.create')
+            || $request->user()->isSuperAdmin();
+
+        $record = $this->persistNew($request, $project, $purchaseRequest, $canEditRates);
 
         return redirect()
             ->route('projects.purchase-orders.show', [$project, $record])
@@ -609,8 +620,12 @@ class PurchaseOrderController extends Controller
         ];
     }
 
-    private function persistNew(PurchaseOrderItemRequest $request, Project $project, PurchaseRequest $purchaseRequest): PurchaseOrder
-    {
+    private function persistNew(
+        PurchaseOrderItemRequest $request,
+        Project $project,
+        PurchaseRequest $purchaseRequest,
+        bool $canEditRates = false,
+    ): PurchaseOrder {
         $purchaseRequest->loadMissing('items');
 
         if ($purchaseRequest->items->isEmpty()) {
@@ -623,11 +638,11 @@ class PurchaseOrderController extends Controller
 
         for ($attempt = 0; $attempt < 3; $attempt++) {
             try {
-                return DB::transaction(function () use ($request, $project, $purchaseRequest) {
+                return DB::transaction(function () use ($request, $project, $purchaseRequest, $canEditRates) {
                     $commercial = $this->commercial($request);
                     $fallbackGst = $this->fallbackGstPercentage($request);
                     $lines = PurchaseLines::price(
-                        $this->withPostedCommercial($this->storedLines($purchaseRequest), $request),
+                        $this->withPostedCommercial($this->storedLines($purchaseRequest), $request, $canEditRates),
                         $fallbackGst,
                         $commercial
                     );

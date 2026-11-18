@@ -93,6 +93,9 @@ function receive() {
             <button v-if="abilities.approve" type="button" class="ui-btn-primary" @click="post('approve')">Approve</button>
             <button v-if="abilities.dispatch" type="button" class="ui-btn-primary" @click="post('dispatch')">Dispatch</button>
         </div>
+        <p v-if="reason.errors.items || reason.errors.quantity || reason.errors.stock" class="mt-2 text-sm text-red-700">
+            {{ reason.errors.items || reason.errors.quantity || reason.errors.stock }}
+        </p>
         <form v-if="abilities.reject || abilities.cancel" class="ui-card mt-4 space-y-3 p-4" @submit.prevent="post(abilities.reject ? 'reject' : 'cancel')">
             <textarea v-model="reason.reason" required placeholder="Reason" class="ui-input w-full"></textarea>
             <button v-if="abilities.reject" class="ui-btn-secondary">Reject</button>
@@ -109,7 +112,9 @@ function receive() {
             </div>
             <input type="file" accept="image/*" multiple @change="receipt.images = Array.from($event.target.files || [])">
             <button class="ui-btn-primary" :disabled="receipt.processing">Confirm receipt</button>
-            <p v-if="receipt.errors.items" class="text-sm text-red-700">{{ receipt.errors.items }}</p>
+            <p v-if="receipt.errors.items || receipt.errors.quantity || receipt.errors.stock" class="text-sm text-red-700">
+                {{ receipt.errors.items || receipt.errors.quantity || receipt.errors.stock }}
+            </p>
         </form>
     </AdminLayout>
 </template>

@@ -94,7 +94,11 @@ class PurchaseLines
         $fallbackGst = self::fallbackGst($gstPercentage, $commercial);
 
         return array_map(function (array $item) use ($splitMode, $fallbackGst): array {
-            $gross = Money::scale($item['amount'] ?? null, 2) ?? '0.00';
+            $quantity = Money::scale($item['quantity'] ?? null, 3);
+            $rate = Money::scale($item['rate'] ?? null, 2);
+            $gross = ($quantity !== null && $rate !== null)
+                ? (Money::itemAmount($quantity, $rate) ?? '0.00')
+                : (Money::scale($item['amount'] ?? null, 2) ?? '0.00');
             $discountRate = Money::scale($item['discount_percentage'] ?? 0, 2) ?? '0.00';
             $discount = Money::percentage($gross, $discountRate);
 
