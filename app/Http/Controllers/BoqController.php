@@ -14,6 +14,7 @@ use App\Support\BoqTotals;
 use App\Support\Listing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -109,25 +110,32 @@ class BoqController extends Controller
         $this->ensureBoq($project, $boq);
 
         $validated = $request->validated();
+        $shouldFinalize = ! empty($validated['finalize']);
 
-        $boq->update([
-            'title' => $validated['title'],
-            'gst_percentage' => $validated['gst_percentage'],
-        ]);
+        $revision = DB::transaction(function () use ($validated, $boq, $sync, $revisions, $shouldFinalize) {
+            $boq->update([
+                'title' => $validated['title'],
+                'gst_percentage' => $validated['gst_percentage'],
+            ]);
 
-        $revision = null;
+            $revision = null;
 
-        if (! empty($validated['revision_id'])) {
-            $revision = $boq->revisions()->whereKey($validated['revision_id'])->firstOrFail();
-        }
+            if (! empty($validated['revision_id'])) {
+                $revision = $boq->revisions()->whereKey($validated['revision_id'])->firstOrFail();
+            }
 
-        $sync->sync($boq, $validated['items'], $revision);
+            $sync->sync($boq, $validated['items'], $revision);
 
-        $revision ??= $revisions->editableRevision($boq) ?? $boq->fresh()->currentRevision;
+            $revision ??= $revisions->editableRevision($boq) ?? $boq->fresh()->currentRevision;
 
-        if (! empty($validated['finalize']) && $revision) {
-            $revisions->finalize($boq, $revision);
+            if ($shouldFinalize && $revision) {
+                $revisions->finalize($boq, $revision);
+            }
 
+            return $revision;
+        });
+
+        if ($shouldFinalize && $revision) {
             return redirect()
                 ->route('projects.boqs.show', [$project, $boq, 'revision' => $revision->id])
                 ->with('success', 'BOQ saved and finalized. New items are available for procurement.');

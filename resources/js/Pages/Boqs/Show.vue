@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import ActionMenu from '../../Components/ActionMenu.vue';
@@ -21,9 +21,14 @@ const props = defineProps({
 });
 
 const page = usePage();
-const errors = computed(() => Object.values(page.props.errors ?? {}).flatMap((error) => (
-    Array.isArray(error) ? error : [error]
-)));
+const clientErrors = ref([]);
+const saving = ref(false);
+const errors = computed(() => [
+    ...clientErrors.value,
+    ...Object.values(page.props.errors ?? {}).flatMap((error) => (
+        Array.isArray(error) ? error : [error]
+    )),
+]);
 
 let keySequence = 1;
 
@@ -55,10 +60,45 @@ function rowsFromBoq(boq) {
     }));
 }
 
+function boqStateKey(boq) {
+    const itemKey = (boq.items ?? [])
+        .map((item) => `${item.id}:${item.procurable ? 1 : 0}`)
+        .join(',');
+
+    return [
+        boq.revision_id,
+        boq.revision_status,
+        boq.is_current ? 1 : 0,
+        boq.editable ? 1 : 0,
+        itemKey,
+    ].join('~');
+}
+
+function syncFromBoq(boq) {
+    title.value = boq.title;
+    gstPercentage.value = boq.gst_percentage;
+    items.value = rowsFromBoq(boq);
+}
+
 const title = ref(props.boq.title);
 const gstPercentage = ref(props.boq.gst_percentage);
 const items = ref(rowsFromBoq(props.boq));
 const budgetItem = ref(null);
+
+watch(
+    () => boqStateKey(props.boq),
+    (next, previous) => {
+        if (next === previous) {
+            return;
+        }
+
+        if (Object.keys(page.props.errors ?? {}).length > 0) {
+            return;
+        }
+
+        syncFromBoq(props.boq);
+    },
+);
 
 function isParent(row) {
     return items.value.some((other) => other.parent_key === row.client_key);
@@ -121,6 +161,9 @@ function addItem() {
             router.post(`/projects/${props.project.id}/boqs/${props.boq.id}/revisions`, {
                 revision_reason: 'Add BOQ items',
                 add_item: 1,
+            }, {
+                preserveState: false,
+                preserveScroll: false,
             });
         }
 
@@ -206,10 +249,38 @@ function payloadItems() {
         }));
 }
 
+function validateBeforeSave({ finalize = false } = {}) {
+    const messages = [];
+    const rows = payloadItems();
+
+    if (rows.length === 0) {
+        messages.push(finalize
+            ? 'Add at least one BOQ item before finalizing.'
+            : 'Add at least one BOQ item before saving.');
+    }
+
+    rows.forEach((row, index) => {
+        if (!String(row.description ?? '').trim()) {
+            messages.push(`Item ${row.item_number || index + 1}: description is required.`);
+        }
+    });
+
+    clientErrors.value = messages;
+
+    return messages.length === 0;
+}
+
 function save({ finalize = false } = {}) {
-    if (!props.boq.editable) {
+    if (!props.boq.editable || saving.value) {
         return;
     }
+
+    if (!validateBeforeSave({ finalize })) {
+        return;
+    }
+
+    saving.value = true;
+    clientErrors.value = [];
 
     router.put(`/projects/${props.project.id}/boqs/${props.boq.id}`, {
         revision_id: props.boq.revision_id,
@@ -219,23 +290,54 @@ function save({ finalize = false } = {}) {
         items: payloadItems(),
     }, {
         preserveState: (page) => Object.keys(page.props.errors ?? {}).length > 0,
+        preserveScroll: (page) => Object.keys(page.props.errors ?? {}).length > 0,
+        onSuccess: (page) => {
+            const fresh = page.props.boq;
+
+            if (fresh) {
+                syncFromBoq(fresh);
+            }
+        },
+        onFinish: () => {
+            saving.value = false;
+        },
     });
 }
 
 function openRevision(event) {
     router.get(`/projects/${props.project.id}/boqs/${props.boq.id}`, {
         revision: event.target.value,
+    }, {
+        preserveState: false,
+        preserveScroll: false,
     });
 }
 
 function createRevision() {
+    if (saving.value) {
+        return;
+    }
+
     router.post(`/projects/${props.project.id}/boqs/${props.boq.id}/revisions`, {
         revision_reason: '',
+    }, {
+        preserveState: false,
+        preserveScroll: false,
+        onSuccess: (page) => {
+            const fresh = page.props.boq;
+
+            if (fresh) {
+                syncFromBoq(fresh);
+            }
+        },
     });
 }
 
 function finalizeRevision() {
-    router.post(`/projects/${props.project.id}/boqs/${props.boq.id}/revisions/${props.boq.revision_id}/finalize`);
+    // Finalize must persist on-screen rows first. The bare
+    // /revisions/{id}/finalize route only flips status and never
+    // receives unsaved Add Item rows from this form.
+    save({ finalize: true });
 }
 
 function openBudget(row) {
@@ -299,13 +401,15 @@ const budgetTotal = computed(() => items.value.reduce((sum, row) => sum + (Numbe
                         v-if="needsFinalizeForProcurement"
                         type="button"
                         class="ui-btn-primary"
+                        :disabled="saving"
                         @click="save({ finalize: true })"
-                    >Save &amp; Finalize</button>
+                    >{{ saving ? 'Saving…' : 'Save & Finalize' }}</button>
                     <button
                         type="button"
                         :class="needsFinalizeForProcurement ? 'ui-btn-secondary' : 'ui-btn-primary'"
+                        :disabled="saving"
                         @click="save()"
-                    >Save BOQ</button>
+                    >{{ saving ? 'Saving…' : 'Save BOQ' }}</button>
                 </template>
             </PageHeader>
         </template>
@@ -318,7 +422,7 @@ const budgetTotal = computed(() => items.value.reduce((sum, row) => sum + (Numbe
             v-if="needsFinalizeForProcurement"
             class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
         >
-            This draft is not current yet. Use <span class="font-medium">Save &amp; Finalize</span> so new items appear in Purchase Requests and procurement.
+            This draft is not current yet. Click <span class="font-medium">Finalize</span> (or Save &amp; Finalize) so new items are saved and available for Purchase Requests.
         </div>
 
         <div class="ui-card mb-4 flex flex-wrap items-end justify-between gap-4 p-5">
@@ -331,13 +435,25 @@ const budgetTotal = computed(() => items.value.reduce((sum, row) => sum + (Numbe
                 </p>
             </div>
             <div class="flex flex-wrap items-center gap-2">
-                <select class="ui-input w-auto" :value="boq.revision_id" @change="openRevision">
+                <select class="ui-input w-auto" :value="boq.revision_id" :disabled="saving" @change="openRevision">
                     <option v-for="revision in boq.revisions" :key="revision.id" :value="revision.id">
                         Revision {{ revision.revision_number }}{{ revision.is_current ? ' · Current' : '' }}
                     </option>
                 </select>
-                <button v-if="boq.revision_status === 'draft'" type="button" class="ui-btn-primary" @click="finalizeRevision">Finalize</button>
-                <button v-if="boq.is_current && boq.revision_status === 'finalized'" type="button" class="ui-btn-secondary" @click="createRevision">Create Revision</button>
+                <button
+                    v-if="boq.revision_status === 'draft'"
+                    type="button"
+                    class="ui-btn-primary"
+                    :disabled="saving || !boq.editable"
+                    @click="finalizeRevision"
+                >{{ saving ? 'Finalizing…' : 'Finalize' }}</button>
+                <button
+                    v-if="boq.is_current && boq.revision_status === 'finalized'"
+                    type="button"
+                    class="ui-btn-secondary"
+                    :disabled="saving"
+                    @click="createRevision"
+                >Create Revision</button>
             </div>
         </div>
 
