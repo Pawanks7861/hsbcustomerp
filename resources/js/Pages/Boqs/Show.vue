@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import AdminLayout from '../../Layouts/AdminLayout.vue';
 import ActionMenu from '../../Components/ActionMenu.vue';
@@ -99,7 +99,7 @@ function familyEnd(parent) {
     return last;
 }
 
-function addItem() {
+function pushBlankItem() {
     items.value.push({
         id: null,
         client_key: nextKey(),
@@ -114,6 +114,48 @@ function addItem() {
         budget_total: '0.00',
     });
 }
+
+function addItem() {
+    if (!props.boq.editable) {
+        if (props.boq.is_current && props.boq.revision_status === 'finalized') {
+            router.post(`/projects/${props.project.id}/boqs/${props.boq.id}/revisions`, {
+                revision_reason: 'Add BOQ items',
+                add_item: 1,
+            });
+        }
+
+        return;
+    }
+
+    pushBlankItem();
+}
+
+const canAddItem = computed(() => (
+    props.boq.editable
+    || (props.boq.is_current && props.boq.revision_status === 'finalized')
+));
+
+const needsFinalizeForProcurement = computed(() => (
+    props.boq.editable && props.boq.revision_status === 'draft' && !props.boq.is_current
+));
+
+onMounted(() => {
+    if (!props.boq.editable) {
+        return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+
+    if (params.get('add_item') !== '1') {
+        return;
+    }
+
+    pushBlankItem();
+    params.delete('add_item');
+    const query = params.toString();
+    const nextUrl = `${window.location.pathname}${query ? `?${query}` : ''}`;
+    window.history.replaceState(window.history.state, '', nextUrl);
+});
 
 function addSubItem(parent) {
     const row = {
@@ -164,13 +206,14 @@ function payloadItems() {
         }));
 }
 
-function save() {
+function save({ finalize = false } = {}) {
     if (!props.boq.editable) {
         return;
     }
 
     router.put(`/projects/${props.project.id}/boqs/${props.boq.id}`, {
         revision_id: props.boq.revision_id,
+        finalize: finalize ? 1 : 0,
         title: title.value,
         gst_percentage: gstPercentage.value,
         items: payloadItems(),
@@ -251,12 +294,31 @@ const budgetTotal = computed(() => items.value.reduce((sum, row) => sum + (Numbe
     <AdminLayout :project="project">
         <template #header>
             <PageHeader :title="boq.boq_number || 'BOQ'" :eyebrow="project.project_name">
-                <button v-if="boq.editable" type="button" class="ui-btn-primary" @click="save">Save BOQ</button>
+                <template v-if="boq.editable">
+                    <button
+                        v-if="needsFinalizeForProcurement"
+                        type="button"
+                        class="ui-btn-primary"
+                        @click="save({ finalize: true })"
+                    >Save &amp; Finalize</button>
+                    <button
+                        type="button"
+                        :class="needsFinalizeForProcurement ? 'ui-btn-secondary' : 'ui-btn-primary'"
+                        @click="save()"
+                    >Save BOQ</button>
+                </template>
             </PageHeader>
         </template>
 
         <div v-if="errors.length" class="mb-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
             <p v-for="(error, index) in errors" :key="index">{{ error }}</p>
+        </div>
+
+        <div
+            v-if="needsFinalizeForProcurement"
+            class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+            This draft is not current yet. Use <span class="font-medium">Save &amp; Finalize</span> so new items appear in Purchase Requests and procurement.
         </div>
 
         <div class="ui-card mb-4 flex flex-wrap items-end justify-between gap-4 p-5">
@@ -286,10 +348,10 @@ const budgetTotal = computed(() => items.value.reduce((sum, row) => sum + (Numbe
             <FormField label="GST %">
                 <input v-model="gstPercentage" type="number" min="0" max="100" step="0.01" class="ui-input" :disabled="!boq.editable">
             </FormField>
-            <div v-if="boq.editable" class="flex flex-wrap gap-2">
-                <a :href="`/projects/${project.id}/boqs/${boq.id}/template`" class="ui-btn-secondary">Download Template</a>
-                <Link :href="`/projects/${project.id}/boqs/${boq.id}/import`" class="ui-btn-secondary">Import Excel</Link>
-                <button type="button" class="ui-btn-secondary" @click="addItem">+ Add Item</button>
+            <div v-if="canAddItem || boq.editable" class="flex flex-wrap gap-2">
+                <a v-if="boq.editable" :href="`/projects/${project.id}/boqs/${boq.id}/template`" class="ui-btn-secondary">Download Template</a>
+                <Link v-if="boq.editable" :href="`/projects/${project.id}/boqs/${boq.id}/import`" class="ui-btn-secondary">Import Excel</Link>
+                <button v-if="canAddItem" type="button" class="ui-btn-secondary" @click="addItem">+ Add Item</button>
             </div>
         </div>
 

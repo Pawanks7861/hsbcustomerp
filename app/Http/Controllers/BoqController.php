@@ -99,8 +99,13 @@ class BoqController extends Controller
         ]);
     }
 
-    public function update(UpdateBoqRequest $request, Project $project, Boq $boq, BoqItemSync $sync): RedirectResponse
-    {
+    public function update(
+        UpdateBoqRequest $request,
+        Project $project,
+        Boq $boq,
+        BoqItemSync $sync,
+        BoqRevisionService $revisions,
+    ): RedirectResponse {
         $this->ensureBoq($project, $boq);
 
         $validated = $request->validated();
@@ -118,8 +123,24 @@ class BoqController extends Controller
 
         $sync->sync($boq, $validated['items'], $revision);
 
+        $revision ??= $revisions->editableRevision($boq) ?? $boq->fresh()->currentRevision;
+
+        if (! empty($validated['finalize']) && $revision) {
+            $revisions->finalize($boq, $revision);
+
+            return redirect()
+                ->route('projects.boqs.show', [$project, $boq, 'revision' => $revision->id])
+                ->with('success', 'BOQ saved and finalized. New items are available for procurement.');
+        }
+
+        $route = [$project, $boq];
+
+        if ($revision) {
+            $route['revision'] = $revision->id;
+        }
+
         return redirect()
-            ->route('projects.boqs.show', [$project, $boq])
+            ->route('projects.boqs.show', $route)
             ->with('success', 'BOQ saved.');
     }
 

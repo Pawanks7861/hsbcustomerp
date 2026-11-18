@@ -18,6 +18,7 @@ class UpdateBoqRequest extends FormRequest
     {
         return [
             'revision_id' => ['nullable', 'integer'],
+            'finalize' => ['nullable', 'boolean'],
             'title' => ['required', 'string', 'max:255'],
             'gst_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
             'items' => ['present', 'array'],
@@ -72,13 +73,16 @@ class UpdateBoqRequest extends FormRequest
                 }
 
                 if (! empty($item['id']) && $boq) {
-                    $belongs = BoqItem::query()
+                    $query = BoqItem::query()
                         ->where('boq_id', $boq->id)
-                        ->whereKey($item['id'])
-                        ->exists();
+                        ->whereKey($item['id']);
 
-                    if (! $belongs) {
-                        $validator->errors()->add("items.$index.id", 'This BOQ item does not belong to the selected BOQ.');
+                    if (! empty($this->input('revision_id'))) {
+                        $query->where('boq_revision_id', (int) $this->input('revision_id'));
+                    }
+
+                    if (! $query->exists()) {
+                        $validator->errors()->add("items.$index.id", 'This BOQ item does not belong to the selected BOQ revision.');
                     }
                 }
             }

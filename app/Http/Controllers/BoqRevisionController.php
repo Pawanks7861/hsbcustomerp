@@ -17,13 +17,34 @@ class BoqRevisionController extends Controller
 
         $validated = $request->validate([
             'revision_reason' => ['nullable', 'string', 'max:2000'],
+            'add_item' => ['nullable', 'boolean'],
         ]);
 
-        $revision = $revisions->createNext($boq, $request->user(), $validated['revision_reason'] ?? null);
+        $reason = $validated['revision_reason'] ?? null;
+        $addItem = $request->boolean('add_item');
+
+        if (($reason === null || trim((string) $reason) === '') && $addItem) {
+            $reason = 'Add BOQ items';
+        }
+
+        $existing = $revisions->editableRevision($boq);
+        $revision = $addItem
+            ? $revisions->ensureEditable($boq, $request->user(), $reason)
+            : $revisions->createNext($boq, $request->user(), $reason);
+
+        $params = ['revision' => $revision->id];
+
+        if ($addItem) {
+            $params['add_item'] = 1;
+        }
+
+        $message = $existing && $existing->is($revision)
+            ? 'Opened draft revision '.$revision->revision_number.'.'
+            : 'Revision '.$revision->revision_number.' created.';
 
         return redirect()
-            ->route('projects.boqs.show', [$project, $boq, 'revision' => $revision->id])
-            ->with('success', 'Revision '.$revision->revision_number.' created.');
+            ->route('projects.boqs.show', [$project, $boq, ...$params])
+            ->with('success', $message);
     }
 
     public function finalize(Project $project, Boq $boq, BoqRevision $revision, BoqRevisionService $revisions): RedirectResponse

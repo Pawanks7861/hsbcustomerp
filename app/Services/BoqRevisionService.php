@@ -48,6 +48,17 @@ class BoqRevisionService
         return sprintf('BOQ-%03d', $sequence);
     }
 
+    public function ensureEditable(Boq $boq, User $user, ?string $reason = null): BoqRevision
+    {
+        $draft = $this->editableRevision($boq);
+
+        if ($draft) {
+            return $draft;
+        }
+
+        return $this->createNext($boq, $user, $reason);
+    }
+
     public function createNext(Boq $boq, User $user, ?string $reason = null): BoqRevision
     {
         return DB::transaction(function () use ($boq, $user, $reason) {
